@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>clonarr</Name>
+  <Repository>ghcr.io/prophetse7en/clonarr:latest</Repository>
+  <Registry>https://github.com/prophetse7en/clonarr/pkgs/container/clonarr</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Latest release</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/prophetse7en/clonarr/issues</Support>
+  <Project>https://github.com/prophetse7en/clonarr</Project>
+  <Overview>TRaSH Guides sync tool for Radarr and Sonarr with a built-in web UI. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes from TRaSH Guides to your Radarr and Sonarr instances. Features profile builder, scoring sandbox, auto-sync, and import/export support.</Overview>
+  <Category>MediaApp:Other</Category>
+  <WebUI>http://[IP]:[PORT:6060]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/prophetse7en/clonarr/main/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Radarr or Sonarr instance with API access. See project page for setup instructions.</Requires>
+  <Config Name="WebUI" Target="6060" Default="6060" Mode="tcp" Description="Web UI port" Type="Port" Display="always" Required="true" Mask="false">6060</Config>
+  <Config Name="Config Path" Target="/config" Default="/mnt/user/appdata/clonarr" Mode="rw" Description="Configuration, profiles, and sync history" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/clonarr</Config>
+  <Config Name="Data Path" Target="/data" Default="/mnt/user/appdata/clonarr/data" Mode="rw" Description="TRaSH Guides repository clone" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/clonarr/data</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Description="Container timezone" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Description="User ID for file ownership" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group ID for file ownership" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>
