@@ -10,19 +10,19 @@ Built as an alternative to config-driven tools like Recyclarr, with a visual int
 
 | Profiles | Profile Sync |
 |----------|-------------|
-| ![Profiles](screenshots/profiles.png) | ![Sync](screenshots/sync-profile.png) |
+| ![Profiles](docs/images/profiles.png) | ![Sync](docs/images/sync-profile.png) |
 
 | Profile Creator | Custom Formats |
 |----------------|----------------|
-| ![Creator](screenshots/profile-creator.png) | ![CFs](screenshots/CF.png) |
+| ![Creator](docs/images/profile-creator.png) | ![CFs](docs/images/CF.png) |
 
 | CF Creator | Quality Size |
 |-----------|-------------|
-| ![CF Creator](screenshots/CF-Creator.png) | ![Quality Size](screenshots/quality-seize.png) |
+| ![CF Creator](docs/images/CF-Creator.png) | ![Quality Size](docs/images/quality-size.png) |
 
 | File Naming | Maintenance |
 |------------|-------------|
-| ![File Naming](screenshots/file-naming.png) | ![Maintenance](screenshots/maintenance.png) |
+| ![File Naming](docs/images/file-naming.png) | ![Maintenance](docs/images/maintenance.png) |
 
 ## Features
 
