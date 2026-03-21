@@ -546,6 +546,7 @@
                 <div style="display:flex;gap:6px;align-items:center">
                   <span style="font-size:11px;color:#484f58" x-text="p.importedAt ? new Date(p.importedAt).toLocaleDateString() : ''"></span>
                   <button x-show="p.source === 'custom'" class="btn btn-sm" @click.stop="editCustomProfile(tab.type, p)">Edit</button>
+                  <button class="btn btn-sm btn-primary" @click.stop="openImportedSyncModalFromList(tab.type, p)">Sync</button>
                   <button class="btn btn-sm btn-blue" @click.stop="openExportModalFromList(tab.type, p)">Export</button>
                   <button class="btn btn-sm btn-danger" @click.stop="deleteImportedProfile(p.id, tab.type)">Delete</button>
                 </div>
@@ -2169,6 +2170,7 @@
             </template>
           </div>
           <div style="display:flex;gap:8px" x-show="profileDetail?.detail?.imported">
+            <button x-show="profileDetail?.detail?.importedRaw?.source === 'custom'" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
             <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
             <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()">Sync</button>
           </div>
@@ -3048,6 +3050,10 @@
         <label>Profile name</label>
         <input type="text" class="input" x-model="syncForm.newProfileName" placeholder="Profile name in Radarr/Sonarr">
         <div style="font-size:11px;color:#484f58;margin-top:4px">A new quality profile will be created with CFs, scores, quality items, and cutoff</div>
+        <div x-show="syncForm.newProfileName && arrProfiles.some(p => p.name.toLowerCase() === syncForm.newProfileName.trim().toLowerCase())"
+             style="margin-top:8px;padding:8px 12px;background:#3d1f00;border:1px solid #d29922;border-radius:4px;font-size:12px;color:#d29922">
+          &#9888; Profile "<span x-text="syncForm.newProfileName.trim()"></span>" already exists in <span x-text="syncForm.instanceName"></span>. Use <strong>Update existing profile</strong> to sync changes.
+        </div>
       </div>
 
       <!-- Update mode: existing profile dropdown -->
@@ -7371,6 +7377,24 @@ function clonarr() {
       this.showSyncModal = true;
     },
 
+    async openImportedSyncModalFromList(appType, profile) {
+      const inst = this.instancesOfType(appType)[0];
+      if (!inst) { alert('No ' + appType + ' instance configured'); return; }
+      this.syncForm = {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        appType: appType,
+        profileTrashId: profile.trashProfileId || '',
+        importedProfileId: profile.id,
+        profileName: profile.name,
+        arrProfileId: '0',
+        newProfileName: profile.name,
+        behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      await this._loadSyncInstanceData(inst.id, profile.trashProfileId || profile.id);
+      this.showSyncModal = true;
+    },
+
     async openImportedSyncModal() {
       const raw = this.profileDetail?.detail?.importedRaw;
       if (!raw) return;
@@ -7515,14 +7539,18 @@ function clonarr() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.buildSyncBody())
         });
-        const plan = await r.json();
+        const data = await r.json();
+        if (!r.ok) {
+          this.showToast(data.error || 'Dry-run failed', 'toast-error');
+          return;
+        }
         this.showSyncModal = false;
         if (!this.profileDetail) {
           const inst = this.instances.find(i => i.id === this.syncForm.instanceId);
           const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === this.syncForm.profileTrashId);
           if (inst && profile) await this.openProfileDetail(inst, profile);
         }
-        this.syncPlan = plan;
+        this.syncPlan = data;
       } catch (e) {
         console.error('dryRun:', e);
       } finally {

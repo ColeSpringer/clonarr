@@ -900,6 +900,21 @@ func BuildArrProfile(
 		})
 	}
 
+	// Radarr requires ALL CFs present in FormatItems — add missing ones with score 0
+	includedCFs := make(map[int]bool)
+	for _, fi := range formatItems {
+		includedCFs[fi.Format] = true
+	}
+	for cfName, cfID := range cfNameToID {
+		if !includedCFs[cfID] {
+			formatItems = append(formatItems, ArrProfileFormatItem{
+				Format: cfID,
+				Name:   cfName,
+				Score:  0,
+			})
+		}
+	}
+
 	// Resolve language (Radarr only)
 	var lang *ArrLanguage
 	if languages != nil {

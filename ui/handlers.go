@@ -2142,7 +2142,7 @@ func (app *App) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	plan, err := BuildSyncPlan(ad, inst, req, imported, customCFs, lastSyncedCFs)
 	if err != nil {
 		log.Printf("Dry-run error for %s: %v", inst.Name, err)
-		writeError(w, 500, "Failed to build sync plan")
+		writeError(w, 400, err.Error())
 		return
 	}
 
