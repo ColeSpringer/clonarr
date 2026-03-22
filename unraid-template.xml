@@ -15,7 +15,7 @@
   <Overview>TRaSH Guides sync tool for Radarr and Sonarr with a built-in web UI. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes from TRaSH Guides to your Radarr and Sonarr instances. Features profile builder, scoring sandbox, auto-sync, and import/export support.</Overview>
   <Category>MediaApp:Other</Category>
   <WebUI>http://[IP]:[PORT:6060]</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/prophetse7en/clonarr/main/unraid-template.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>

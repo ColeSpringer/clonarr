@@ -72,6 +72,8 @@ Built as an alternative to config-driven tools like Recyclarr, with a visual int
 - **Multi-instance** — manage multiple Radarr and Sonarr instances
 - **Dynamic language support** — all languages from your Arr instance available in dropdowns
 
+📖 **New to Clonarr?** See the [Getting Started guide](docs/GETTING-STARTED.md) for a step-by-step walkthrough with screenshots.
+
 ## Quick Start
 
 ### 1. Run with Docker
