@@ -671,6 +671,7 @@ type CFPickerGroup struct {
 	TrashDescription string          `json:"trashDescription,omitempty"`
 	DefaultEnabled   bool            `json:"defaultEnabled"`
 	Exclusive        bool            `json:"exclusive"`
+	IncludeProfiles  []string        `json:"includeProfiles,omitempty"`
 	CFs              []CategorizedCF `json:"cfs"`
 }
 
@@ -718,12 +719,20 @@ func AllCFsCategorized(ad *AppData, customCFs []CustomCF) *CFPickerData {
 		exclusive := strings.Contains(strings.ToLower(group.TrashDescription), "only score or enable one") ||
 			strings.Contains(strings.ToLower(group.TrashDescription), "only enable one")
 
+		// Extract profile names from include list
+		var includeProfiles []string
+		for profName := range group.QualityProfiles.Include {
+			includeProfiles = append(includeProfiles, profName)
+		}
+		sort.Strings(includeProfiles)
+
 		pg := CFPickerGroup{
 			Name:             group.Name,
 			ShortName:        shortName,
 			TrashDescription: group.TrashDescription,
 			DefaultEnabled:   defaultEnabled,
 			Exclusive:        exclusive,
+			IncludeProfiles:  includeProfiles,
 		}
 
 		for _, cfEntry := range group.CustomFormats {

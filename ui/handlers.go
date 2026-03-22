@@ -426,7 +426,7 @@ func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Map quality items
+	// Map quality items (Radarr API returns lowest priority first, reverse for TRaSH format)
 	var qualities []QualityItem
 	for _, qi := range profile.Items {
 		q := QualityItem{Allowed: qi.Allowed}
@@ -441,6 +441,10 @@ func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		qualities = append(qualities, q)
+	}
+	// Reverse to match TRaSH format (highest priority / allowed first)
+	for i, j := 0, len(qualities)-1; i < j; i, j = i+1, j-1 {
+		qualities[i], qualities[j] = qualities[j], qualities[i]
 	}
 
 	// Resolve cutoff name — check both quality groups (by group ID) and individual qualities
