@@ -156,23 +156,11 @@ The container includes a built-in healthcheck that verifies the web UI and TRaSH
 
 ### Unraid
 
-Clonarr includes an Unraid Docker template for easy installation.
+**Install via template:** Download [`clonarr.xml`](https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml) and place it in `/boot/config/plugins/dockerMan/templates-user/` on your Unraid server. Then go to **Docker** → **Add Container** and select **clonarr** from the Template dropdown.
 
-**Add the template repository (one-time):**
+**Or install manually:** Go to **Docker** → **Add Container**, set Repository to `ghcr.io/prophetse7en/clonarr:latest`, and add the required paths and ports (see above).
 
-1. In the Unraid web UI, go to the **Docker** tab
-2. Scroll to the bottom and click **Template Repositories**
-3. Add this URL: `https://github.com/prophetse7en/clonarr`
-4. Click **Save**
-
-**Install the container:**
-
-1. Click **Add Container**
-2. From the **Template** dropdown, select **clonarr**
-3. Adjust the timezone if needed
-4. Click **Apply**
-
-Unraid will pull the image from GHCR and start the container. The Web UI is available at `http://your-unraid-ip:6060`. Config is stored in `/mnt/user/appdata/clonarr` by default.
+The Web UI is available at `http://your-unraid-ip:6060`. Config is stored in `/mnt/user/appdata/clonarr` by default.
 
 **Updating:** Click the Clonarr icon in the Docker tab and select **Force Update** to pull the latest image.
 
