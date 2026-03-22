@@ -1967,6 +1967,13 @@
                 <span class="profile-group-chevron" :class="{ open: pbExpandedCats[cat.category] }">&#9654;</span>
                 <span style="font-size:13px;font-weight:500" x-text="cat.category"></span>
                 <span class="pb-cat-count" x-text="pbCatSelectedCount(cat) + '/' + pbCatTotalCount(cat)"></span>
+                <span class="pb-req-pill" @click.stop
+                      x-show="pbCatSelectedCount(cat) > 0"
+                      :class="pbIsCatAllRequired(cat) ? 'req' : 'opt'"
+                      @click="pbToggleCatRequired(cat)"
+                      :title="pbIsCatAllRequired(cat) ? 'Click to set all to Optional' : 'Click to set all to Required'"
+                      x-text="pbIsCatAllRequired(cat) ? 'Req' : 'Opt'"
+                      style="margin-left:4px;cursor:pointer"></span>
                 <label class="toggle toggle-sm" @click.stop>
                   <input type="checkbox" :checked="pbIsCatAllSelected(cat)" @change="pbToggleCategory(cat)">
                   <span class="slider"></span>
@@ -4101,6 +4108,7 @@ function clonarr() {
       qualityPreset: '',
       qualityPresetId: '',
       qualityAllowedNames: '',
+      qualityItems: [],
       baselineCFs: [],
       coreCFIds: [],
       selectedCFs: {},
@@ -4594,6 +4602,7 @@ function clonarr() {
         qualityPreset: '',
         qualityPresetId: '',
         qualityAllowedNames: '',
+        qualityItems: existing?.qualities || [],
         baselineCFs: existing?.baselineCFs || [],
         coreCFIds: existing?.coreCFIds || [],
         templateId: '',
@@ -4631,6 +4640,7 @@ function clonarr() {
           this.pb.qualityPresetId = match.id;
           this.pb.qualityPreset = match.id;
           this.pb.qualityAllowedNames = (match.allowed || []).join(', ');
+          this.pb.qualityItems = match.items || [];
         }
       }
     },
@@ -4693,6 +4703,7 @@ function clonarr() {
         this.pb.cutoff = '';
         this.pb.qualityPreset = '';
         this.pb.qualityAllowedNames = '';
+        this.pb.qualityItems = [];
         return;
       }
       const preset = this.pbQualityPresets.find(p => p.id === id);
@@ -4700,6 +4711,7 @@ function clonarr() {
       this.pb.cutoff = preset.cutoff;
       this.pb.qualityPreset = preset.id;
       this.pb.qualityAllowedNames = (preset.allowed || []).join(', ');
+      this.pb.qualityItems = preset.items || [];
     },
 
     // Languages for profile builder — uses first instance of matching type, or fallback
@@ -4759,10 +4771,23 @@ function clonarr() {
         this.pb.scoreOverrides = restOverrides;
       } else {
         const newSelected = {...this.pb.selectedCFs, [trashId]: true};
-        // Exclusive group: deselect others
+        // Exclusive group: deselect other CFs in this group AND any other
+        // exclusive groups that share the same CFs (e.g. Golden Rule HD/UHD)
         if (exclusiveGroup) {
+          const sharedIds = new Set(exclusiveGroup.cfs.map(cf => cf.trashId));
           for (const cf of exclusiveGroup.cfs) {
             if (cf.trashId !== trashId) delete newSelected[cf.trashId];
+          }
+          // Find all other exclusive groups sharing any CF with this group
+          for (const cat of this.pbCategories) {
+            for (const g of cat.groups) {
+              if (g === exclusiveGroup || !g.exclusive) continue;
+              if (g.cfs.some(cf => sharedIds.has(cf.trashId))) {
+                for (const cf of g.cfs) {
+                  if (cf.trashId !== trashId) delete newSelected[cf.trashId];
+                }
+              }
+            }
           }
         }
         this.pb.selectedCFs = newSelected;
@@ -4787,6 +4812,28 @@ function clonarr() {
       this.pb.selectedCFs = newSelected;
       this.pb.requiredCFs = newRequired;
       this.pb.scoreOverrides = newOverrides;
+    },
+
+    pbIsCatAllRequired(cat) {
+      const cfs = this._pbCatCFs(cat);
+      const selected = cfs.filter(cf => this.pb.selectedCFs[cf.trashId]);
+      return selected.length > 0 && selected.every(cf => this.pb.requiredCFs[cf.trashId]);
+    },
+
+    pbToggleCatRequired(cat) {
+      const cfs = this._pbCatCFs(cat);
+      const allReq = this.pbIsCatAllRequired(cat);
+      const newRequired = {...this.pb.requiredCFs};
+      for (const cf of cfs) {
+        if (this.pb.selectedCFs[cf.trashId]) {
+          if (allReq) {
+            delete newRequired[cf.trashId];
+          } else {
+            newRequired[cf.trashId] = true;
+          }
+        }
+      }
+      this.pb.requiredCFs = newRequired;
     },
 
     pbToggleGroup(group) {
@@ -4876,6 +4923,7 @@ function clonarr() {
           // Apply quality preset and sync dropdown
           this.pb.qualityPreset = trashId;
           this.pb.qualityPresetId = trashId;
+          this.pb.qualityItems = detail.profile?.items || [];
           // Apply profile settings
           const prof = detail.profile || {};
           if (prof.cutoff) this.pb.cutoff = prof.cutoff;
@@ -4949,6 +4997,9 @@ function clonarr() {
             this.pb.qualityPreset = prof.trashProfileId;
             this.pb.qualityPresetId = prof.trashProfileId;
           }
+          if (prof.qualities?.length) {
+            this.pb.qualityItems = prof.qualities;
+          }
           // Apply CFs and scores
           this.pb.selectedCFs = {};
           this.pb.scoreOverrides = {};
@@ -4998,6 +5049,11 @@ function clonarr() {
         if (prof.minUpgradeFormatScore != null) this.pb.minUpgradeFormatScore = prof.minUpgradeFormatScore;
         if (prof.upgradeAllowed != null) this.pb.upgradeAllowed = prof.upgradeAllowed;
         if (prof.language) this.pb.language = prof.language;
+        // Apply quality items from instance
+        if (prof.qualities?.length) {
+          this.pb.qualityItems = prof.qualities;
+          this.pb.qualityAllowedNames = prof.qualities.filter(q => q.allowed).map(q => q.name).join(', ');
+        }
         // Apply CFs and scores
         this.pb.selectedCFs = {};
         this.pb.scoreOverrides = {};
@@ -5021,6 +5077,19 @@ function clonarr() {
     async saveCustomProfile() {
       this.pbSaving = true;
       try {
+        // Check for duplicate name (only when creating, not editing)
+        if (!this.pb.editId) {
+          const existing = (this.importedProfiles[this.pb.appType] || []).find(
+            p => p.name.toLowerCase() === this.pb.name.trim().toLowerCase()
+          );
+          if (existing) {
+            if (!confirm(`A profile named "${this.pb.name.trim()}" already exists. This will create a duplicate.\n\nContinue?`)) {
+              this.pbSaving = false;
+              return;
+            }
+          }
+        }
+
         // Build formatItems and formatComments from selected CFs
         const formatItems = {};
         const formatComments = {};
@@ -5034,13 +5103,29 @@ function clonarr() {
           if (this.pb.requiredCFs[trashId]) requiredCFs.push(trashId);
         }
 
-        // Resolve qualities from preset if selected
-        let qualities = [];
-        if (this.pb.qualityPreset) {
-          const r = await fetch(`/api/trash/${this.pb.appType}/profiles/${this.pb.qualityPreset}`);
-          if (r.ok) {
-            const detail = await r.json();
-            qualities = detail.profile?.items || [];
+        // Use cached quality items from preset selection (stored when preset is applied)
+        let qualities = this.pb.qualityItems || [];
+        if (qualities.length === 0) {
+          // Try fetching from quality preset if set
+          if (this.pb.qualityPreset) {
+            try {
+              const r = await fetch(`/api/trash/${this.pb.appType}/profiles/${this.pb.qualityPreset}`);
+              if (r.ok) {
+                const detail = await r.json();
+                qualities = detail.profile?.items || [];
+              }
+            } catch (e) { /* ignore fetch errors */ }
+          }
+          // Still empty — try from preset dropdown
+          if (qualities.length === 0 && this.pb.qualityPresetId) {
+            const preset = this.pbQualityPresets.find(p => p.id === this.pb.qualityPresetId);
+            if (preset) qualities = preset.items || [];
+          }
+        }
+        if (qualities.length === 0) {
+          if (!confirm('No quality items configured. The profile will not work in Radarr/Sonarr without quality items.\n\nSelect a Quality Preset to include them.\n\nSave anyway?')) {
+            this.pbSaving = false;
+            return;
           }
         }
 
@@ -7561,7 +7646,7 @@ function clonarr() {
         });
         const data = await r.json();
         if (!r.ok) {
-          this.showToast(data.error || 'Dry-run failed', 'toast-error');
+          alert(data.error || 'Dry-run failed');
           return;
         }
         this.showSyncModal = false;
