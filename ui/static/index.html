@@ -361,9 +361,10 @@
   .pb-cf-row:hover { background: #1c2129; }
   .pb-cf-row .toggle { flex-shrink: 0; }
   .pb-cf-name { flex: 1; font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .pb-req-pill { font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer; user-select: none; border: 1px solid #30363d; }
-  .pb-req-pill.req { background: #1f3a5f; color: #58a6ff; border-color: #1f3a5f; }
-  .pb-req-pill.opt { background: transparent; color: #484f58; }
+  .pb-req-pill { font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer; user-select: none; border: 1px solid #30363d; font-weight: 600; }
+  .pb-req-pill.req { background: #2d1f4e; color: #d2a8ff; border-color: #6e40c9; }
+  .pb-req-pill.default-on { background: #0d2847; color: #58a6ff; border-color: #1f6feb; }
+  .pb-req-pill.opt { background: #3d2800; color: #d29922; border-color: #9e6a03; }
   .pb-score-input { width: 70px; background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; padding: 3px 6px; border-radius: 4px; font-size: 12px; font-family: monospace; text-align: right; }
   .pb-score-input.overridden { border-color: #d29922; color: #d29922; }
   .pb-select-all { font-size: 11px; color: #58a6ff; cursor: pointer; margin-left: auto; padding: 2px 8px; }
@@ -536,6 +537,10 @@
             <template x-if="!importedProfiles[tab.type] || importedProfiles[tab.type].length === 0">
               <div style="padding:12px 16px;color:#484f58;font-size:12px">No imported profiles. Import a Recyclarr YAML to add custom profiles.</div>
             </template>
+            <div x-show="(importedProfiles[tab.type]?.length || 0) > 1" style="padding:4px 16px 8px;text-align:right">
+              <button class="btn btn-sm btn-danger" style="font-size:10px;padding:2px 8px"
+                      @click="confirmModal = { show: true, title: 'Delete All Profiles', message: 'Delete all ' + (importedProfiles[tab.type]?.length || 0) + ' imported/custom profiles for ' + tab.label + '?\n\nThis cannot be undone.', onConfirm: () => deleteAllImportedProfiles(tab.type) }">Delete All</button>
+            </div>
             <template x-for="p in (importedProfiles[tab.type] || [])" :key="p.id">
               <div class="profile-row">
                 <div class="profile-name">
@@ -1858,11 +1863,11 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
               <!-- Scoring card -->
               <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
-                <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
+                <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
                   <div>
                     <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Score Set</div>
-                    <select class="pb-input" x-model="pb.scoreSet" @change="pbScoreSetChanged()" style="width:100%">
+                    <select class="pb-input" x-model="pb.scoreSet" @change="pbScoreSetChanged(); _pbSaveDefaults()" style="width:100%">
                       <option value="default">default</option>
                       <template x-for="ss in sortedScoreSets()" :key="ss">
                         <option :value="ss" x-text="ss"></option>
@@ -1890,12 +1895,12 @@
 
               <!-- Quality card -->
               <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
-                <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Quality</div>
+                <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Quality</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
                   <div style="grid-column:1/3">
                     <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Quality Preset</div>
                     <div style="display:flex;gap:6px">
-                      <select class="pb-input" x-model="pb.qualityPresetId" @change="pbApplyQualityPreset()" style="flex:1">
+                      <select class="pb-input" x-model="pb.qualityPresetId" @change="pbApplyQualityPreset(); _pbSaveDefaults()" style="flex:1">
                         <option value="">None</option>
                         <template x-for="gn in pbQualityPresetGroups()" :key="'qpg:'+gn">
                           <optgroup :label="gn">
@@ -2047,8 +2052,8 @@
             <template x-if="!pb.trashProfileName && pbHasGroupVariants()">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px" x-show="pbGroupVariant('Golden Rule')">
-                  <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Golden Rule</div>
-                  <select class="pb-input" x-model="pb.variantGoldenRule" style="width:100%">
+                  <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Golden Rule</div>
+                  <select class="pb-input" x-model="pb.variantGoldenRule" @change="pbApplyGoldenRule(); _pbSaveDefaults()" style="width:100%;font-size:13px;padding:5px 8px">
                     <option value="" disabled>Select variant...</option>
                     <option value="HD">HD</option>
                     <option value="UHD">UHD</option>
@@ -2056,8 +2061,8 @@
                   </select>
                 </div>
                 <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px" x-show="pbGroupVariant('Miscellaneous')">
-                  <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Miscellaneous</div>
-                  <select class="pb-input" x-model="pb.variantMisc" style="width:100%">
+                  <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Miscellaneous</div>
+                  <select class="pb-input" x-model="pb.variantMisc" @change="_pbSaveDefaults()" style="width:100%;font-size:13px;padding:5px 8px">
                     <option value="" disabled>Select variant...</option>
                     <option value="Standard">Standard</option>
                     <option value="SQP">SQP</option>
@@ -2076,7 +2081,7 @@
                   <input type="text" class="pb-input" x-model="pb.trashProfileId" placeholder="UUID" style="width:240px;font-family:monospace">
                   <button class="btn btn-sm" @click="pb.trashProfileId = genUUID(true)" style="padding:2px 8px;font-size:10px">Generate</button>
                   <span style="font-size:11px;color:#8b949e;margin-left:8px">Score Set</span>
-                  <input type="text" class="pb-input" x-model="pb.trashScoreSet" placeholder="e.g. sqp-3" style="width:100px">
+                  <input type="text" class="pb-input" x-model="pb.trashScoreSet" @change="_pbSaveDefaults()" placeholder="e.g. sqp-3" style="width:100px">
                   <span style="font-size:11px;color:#8b949e;margin-left:8px">Group</span>
                   <input type="number" class="pb-input" x-model.number="pb.groupNum" style="width:50px">
                 </div>
@@ -2110,13 +2115,13 @@
                 <span style="font-size:13px;font-weight:500" x-text="cat.category"></span>
                 <span class="pb-cat-count" x-text="pbCatSelectedCount(cat) + '/' + pbCatTotalCount(cat)"></span>
                 <span class="pb-req-pill" @click.stop
-                      x-show="pbCatSelectedCount(cat) > 0"
+                      x-show="cat.category !== 'Golden Rule'"
                       :class="pbIsCatAllRequired(cat) ? 'req' : 'opt'"
                       @click="pbToggleCatRequired(cat)"
-                      :title="pbIsCatAllRequired(cat) ? 'Click to set all to Optional' : 'Click to set all to Required'"
+                      :title="pbIsCatAllRequired(cat) ? 'Click to set all to Optional' : 'Click to select all and set to Required'"
                       x-text="pbIsCatAllRequired(cat) ? 'Req' : 'Opt'"
                       style="margin-left:4px;cursor:pointer"></span>
-                <label class="toggle toggle-sm" @click.stop>
+                <label class="toggle toggle-sm" @click.stop x-show="cat.category !== 'Golden Rule'">
                   <input type="checkbox" :checked="pbIsCatAllSelected(cat)" @change="pbToggleCategory(cat)">
                   <span class="slider"></span>
                 </label>
@@ -2142,7 +2147,7 @@
                     <!-- Single-CF group in multi-group category: show inline with badges -->
                     <template x-if="cat.groups.length > 1 && group.cfs.length === 1">
                       <div class="pb-cf-row" style="padding-left:24px;border-top:1px solid #161b22">
-                        <label class="toggle toggle-sm">
+                        <label class="toggle toggle-sm" :style="pbIsGoldenRuleCF(group.cfs[0].trashId) && pb.variantGoldenRule ? 'opacity:0.3;pointer-events:none' : ''">
                           <input type="checkbox" :checked="pb.selectedCFs[group.cfs[0].trashId]"
                                  @change="pbToggleCF(group.cfs[0].trashId, group.exclusive ? group : null)">
                           <span class="slider"></span>
@@ -2151,14 +2156,17 @@
                           <span x-text="group.cfs[0].name"></span>
                           <span x-show="group.shortName !== group.cfs[0].name" style="font-size:10px;color:#484f58;margin-left:2px" x-text="'(' + group.shortName + ')'"></span>
                           <span x-show="group.defaultEnabled" class="group-badge badge-default" style="font-size:9px">default</span>
+                          <span x-show="pbIsGoldenRuleCF(group.cfs[0].trashId) && pb.variantGoldenRule" style="font-size:9px;color:#d2a8ff;margin-left:4px">managed by dropdown</span>
                           <span class="cf-info" x-show="group.cfs[0].description"
                                 @mouseenter="showCFTooltip($event, group.cfs[0].description)"
                                 @mouseleave="hideCFTooltip()">ⓘ</span>
                         </div>
-                        <span class="pb-req-pill" :class="pb.requiredCFs[group.cfs[0].trashId] ? 'req' : 'opt'"
-                              x-show="pb.selectedCFs[group.cfs[0].trashId]"
-                              @click="pb.requiredCFs[group.cfs[0].trashId] = !pb.requiredCFs[group.cfs[0].trashId]"
-                              x-text="pb.requiredCFs[group.cfs[0].trashId] ? 'Req' : 'Opt'"></span>
+                        <span class="pb-req-pill"
+                              x-show="pb.selectedCFs[group.cfs[0].trashId] && !pbIsGoldenRuleCF(group.cfs[0].trashId)"
+                              :class="pb.requiredCFs[group.cfs[0].trashId] ? 'req' : pb.defaultOnCFs?.[group.cfs[0].trashId] ? 'default-on' : 'opt'"
+                              @click="pbCycleCFMode(group.cfs[0].trashId)"
+                              :title="pb.requiredCFs[group.cfs[0].trashId] ? 'Required — always included, locked at sync' : pb.defaultOnCFs?.[group.cfs[0].trashId] ? 'Optional (recommended) — on by default, user can disable' : 'Optional — off by default, user can enable'"
+                              x-text="pb.requiredCFs[group.cfs[0].trashId] ? 'Req' : pb.defaultOnCFs?.[group.cfs[0].trashId] ? 'Opt ★' : 'Opt'"></span>
                         <input type="number" class="pb-score-input"
                                x-show="pb.selectedCFs[group.cfs[0].trashId]"
                                :class="{ overridden: pbIsScoreOverridden(group.cfs[0]) }"
@@ -2176,7 +2184,7 @@
                     <div x-show="(cat.groups.length === 1 || group.cfs.length > 1) && (cat.groups.length === 1 || (pbExpandedGroups[cat.category+'/'+group.name] ?? true))">
                       <template x-for="cf in group.cfs" :key="cf.trashId">
                         <div class="pb-cf-row" :style="cat.groups.length > 1 ? 'padding-left:44px' : ''">
-                          <label class="toggle toggle-sm">
+                          <label class="toggle toggle-sm" :style="pbIsGoldenRuleCF(cf.trashId) && pb.variantGoldenRule ? 'opacity:0.3;pointer-events:none' : ''">
                             <input type="checkbox" :checked="pb.selectedCFs[cf.trashId]"
                                    @change="pbToggleCF(cf.trashId, group.exclusive ? group : null)">
                             <span class="slider"></span>
@@ -2184,6 +2192,7 @@
                           <div class="pb-cf-name">
                             <span x-text="cf.name"></span>
                             <span x-show="cf.isCustom" style="font-size:10px;color:#d29922;border:1px solid #d29922;border-radius:3px;padding:0 4px;margin-left:4px">Custom</span>
+                            <span x-show="pbIsGoldenRuleCF(cf.trashId) && pb.variantGoldenRule" style="font-size:9px;color:#d2a8ff;margin-left:4px">managed by dropdown</span>
                             <span class="cf-info" x-show="cf.description"
                                   @mouseenter="showCFTooltip($event, cf.description)"
                                   @mouseleave="hideCFTooltip()">ⓘ</span>
@@ -2191,10 +2200,12 @@
                               <span style="font-size:10px;color:#484f58;font-family:monospace" x-text="cf.trashId.substring(0,8)"></span>
                             </template>
                           </div>
-                          <span class="pb-req-pill" :class="pb.requiredCFs[cf.trashId] ? 'req' : 'opt'"
-                                x-show="pb.selectedCFs[cf.trashId]"
-                                @click="pb.requiredCFs[cf.trashId] = !pb.requiredCFs[cf.trashId]"
-                                x-text="pb.requiredCFs[cf.trashId] ? 'Req' : 'Opt'"></span>
+                          <span class="pb-req-pill"
+                                x-show="pb.selectedCFs[cf.trashId] && !pbIsGoldenRuleCF(cf.trashId)"
+                                :class="pb.requiredCFs[cf.trashId] ? 'req' : pb.defaultOnCFs?.[cf.trashId] ? 'default-on' : 'opt'"
+                                @click="pbCycleCFMode(cf.trashId)"
+                                :title="pb.requiredCFs[cf.trashId] ? 'Required — always included, locked at sync' : pb.defaultOnCFs?.[cf.trashId] ? 'Optional (recommended) — on by default, user can disable' : 'Optional — off by default, user can enable'"
+                                x-text="pb.requiredCFs[cf.trashId] ? 'Req' : pb.defaultOnCFs?.[cf.trashId] ? 'Opt ★' : 'Opt'"></span>
                           <input type="number" class="pb-score-input"
                                  x-show="pb.selectedCFs[cf.trashId]"
                                  :class="{ overridden: pbIsScoreOverridden(cf) }"
@@ -2291,7 +2302,7 @@
         </div>
       </template>
 
-      <div class="card">
+      <div class="card" :style="profileDetail?.detail?.imported ? 'background:#0d1117' : ''">
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #30363d">
           <div>
@@ -2339,7 +2350,7 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px">
             <!-- Scoring card -->
             <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
-              <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
+              <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
                 <div>
                   <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Language</div>
@@ -2390,7 +2401,7 @@
 
             <!-- Quality card -->
             <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
-              <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Quality</div>
+              <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Quality</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
                 <div style="grid-column:1/3">
                   <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Cutoff</div>
@@ -2471,21 +2482,98 @@
           </div>
         </div>
 
-        <!-- Imported profile categories -->
-        <template x-if="profileDetail?.detail?.imported && profileDetail?.detail?.importedCategories">
+        <!-- Imported profile: Required CFs (locked) -->
+        <template x-if="profileDetail?.detail?.imported && profileDetail?.detail?.importedRequiredCategories?.length > 0">
+          <div>
+            <div class="detail-section cat-required-core" style="margin-bottom:8px">
+              <div class="detail-section-header" @click="toggleDetailSection('importedReq')">
+                <span class="detail-section-chevron" :class="{ open: detailSections.importedReq }">&#9654;</span>
+                <div style="font-size:13px;font-weight:600">Required Custom Formats</div>
+                <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="profileDetail.detail.importedRequiredCategories.reduce((n,c) => n + c.cfs.length, 0) + ' CFs'"></div>
+              </div>
+              <div class="section-desc" x-show="detailSections.importedReq">
+                Required for this profile. Always included when syncing.
+              </div>
+              <div x-show="detailSections.importedReq">
+                <template x-for="cat in profileDetail.detail.importedRequiredCategories" :key="'req-'+cat.category">
+                  <div class="detail-section" :class="getCategoryClass(cat.category)" style="margin-bottom:2px">
+                    <div class="detail-section-header" @click="toggleGroupExpanded('req', cat.category)">
+                      <span class="detail-section-chevron" :class="{ open: groupExpanded['req/' + cat.category] }">&#9654;</span>
+                      <div style="font-size:13px;font-weight:600" x-text="cat.category"></div>
+                      <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="cat.cfs.length + '/' + cat.cfs.length"></div>
+                    </div>
+                    <div x-show="groupExpanded['req/' + cat.category]">
+                      <template x-for="cf in cat.cfs" :key="cf.trashId">
+                        <div class="cf-row">
+                          <div class="cf-name" x-text="cf.name"></div>
+                          <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                            <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Imported profile: Golden Rule (pick one — required but with choice) -->
+        <template x-if="profileDetail?.detail?.imported && profileDetail?.detail?.importedGoldenRule?.length > 0">
+          <div class="detail-section cat-golden-rule" style="margin-bottom:8px">
+            <div class="detail-section-header" @click="toggleDetailSection('goldenRule')">
+              <span class="detail-section-chevron" :class="{ open: detailSections.goldenRule }">&#9654;</span>
+              <div style="font-size:13px;font-weight:600">Golden Rule</div>
+              <div style="font-size:11px;color:#484f58;margin-right:auto">pick one</div>
+            </div>
+            <div x-show="detailSections.goldenRule">
+              <div style="padding:6px 16px;font-size:11px;color:#d29922">Please ensure you only score or enable one of them in your Quality Profile!</div>
+              <template x-for="cf in profileDetail.detail.importedGoldenRule" :key="cf.trashId">
+                <div class="cf-row">
+                  <label class="toggle toggle-sm">
+                    <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
+                           @change="if($event.target.checked) { profileDetail.detail.importedGoldenRule.forEach(c => { if(c.trashId !== cf.trashId) selectedOptionalCFs[c.trashId] = false }); } selectedOptionalCFs[cf.trashId] = $event.target.checked; selectedOptionalCFs = {...selectedOptionalCFs}">
+                    <span class="slider"></span>
+                  </label>
+                  <div class="cf-name" x-text="cf.name"></div>
+                  <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                    <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Imported profile: Optional CFs (toggleable) — matches TRaSH profile styling -->
+        <template x-if="profileDetail?.detail?.imported && profileDetail?.detail?.importedCategories?.length > 0">
           <div>
             <template x-for="cat in profileDetail.detail.importedCategories" :key="cat.category">
-              <div class="detail-section" :class="cat.category === 'Unwanted' ? 'cat-unwanted' : ''">
-                <div class="detail-section-header" @click="toggleGroupExpanded('imported', cat.category)">
-                  <span class="detail-section-chevron" :class="{ open: groupExpanded['imported/' + cat.category] }">&#9654;</span>
-                  <div class="detail-section-label" x-text="cat.category"></div>
-                  <div class="detail-section-count" x-text="cat.cfs.length + ' CFs'"></div>
+              <div class="detail-section" :class="getCategoryClass(cat.category)" style="margin-bottom:8px">
+                <div class="detail-section-header" @click="toggleDetailSection(cat.category)">
+                  <span class="detail-section-chevron" :class="{ open: detailSections[cat.category] }">&#9654;</span>
+                  <div style="font-size:13px;font-weight:600" x-text="cat.category"></div>
+                  <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="cat.cfs.filter(cf => selectedOptionalCFs[cf.trashId]).length + '/' + cat.cfs.length"></div>
+                  <label class="toggle toggle-sm" @click.stop>
+                    <input type="checkbox"
+                           :checked="cat.cfs.every(cf => selectedOptionalCFs[cf.trashId])"
+                           @change="cat.cfs.forEach(cf => { selectedOptionalCFs[cf.trashId] = $event.target.checked }); selectedOptionalCFs = {...selectedOptionalCFs}">
+                    <span class="slider"></span>
+                  </label>
                 </div>
-                <div x-show="groupExpanded['imported/' + cat.category]">
+                <div x-show="detailSections[cat.category]">
                   <template x-for="cf in cat.cfs" :key="cf.trashId">
                     <div class="cf-row">
+                      <label class="toggle toggle-sm">
+                        <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
+                               @change="selectedOptionalCFs[cf.trashId] = $event.target.checked; selectedOptionalCFs = {...selectedOptionalCFs}">
+                        <span class="slider"></span>
+                      </label>
                       <div class="cf-name" x-text="cf.name"></div>
-                      <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'" x-text="cf.score"></div>
+                      <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                        <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -4258,11 +4346,13 @@ function clonarr() {
       coreCFIds: [],
       selectedCFs: {},
       requiredCFs: {},
+      defaultOnCFs: {},
       scoreOverrides: {},
       // Dev mode
       trashProfileId: '',
       trashProfileName: '',
       variantGoldenRule: '',
+      goldenRuleDefault: '',
       variantMisc: '',
       trashScoreSet: '',
       trashDescription: '',
@@ -4680,6 +4770,7 @@ function clonarr() {
 
       let totalImported = 0;
       const errors = [];
+      const renamed = [];
 
       for (const y of yamls) {
         try {
@@ -4693,21 +4784,37 @@ function clonarr() {
             errors.push(`${y.name}: ${data.error || 'failed'}`);
           } else {
             totalImported += data.imported || 0;
+            // Check for renamed profiles (name collision)
+            if (data.profiles) {
+              for (const p of data.profiles) {
+                const origName = yamls.length === 1 && this.importNameOverride.trim() ? this.importNameOverride.trim() : null;
+                if (origName && p.name !== origName) {
+                  renamed.push(`"${origName}" → "${p.name}"`);
+                } else if (p.name && p.name.match(/\(\d+\)$/)) {
+                  renamed.push(`Saved as "${p.name}" (name already existed)`);
+                }
+              }
+            }
           }
         } catch (e) {
           errors.push(`${y.name}: ${e.message}`);
         }
       }
 
+      let resultMsg = '';
       if (errors.length > 0) {
         this.importError = true;
-        this.importResult = errors.join('\n');
+        resultMsg = errors.join('\n');
         if (totalImported > 0) {
-          this.importResult = `Imported ${totalImported} profile(s), but errors occurred:\n${errors.join('\n')}`;
+          resultMsg = `Imported ${totalImported} profile(s), but errors occurred:\n${errors.join('\n')}`;
         }
       } else {
-        this.importResult = `Imported ${totalImported} profile(s) from ${yamls.length} file(s)`;
+        resultMsg = `Imported ${totalImported} profile(s) from ${yamls.length} file(s)`;
       }
+      if (renamed.length > 0) {
+        resultMsg += '\n' + renamed.join('\n');
+      }
+      this.importResult = resultMsg;
 
       this.loadImportedProfiles('radarr');
       this.loadImportedProfiles('sonarr');
@@ -4733,6 +4840,16 @@ function clonarr() {
       } catch (e) { /* ignore */ }
     },
 
+    async deleteAllImportedProfiles(appType) {
+      const profiles = this.importedProfiles[appType] || [];
+      for (const p of profiles) {
+        try {
+          await fetch(`/api/import/profiles/${p.id}`, { method: 'DELETE' });
+        } catch (e) { /* ignore */ }
+      }
+      this.loadImportedProfiles(appType);
+    },
+
     // --- Profile Builder ---
 
     async openProfileBuilder(appType, existing = null) {
@@ -4740,15 +4857,15 @@ function clonarr() {
         editId: existing?.id || null,
         name: existing?.name || '',
         appType: appType,
-        scoreSet: existing?.scoreSet || 'default',
+        scoreSet: existing?.scoreSet || (existing ? 'default' : (this._pbLoadDefaults().scoreSet || 'default')),
         upgradeAllowed: existing?.upgradeAllowed ?? true,
         cutoff: existing?.cutoff || '',
         cutoffScore: existing?.cutoffScore ?? 10000,
         minFormatScore: existing?.minFormatScore ?? 0,
         minUpgradeFormatScore: existing?.minUpgradeFormatScore ?? 1,
         language: existing?.language || 'Original',
-        qualityPreset: '',
-        qualityPresetId: '',
+        qualityPreset: existing?.qualityPresetId || (existing ? '' : (this._pbLoadDefaults().qualityPresetId || '')),
+        qualityPresetId: existing?.qualityPresetId || (existing ? '' : (this._pbLoadDefaults().qualityPresetId || '')),
         qualityAllowedNames: '',
         qualityItems: existing?.qualities || [],
         qualityEditorOpen: false,
@@ -4758,12 +4875,14 @@ function clonarr() {
         templateId: '',
         selectedCFs: {},
         requiredCFs: {},
+        defaultOnCFs: {},
         scoreOverrides: {},
         trashProfileId: existing?.trashProfileId || '',
         trashProfileName: '',
-        variantGoldenRule: '',
-        variantMisc: '',
-        trashScoreSet: existing?.trashScoreSet || '',
+        variantGoldenRule: existing?.variantGoldenRule || (existing ? '' : (this._pbLoadDefaults().variantGoldenRule || '')),
+        goldenRuleDefault: existing?.goldenRuleDefault || '',
+        variantMisc: existing?.variantMisc || (existing ? '' : (this._pbLoadDefaults().variantMisc || '')),
+        trashScoreSet: existing?.trashScoreSet || (existing ? '' : (this._pbLoadDefaults().trashScoreSet || '')),
         trashDescription: existing?.trashDescription || '',
         groupNum: existing?.groupNum || 0,
       };
@@ -4779,6 +4898,11 @@ function clonarr() {
           this.pb.requiredCFs[tid] = true;
         }
       }
+      if (existing?.defaultOnCFs) {
+        for (const tid of existing.defaultOnCFs) {
+          this.pb.defaultOnCFs[tid] = true;
+        }
+      }
       this.pbExpandedCats = {};
       this.pbSettingsOpen = !existing; // collapse settings when editing
       this.pbInstanceImportId = '';
@@ -4786,15 +4910,25 @@ function clonarr() {
       this.pbInstanceImportProfileId = '';
       this.profileBuilder = true;
       await this.loadCFPicker(appType);
-      // After presets loaded, try to match existing cutoff to a preset
-      if (existing?.cutoff) {
+      // After presets loaded, restore quality preset display
+      if (existing?.qualityPresetId) {
+        // Use saved preset ID
+        const match = this.pbQualityPresets.find(p => p.id === existing.qualityPresetId);
+        if (match) {
+          this.pb.qualityAllowedNames = (match.allowed || []).join(', ');
+        }
+      } else if (existing?.cutoff) {
+        // Fallback: try to match by cutoff
         const match = this.pbQualityPresets.find(p => p.cutoff === existing.cutoff);
         if (match) {
           this.pb.qualityPresetId = match.id;
           this.pb.qualityPreset = match.id;
           this.pb.qualityAllowedNames = (match.allowed || []).join(', ');
-          this.pb.qualityItems = match.items || [];
         }
+      }
+      // Update quality display from items if available
+      if (existing?.qualities?.length) {
+        this.pb.qualityAllowedNames = existing.qualities.filter(q => q.allowed).map(q => q.name).join(', ');
       }
     },
 
@@ -5133,19 +5267,82 @@ function clonarr() {
       return selected.length > 0 && selected.every(cf => this.pb.requiredCFs[cf.trashId]);
     },
 
+    // Golden Rule: auto-set both CFs when variant is selected
+    pbIsGoldenRuleCF(trashId) {
+      return trashId === 'dc98083864ea246d05a42df0d05f81cc' || trashId === '839bea857ed2c0a8e084f3cbdbd65ecb';
+    },
+
+    pbApplyGoldenRule() {
+      const grHD = 'dc98083864ea246d05a42df0d05f81cc';   // x265 (HD)
+      const grUHD = '839bea857ed2c0a8e084f3cbdbd65ecb';  // x265 (no HDR/DV)
+      const newSelected = {...this.pb.selectedCFs};
+      const variant = this.pb.variantGoldenRule;
+      const newDefaultOn = {...(this.pb.defaultOnCFs || {})};
+      if (variant === 'HD') {
+        newSelected[grHD] = true;
+        newSelected[grUHD] = true;
+        newDefaultOn[grHD] = true;
+        delete newDefaultOn[grUHD];
+        this.pb.goldenRuleDefault = grHD;
+      } else if (variant === 'UHD') {
+        newSelected[grHD] = true;
+        newSelected[grUHD] = true;
+        delete newDefaultOn[grHD];
+        newDefaultOn[grUHD] = true;
+        this.pb.goldenRuleDefault = grUHD;
+      } else {
+        delete newSelected[grHD];
+        delete newSelected[grUHD];
+        delete newDefaultOn[grHD];
+        delete newDefaultOn[grUHD];
+        this.pb.goldenRuleDefault = '';
+      }
+      this.pb.selectedCFs = newSelected;
+      this.pb.defaultOnCFs = newDefaultOn;
+    },
+
+    // Cycle CF mode: Req → Opt ★ → Opt → Req
+    // Req = always included, locked at sync
+    // Opt ★ = optional, default on (recommended)
+    // Opt = optional, default off
+    pbCycleCFMode(trashId) {
+      const isReq = this.pb.requiredCFs[trashId];
+      const isDefaultOn = this.pb.defaultOnCFs?.[trashId];
+      const newReq = {...this.pb.requiredCFs};
+      const newDefaultOn = {...(this.pb.defaultOnCFs || {})};
+
+      if (isReq) {
+        // Req → Opt ★
+        delete newReq[trashId];
+        newDefaultOn[trashId] = true;
+      } else if (isDefaultOn) {
+        // Opt ★ → Opt
+        delete newDefaultOn[trashId];
+      } else {
+        // Opt → Req
+        newReq[trashId] = true;
+        delete newDefaultOn[trashId];
+      }
+      this.pb.requiredCFs = newReq;
+      this.pb.defaultOnCFs = newDefaultOn;
+    },
+
     pbToggleCatRequired(cat) {
       const cfs = this._pbCatCFs(cat);
       const allReq = this.pbIsCatAllRequired(cat);
       const newRequired = {...this.pb.requiredCFs};
+      const newSelected = {...this.pb.selectedCFs};
       for (const cf of cfs) {
-        if (this.pb.selectedCFs[cf.trashId]) {
-          if (allReq) {
-            delete newRequired[cf.trashId];
-          } else {
-            newRequired[cf.trashId] = true;
-          }
+        if (allReq) {
+          // Switch all to optional (keep selected)
+          delete newRequired[cf.trashId];
+        } else {
+          // Switch all to required (also select unselected CFs)
+          newSelected[cf.trashId] = true;
+          newRequired[cf.trashId] = true;
         }
       }
+      this.pb.selectedCFs = newSelected;
       this.pb.requiredCFs = newRequired;
     },
 
@@ -5388,6 +5585,25 @@ function clonarr() {
       }
     },
 
+    _pbSaveDefaults() {
+      try {
+        localStorage.setItem('clonarr-pb-defaults', JSON.stringify({
+          variantGoldenRule: this.pb.variantGoldenRule,
+          variantMisc: this.pb.variantMisc,
+          qualityPresetId: this.pb.qualityPresetId,
+          scoreSet: this.pb.scoreSet,
+          trashScoreSet: this.pb.trashScoreSet,
+        }));
+      } catch (e) {}
+    },
+
+    _pbLoadDefaults() {
+      try {
+        const raw = localStorage.getItem('clonarr-pb-defaults');
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) { return {}; }
+    },
+
     async saveCustomProfile() {
       this.pbSaving = true;
       try {
@@ -5397,23 +5613,50 @@ function clonarr() {
             p => p.name.toLowerCase() === this.pb.name.trim().toLowerCase()
           );
           if (existing) {
-            if (!confirm(`A profile named "${this.pb.name.trim()}" already exists. This will create a duplicate.\n\nContinue?`)) {
-              this.pbSaving = false;
-              return;
+            // Find next available suffix
+            const baseName = this.pb.name.trim();
+            let suffix = 2;
+            let newName = baseName + ' (' + suffix + ')';
+            while ((this.importedProfiles[this.pb.appType] || []).some(
+              p => p.name.toLowerCase() === newName.toLowerCase()
+            )) {
+              suffix++;
+              newName = baseName + ' (' + suffix + ')';
             }
+            await new Promise((resolve, reject) => {
+              this.confirmModal = {
+                show: true,
+                title: 'Profile Name Already Exists',
+                message: `A profile named "${baseName}" already exists.\n\nThe new profile will be saved as "${newName}".`,
+                onConfirm: resolve,
+                onCancel: reject
+              };
+            }).catch(() => { this.pbSaving = false; throw new Error('cancelled'); });
+            this.pb.name = newName;
           }
         }
 
-        // Build formatItems and formatComments from selected CFs
+        // Build formatItems, formatComments, and formatGroups from selected CFs
         const formatItems = {};
         const formatComments = {};
+        const formatGroups = {};
         const requiredCFs = [];
+        // Build CF → group name lookup from pbCategories
+        const cfGroupLookup = {};
+        for (const cat of this.pbCategories) {
+          for (const g of cat.groups) {
+            for (const cf of (g.cfs || [])) {
+              cfGroupLookup[cf.trashId] = g.name;
+            }
+          }
+        }
         for (const trashId of Object.keys(this.pb.selectedCFs)) {
           if (!this.pb.selectedCFs[trashId]) continue;
           const cf = this._pbFindCF(trashId);
           const score = this.pb.scoreOverrides[trashId] ?? cf?.trashScores?.[this.pb.scoreSet] ?? cf?.trashScores?.['default'] ?? 0;
           formatItems[trashId] = score;
           if (cf) formatComments[trashId] = cf.name;
+          if (cfGroupLookup[trashId]) formatGroups[trashId] = cfGroupLookup[trashId];
           if (this.pb.requiredCFs[trashId]) requiredCFs.push(trashId);
         }
 
@@ -5437,10 +5680,15 @@ function clonarr() {
           }
         }
         if (qualities.length === 0) {
-          if (!confirm('No quality items configured. The profile will not work in Radarr/Sonarr without quality items.\n\nSelect a Quality Preset to include them.\n\nSave anyway?')) {
-            this.pbSaving = false;
-            return;
-          }
+          await new Promise((resolve, reject) => {
+            this.confirmModal = {
+              show: true,
+              title: 'No Quality Items',
+              message: 'No quality items configured. The profile will not work in Radarr/Sonarr without quality items.\n\nSelect a Quality Preset to include them.',
+              onConfirm: resolve,
+              onCancel: reject
+            };
+          }).catch(() => { this.pbSaving = false; throw new Error('cancelled'); });
         }
 
         const profile = {
@@ -5457,9 +5705,16 @@ function clonarr() {
           qualities: qualities,
           formatItems: formatItems,
           formatComments: formatComments,
+          formatGroups: Object.keys(formatGroups).length > 0 ? formatGroups : undefined,
           requiredCFs: requiredCFs,
+          defaultOnCFs: Object.keys(this.pb.defaultOnCFs || {}).filter(k => this.pb.defaultOnCFs[k] && this.pb.selectedCFs[k]),
           baselineCFs: this.pb.baselineCFs?.length ? this.pb.baselineCFs : undefined,
           coreCFIds: this.pb.coreCFIds?.length ? this.pb.coreCFIds : undefined,
+          // Builder state (preserved for edit)
+          variantGoldenRule: this.pb.variantGoldenRule || undefined,
+          goldenRuleDefault: this.pb.goldenRuleDefault || undefined,
+          variantMisc: this.pb.variantMisc || undefined,
+          qualityPresetId: this.pb.qualityPresetId || undefined,
           // Dev mode
           trashProfileId: this.pb.trashProfileId || undefined,
           trashScoreSet: this.pb.trashScoreSet || undefined,
@@ -5483,6 +5738,7 @@ function clonarr() {
         });
 
         if (r.ok) {
+          this._pbSaveDefaults();
           this.profileBuilder = false;
           this.loadImportedProfiles(this.pb.appType);
         } else {
@@ -5490,7 +5746,7 @@ function clonarr() {
           alert(data.error || 'Failed to save profile');
         }
       } catch (e) {
-        alert('Error: ' + e.message);
+        if (e.message !== 'cancelled') alert('Error: ' + e.message);
       }
       this.pbSaving = false;
     },
@@ -5533,13 +5789,24 @@ function clonarr() {
       }
 
       // Fallback: no trashProfileId or API call failed — build categories from imported data
+      // Split into required (locked), golden rule (pick one), and optional (toggleable)
       const cfNames = profile.formatComments || {};
       const cfGroups = profile.formatGroups || {};
-      const categories = {};
+      const requiredSet = new Set(profile.requiredCFs || []);
+      const requiredCategories = {};
+      const optionalCategories = {};
+      const goldenRuleCFs = [];
       for (const [tid, score] of Object.entries(profile.formatItems || {})) {
         const name = cfNames[tid] || tid.substring(0, 8) + '...';
         let cat = 'Custom Formats';
-        const groupName = cfGroups[tid];
+        const groupName = cfGroups[tid] || '';
+
+        // Detect Golden Rule CFs by group name
+        if (groupName.includes('Golden Rule')) {
+          goldenRuleCFs.push({ name, trashId: tid, score, groupName });
+          continue;
+        }
+
         if (groupName) {
           const m = groupName.match(/^\[(.+?)\]/);
           cat = m ? m[1] : groupName;
@@ -5550,19 +5817,30 @@ function clonarr() {
         } else if (score < 0) {
           cat = 'Penalties';
         }
-        if (!categories[cat]) categories[cat] = [];
-        categories[cat].push({ name, trashId: tid, score });
+        const target = requiredSet.has(tid) ? requiredCategories : optionalCategories;
+        if (!target[cat]) target[cat] = [];
+        target[cat].push({ name, trashId: tid, score });
       }
-      for (const cat of Object.values(categories)) {
+      for (const cat of Object.values(requiredCategories)) {
+        cat.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+      }
+      for (const cat of Object.values(optionalCategories)) {
         cat.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
       }
       const knownOrder = ['Audio', 'HDR', 'Movie Versions', 'HQ Release Groups', 'Streaming Services', 'Unwanted', 'Custom Formats', 'Penalties'];
-      const orderedCats = [];
+      const orderedReq = [];
       for (const c of knownOrder) {
-        if (categories[c]) orderedCats.push({ category: c, cfs: categories[c] });
+        if (requiredCategories[c]) orderedReq.push({ category: c, cfs: requiredCategories[c] });
       }
-      for (const c of Object.keys(categories).sort()) {
-        if (!knownOrder.includes(c)) orderedCats.push({ category: c, cfs: categories[c] });
+      for (const c of Object.keys(requiredCategories).sort()) {
+        if (!knownOrder.includes(c)) orderedReq.push({ category: c, cfs: requiredCategories[c] });
+      }
+      const orderedOpt = [];
+      for (const c of knownOrder) {
+        if (optionalCategories[c]) orderedOpt.push({ category: c, cfs: optionalCategories[c] });
+      }
+      for (const c of Object.keys(optionalCategories).sort()) {
+        if (!knownOrder.includes(c)) orderedOpt.push({ category: c, cfs: optionalCategories[c] });
       }
 
       this.profileDetail = {
@@ -5580,12 +5858,24 @@ function clonarr() {
             language: profile.language,
             items: profile.qualities || [],
           },
-          importedCategories: orderedCats,
-          totalCoreCFs: Object.keys(profile.formatItems || {}).length,
+          importedRequiredCategories: orderedReq,
+          importedGoldenRule: goldenRuleCFs,
+          importedCategories: orderedOpt,
+          totalCoreCFs: requiredSet.size || Object.keys(profile.formatItems || {}).length,
           imported: true,
           importedRaw: profile,
         }
       };
+
+      // Pre-select defaultOnCFs (optional recommended) and Golden Rule default
+      const defaultOnSet = new Set(profile.defaultOnCFs || []);
+      if (profile.goldenRuleDefault) defaultOnSet.add(profile.goldenRuleDefault);
+      for (const tid of defaultOnSet) {
+        this.selectedOptionalCFs[tid] = true;
+      }
+      if (defaultOnSet.size > 0) {
+        this.selectedOptionalCFs = {...this.selectedOptionalCFs};
+      }
     },
 
     openExportModalFromList(appType, profile) {
@@ -5861,13 +6151,15 @@ function clonarr() {
 
     generateTrashJSON(p) {
       // TRaSH format: formatItems is { "CF Name": "trash_id" }
-      // Only include coreCFs (profile definition) — not CFs from CF groups
-      // (scores live in individual CF JSONs under trash_scores, not here)
+      // Only required CFs go in formatItems — optional CFs belong in CF group files
+      const requiredSet = new Set(p.requiredCFs || []);
       const coreCFs = new Set(p.coreCFIds || []);
       const formatItems = {};
       for (const [tid] of Object.entries(p.formatItems || {})) {
-        // If we have coreCF data, only include those; otherwise include all
-        if (coreCFs.size > 0 && !coreCFs.has(tid)) continue;
+        // If we have requiredCFs data, only include required ones
+        if (requiredSet.size > 0 && !requiredSet.has(tid)) continue;
+        // Fallback: if no requiredCFs but we have coreCFs, use those
+        if (requiredSet.size === 0 && coreCFs.size > 0 && !coreCFs.has(tid)) continue;
         const name = (p.formatComments || {})[tid] || tid;
         formatItems[name] = tid;
       }
@@ -5899,6 +6191,46 @@ function clonarr() {
       trashProfile.language = p.language || 'Original';
       trashProfile.items = items;
       trashProfile.formatItems = formatItems;
+
+      // Build cfGroupIncludes — optional CF groups this profile uses
+      // Match optional CFs (not in requiredSet) to TRaSH CF groups
+      if (requiredSet.size > 0) {
+        const optionalTids = new Set();
+        for (const tid of Object.keys(p.formatItems || {})) {
+          if (!requiredSet.has(tid)) optionalTids.add(tid);
+        }
+        if (optionalTids.size > 0) {
+          const cfBrowse = this.cfBrowseData[p.appType || 'radarr'];
+          if (cfBrowse?.groups) {
+            // Filter out groups excluded by variant selection
+            const excludeGroups = new Set();
+            if (p.variantGoldenRule === 'HD') excludeGroups.add('[Required] Golden Rule UHD');
+            else if (p.variantGoldenRule === 'UHD') excludeGroups.add('[Required] Golden Rule HD');
+            else if (p.variantGoldenRule === 'none') { excludeGroups.add('[Required] Golden Rule HD'); excludeGroups.add('[Required] Golden Rule UHD'); }
+            if (p.variantMisc === 'Standard') excludeGroups.add('[Optional] Miscellaneous SQP');
+            else if (p.variantMisc === 'SQP') excludeGroups.add('[Optional] Miscellaneous');
+            else if (p.variantMisc === 'none') { excludeGroups.add('[Optional] Miscellaneous'); excludeGroups.add('[Optional] Miscellaneous SQP'); }
+
+            const groupIncludes = [];
+            const seenGroups = new Set();
+            for (const group of cfBrowse.groups) {
+              if (excludeGroups.has(group.name)) continue;
+              const groupCFIds = new Set((group.custom_formats || []).map(cf => cf.trash_id));
+              const hasOptional = [...optionalTids].some(tid => groupCFIds.has(tid));
+              if (hasOptional && !seenGroups.has(group.trash_id)) {
+                seenGroups.add(group.trash_id);
+                groupIncludes.push({
+                  trash_id: group.trash_id,
+                  name: group.name
+                });
+              }
+            }
+            if (groupIncludes.length > 0) {
+              trashProfile.cfGroupIncludes = groupIncludes;
+            }
+          }
+        }
+      }
 
       return JSON.stringify(trashProfile, null, 2);
     },

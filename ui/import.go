@@ -105,6 +105,7 @@ type ImportedProfile struct {
 	FormatComments        map[string]string `json:"formatComments,omitempty"`        // trash_id -> CF name
 	FormatGroups          map[string]string `json:"formatGroups,omitempty"`          // trash_id -> group name (TRaSH CF group membership)
 	RequiredCFs           []string          `json:"requiredCFs,omitempty"`           // trash_ids marked as required
+	DefaultOnCFs          []string          `json:"defaultOnCFs,omitempty"`          // trash_ids that are optional but default-on (recommended)
 	BaselineCFs           []string          `json:"baselineCFs,omitempty"`           // CFs from TRaSH template defaults (core + default groups)
 	CoreCFIds             []string          `json:"coreCFIds,omitempty"`             // CFs from TRaSH profile coreCFs (for TRaSH JSON export)
 	TrashDescription      string            `json:"trashDescription,omitempty"`      // dev mode: profile description for TRaSH export

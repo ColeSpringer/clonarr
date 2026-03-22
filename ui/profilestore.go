@@ -192,13 +192,19 @@ func (ps *profileStore) writeProfile(p ImportedProfile) error {
 	if existing, err := os.ReadFile(path); err == nil {
 		var ep ImportedProfile
 		if json.Unmarshal(existing, &ep) == nil && ep.ID != p.ID {
-			// Name collision — use ID as suffix (safe: generateID produces 32 hex chars)
-			idSuffix := p.ID
-			if len(idSuffix) > 8 {
-				idSuffix = idSuffix[:8]
+			// Name collision — add numeric suffix to both profile name and filename
+			for suffix := 2; suffix < 100; suffix++ {
+				candidate := fmt.Sprintf("%s (%d)", p.Name, suffix)
+				candidateFile := sanitizeFilename(candidate) + ".json"
+				candidatePath := filepath.Join(ps.dir, candidateFile)
+				if _, err := os.Stat(candidatePath); err != nil {
+					// File doesn't exist — use this name
+					p.Name = candidate
+					filename = candidateFile
+					path = candidatePath
+					break
+				}
 			}
-			filename = sanitizeFilename(p.Name) + "_" + idSuffix + ".json"
-			path = filepath.Join(ps.dir, filename)
 		}
 	}
 
