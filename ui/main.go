@@ -157,6 +157,7 @@ func main() {
 	mux.HandleFunc("PUT /api/instances/{id}/quality-sizes/overrides", app.handleSaveQSOverrides)
 	mux.HandleFunc("GET /api/instances/{id}/quality-sizes/auto-sync", app.handleGetQSAutoSync)
 	mux.HandleFunc("PUT /api/instances/{id}/quality-sizes/auto-sync", app.handleSaveQSAutoSync)
+	mux.HandleFunc("GET /api/instances/{id}/quality-definitions", app.handleQualityDefinitions)
 	mux.HandleFunc("GET /api/instances/{id}/profile-export/{profileId}", app.handleInstanceProfileExport)
 	mux.HandleFunc("POST /api/instances/{id}/backup", app.handleInstanceBackup)
 	mux.HandleFunc("POST /api/instances/{id}/restore", app.handleInstanceRestore)

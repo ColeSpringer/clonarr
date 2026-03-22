@@ -330,6 +330,32 @@ func (app *App) handleInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, profiles)
 }
 
+// handleQualityDefinitions returns quality names from an Arr instance for the quality builder.
+func (app *App) handleQualityDefinitions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	inst, ok := app.config.GetInstance(id)
+	if !ok {
+		writeError(w, 404, "Instance not found")
+		return
+	}
+	client := NewArrClient(inst.URL, inst.APIKey)
+	defs, err := client.ListQualityDefinitions()
+	if err != nil {
+		writeError(w, 502, "Failed to fetch quality definitions: "+err.Error())
+		return
+	}
+	// Return just quality names in order
+	type QDef struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	result := make([]QDef, 0, len(defs))
+	for _, d := range defs {
+		result = append(result, QDef{ID: d.Quality.ID, Name: d.Quality.Name})
+	}
+	writeJSON(w, result)
+}
+
 // handleInstanceProfileExport fetches a profile from an Arr instance,
 // converts it to an ImportedProfile (same as the import system), and saves it.
 func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Request) {
