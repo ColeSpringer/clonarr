@@ -82,7 +82,6 @@ docker run -d \
   --restart unless-stopped \
   -p 6060:6060 \
   -v /path/to/config:/config \
-  -v /path/to/data:/data \
   -e TZ=Europe/Oslo \
   ghcr.io/prophetse7en/clonarr:latest
 ```
@@ -96,7 +95,7 @@ Open the Web UI at `http://your-host:6060`.
 3. Click **Pull** in the header to clone the TRaSH Guides repository
 4. Browse profiles on the **Radarr** or **Sonarr** tab and click **Sync** to deploy
 
-The TRaSH repository is cloned to `/data/trash-guides/` and updated automatically (default: every 24 hours).
+The TRaSH repository is cloned to `/config/data/trash-guides/` and updated automatically (default: every 24 hours).
 
 ## Docker
 
@@ -113,8 +112,7 @@ The TRaSH repository is cloned to `/data/trash-guides/` and updated automaticall
 
 | Container Path | Purpose |
 |---------------|---------|
-| `/config` | Configuration, profiles, sync history |
-| `/data` | TRaSH Guides repository clone |
+| `/config` | Configuration, profiles, sync history, and TRaSH Guides cache |
 
 ### Ports
 
@@ -138,7 +136,6 @@ services:
       - PGID=100
     volumes:
       - ./clonarr-config:/config
-      - ./clonarr-data:/data
 ```
 
 ### Building from Source
@@ -148,7 +145,7 @@ git clone https://github.com/prophetse7en/clonarr.git
 cd clonarr
 docker build -t clonarr .
 docker run -d --name clonarr -p 6060:6060 \
-  -v ./config:/config -v ./data:/data clonarr
+  -v ./config:/config clonarr
 ```
 
 ### Healthcheck

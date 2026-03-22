@@ -328,6 +328,23 @@ func (ts *trashStore) CloneOrPull(repoURL, branch string) error {
 	}
 
 	if _, err := os.Stat(filepath.Join(ts.dataDir, ".git")); err == nil {
+		// Enable sparse-checkout on existing full clones (migration)
+		sparseFile := filepath.Join(ts.dataDir, ".git", "info", "sparse-checkout")
+		if _, serr := os.Stat(sparseFile); serr != nil {
+			log.Printf("Migrating existing clone to sparse-checkout")
+			for _, cmd := range []*exec.Cmd{
+				exec.Command("git", "-C", ts.dataDir, "config", "core.sparseCheckout", "true"),
+				exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
+					"docs/json/", "docs/updates.txt", "includes/cf-descriptions/"),
+			} {
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					log.Printf("Warning: sparse-checkout migration: %v", err)
+				}
+			}
+		}
+
 		// M13: Pull with explicit branch
 		log.Printf("Pulling TRaSH repo in %s (branch: %s)", ts.dataDir, branch)
 		cmd := exec.Command("git", "-C", ts.dataDir, "fetch", "origin", branch)
@@ -343,13 +360,21 @@ func (ts *trashStore) CloneOrPull(repoURL, branch string) error {
 			return fmt.Errorf("git reset: %w", err)
 		}
 	} else {
-		// Clone
-		log.Printf("Cloning TRaSH repo %s → %s", repoURL, ts.dataDir)
-		cmd := exec.Command("git", "clone", "--depth=1", "--branch", branch, repoURL, ts.dataDir)
+		// Clone with sparse-checkout — only fetch the files Clonarr needs
+		log.Printf("Cloning TRaSH repo %s → %s (sparse-checkout)", repoURL, ts.dataDir)
+		cmd := exec.Command("git", "clone", "--depth=1", "--branch", branch,
+			"--filter=blob:none", "--sparse", repoURL, ts.dataDir)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("git clone: %w", err)
+		}
+		cmd = exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
+			"docs/json/", "docs/updates.txt", "includes/cf-descriptions/")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("sparse-checkout set: %w", err)
 		}
 	}
 

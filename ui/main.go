@@ -42,7 +42,7 @@ func main() {
 
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
-		dataDir = "/data"
+		dataDir = filepath.Join(configDir, "data")
 	}
 
 	// Initialize stores
