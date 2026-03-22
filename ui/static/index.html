@@ -1925,6 +1925,30 @@
               </div>
             </div>
 
+            <!-- Group variant selectors (only shown when conflicting groups exist and no template filters them) -->
+            <template x-if="!pb.trashProfileName && pbHasGroupVariants()">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px" x-show="pbGroupVariant('Golden Rule')">
+                  <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Golden Rule</div>
+                  <select class="pb-input" x-model="pb.variantGoldenRule" style="width:100%">
+                    <option value="" disabled>Select variant...</option>
+                    <option value="HD">HD</option>
+                    <option value="UHD">UHD</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px" x-show="pbGroupVariant('Miscellaneous')">
+                  <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Miscellaneous</div>
+                  <select class="pb-input" x-model="pb.variantMisc" style="width:100%">
+                    <option value="" disabled>Select variant...</option>
+                    <option value="Standard">Standard</option>
+                    <option value="SQP">SQP</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+            </template>
+
             <!-- Dev Mode Fields -->
             <template x-if="config.devMode">
               <div class="pb-dev-fields">
@@ -1961,7 +1985,7 @@
       <!-- CF Picker (grouped) -->
       <template x-if="!pbLoading && pbCategories.length > 0">
         <div>
-          <template x-for="cat in pbCategories" :key="cat.category">
+          <template x-for="cat in pbFilteredCategories" :key="cat.category">
             <div class="card" :class="getCategoryClass(cat.category)" style="margin-bottom:8px">
               <div class="pb-cat-header" @click="pbExpandedCats[cat.category] = !pbExpandedCats[cat.category]">
                 <span class="profile-group-chevron" :class="{ open: pbExpandedCats[cat.category] }">&#9654;</span>
@@ -1981,7 +2005,8 @@
               </div>
               <div x-show="pbExpandedCats[cat.category]">
                 <template x-for="group in cat.groups" :key="group.name">
-                  <div>
+                  <div :style="pbIsGroupDisabled(group) ? 'opacity:0.35;pointer-events:none' : ''"
+                       :title="pbIsGroupDisabled(group) ? 'Disabled — another group with shared CFs is active' : ''">
                     <!-- Group sub-header (only if multiple groups AND group has >1 CF) -->
                     <template x-if="cat.groups.length > 1 && group.cfs.length > 1">
                       <div class="pb-group-header" @click="pbExpandedGroups[cat.category+'/'+group.name] = !(pbExpandedGroups[cat.category+'/'+group.name] ?? true)">
@@ -4116,6 +4141,9 @@ function clonarr() {
       scoreOverrides: {},
       // Dev mode
       trashProfileId: '',
+      trashProfileName: '',
+      variantGoldenRule: '',
+      variantMisc: '',
       trashScoreSet: '',
       trashDescription: '',
       groupNum: 0,
@@ -4610,6 +4638,9 @@ function clonarr() {
         requiredCFs: {},
         scoreOverrides: {},
         trashProfileId: existing?.trashProfileId || '',
+        trashProfileName: '',
+        variantGoldenRule: '',
+        variantMisc: '',
         trashScoreSet: existing?.trashScoreSet || '',
         trashDescription: existing?.trashDescription || '',
         groupNum: existing?.groupNum || 0,
@@ -4731,6 +4762,83 @@ function clonarr() {
       return Object.keys(this.pb.requiredCFs).filter(k => this.pb.requiredCFs[k] && this.pb.selectedCFs[k]).length;
     },
 
+    get pbFilteredCategories() {
+      if (!this.pbCategories.length) return this.pbCategories;
+
+      return this.pbCategories.map(cat => {
+        let filtered = cat.groups;
+
+        // Filter by template profile if set
+        if (this.pb.trashProfileName) {
+          const profName = this.pb.trashProfileName;
+          filtered = filtered.filter(g =>
+            !g.includeProfiles || g.includeProfiles.length === 0 || g.includeProfiles.includes(profName)
+          );
+        }
+
+        // Filter by variant dropdowns (only when no template)
+        if (!this.pb.trashProfileName) {
+          if (this.pb.variantGoldenRule === 'HD') {
+            filtered = filtered.filter(g => g.name !== '[Required] Golden Rule UHD');
+          } else if (this.pb.variantGoldenRule === 'UHD') {
+            filtered = filtered.filter(g => g.name !== '[Required] Golden Rule HD');
+          } else if (this.pb.variantGoldenRule === 'none') {
+            filtered = filtered.filter(g => g.name !== '[Required] Golden Rule HD' && g.name !== '[Required] Golden Rule UHD');
+          }
+          if (this.pb.variantMisc === 'Standard') {
+            filtered = filtered.filter(g => g.name !== '[Optional] Miscellaneous SQP');
+          } else if (this.pb.variantMisc === 'SQP') {
+            filtered = filtered.filter(g => g.name !== '[Optional] Miscellaneous');
+          } else if (this.pb.variantMisc === 'none') {
+            filtered = filtered.filter(g => g.name !== '[Optional] Miscellaneous' && g.name !== '[Optional] Miscellaneous SQP');
+          }
+        }
+
+        if (filtered.length === 0) return null;
+        return { ...cat, groups: filtered };
+      }).filter(Boolean);
+    },
+
+    pbHasGroupVariants() {
+      // Check if there are conflicting group pairs in the categories
+      const names = new Set();
+      for (const cat of this.pbCategories) {
+        for (const g of cat.groups) names.add(g.name);
+      }
+      return (names.has('[Required] Golden Rule HD') && names.has('[Required] Golden Rule UHD')) ||
+             (names.has('[Optional] Miscellaneous') && names.has('[Optional] Miscellaneous SQP'));
+    },
+
+    pbGroupVariant(type) {
+      const names = new Set();
+      for (const cat of this.pbCategories) {
+        for (const g of cat.groups) names.add(g.name);
+      }
+      if (type === 'Golden Rule') return names.has('[Required] Golden Rule HD') && names.has('[Required] Golden Rule UHD');
+      if (type === 'Miscellaneous') return names.has('[Optional] Miscellaneous') && names.has('[Optional] Miscellaneous SQP');
+      return false;
+    },
+
+    // Check if a group is disabled because another group sharing CFs has active selections
+    pbIsGroupDisabled(group) {
+      if (!group.cfs || group.cfs.length === 0) return false;
+      const groupCFIds = new Set(group.cfs.map(cf => cf.trashId));
+      // Check if any of this group's CFs are selected
+      const hasOwnSelection = group.cfs.some(cf => this.pb.selectedCFs[cf.trashId]);
+      if (hasOwnSelection) return false; // This group is active, not disabled
+      // Check all groups (not just filtered) for shared CF conflicts
+      for (const cat of this.pbCategories) {
+        for (const g of cat.groups) {
+          if (g === group || g.name === group.name) continue;
+          const shared = g.cfs?.some(cf => groupCFIds.has(cf.trashId));
+          if (shared && g.cfs?.some(cf => this.pb.selectedCFs[cf.trashId])) {
+            return true; // Another group with shared CFs has active selections
+          }
+        }
+      }
+      return false;
+    },
+
     _pbCatCFs(cat) {
       // Flatten all CFs across groups in a category
       const cfs = [];
@@ -4779,7 +4887,7 @@ function clonarr() {
             if (cf.trashId !== trashId) delete newSelected[cf.trashId];
           }
           // Find all other exclusive groups sharing any CF with this group
-          for (const cat of this.pbCategories) {
+          for (const cat of this.pbFilteredCategories) {
             for (const g of cat.groups) {
               if (g === exclusiveGroup || !g.exclusive) continue;
               if (g.cfs.some(cf => sharedIds.has(cf.trashId))) {
@@ -4918,6 +5026,7 @@ function clonarr() {
           // Apply score set and link to TRaSH profile (enables v8 export)
           if (detail.scoreCtx) this.pb.scoreSet = detail.scoreCtx;
           this.pb.trashProfileId = trashId;
+          this.pb.trashProfileName = detail.profile?.name || '';
           this.pb.trashScoreSet = detail.scoreCtx || '';
           this.pb.trashDescription = detail.profile?.trash_description || '';
           // Apply quality preset and sync dropdown
