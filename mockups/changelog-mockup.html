@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clonarr — Changelog UI Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e1e4e8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; }
+  h1 { font-size: 20px; margin-bottom: 32px; color: #58a6ff; }
+  h2 { font-size: 16px; margin: 40px 0 16px; color: #d29922; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+  .note { font-size: 12px; color: #8b949e; margin-bottom: 24px; line-height: 1.5; }
+
+  /* === HEADER === */
+  .header {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+    position: relative;
+  }
+  .header .logo { font-size: 15px; font-weight: 700; color: #e1e4e8; }
+  .header .tabs { display: flex; gap: 4px; margin-left: 16px; }
+  .header .tab {
+    padding: 4px 12px; border-radius: 4px; font-size: 12px; color: #8b949e; cursor: pointer;
+  }
+  .header .tab.active { background: #21262d; color: #e1e4e8; }
+  .header .spacer { flex: 1; }
+
+  .sync-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #8b949e;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    position: relative;
+  }
+  .sync-status:hover { background: #21262d; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb950; flex-shrink: 0; }
+  .dot.stale { background: #d29922; }
+  .dot.error { background: #f85149; }
+  .sync-time { color: #e1e4e8; }
+  .sync-hash { color: #484f58; font-family: monospace; font-size: 10px; }
+  .sync-arrow { color: #484f58; font-size: 10px; margin-left: 2px; transition: transform 0.2s; }
+  .sync-arrow.open { transform: rotate(180deg); }
+
+  .btn-pull {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .btn-pull:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  /* === DROPDOWN === */
+  .changelog-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 480px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 100;
+    overflow: hidden;
+  }
+  .changelog-dropdown .cd-header {
+    padding: 12px 16px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e1e4e8;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .changelog-dropdown .cd-header span { font-size: 11px; color: #484f58; font-weight: 400; }
+  .cd-section {
+    padding: 10px 16px;
+    border-bottom: 1px solid #21262d;
+  }
+  .cd-section:last-child { border-bottom: none; }
+  .cd-date {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8b949e;
+    margin-bottom: 6px;
+  }
+  .cd-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .cd-type {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .cd-type.feat { background: #1b3a2a; color: #3fb950; }
+  .cd-type.fix { background: #3d2e0a; color: #d29922; }
+  .cd-type.refactor { background: #1c2333; color: #58a6ff; }
+  .cd-scope { color: #8b949e; }
+  .cd-msg { color: #c9d1d9; }
+  .cd-pr { color: #484f58; font-size: 10px; text-decoration: none; }
+  .cd-pr:hover { color: #58a6ff; }
+
+  /* === ALT B: SETTINGS SECTION === */
+  .settings-panel {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 700px;
+  }
+  .settings-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e1e4e8;
+    margin-bottom: 4px;
+  }
+  .settings-subtitle {
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 16px;
+  }
+  .settings-status {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+  .settings-status .ss-item { display: flex; flex-direction: column; gap: 2px; }
+  .settings-status .ss-label { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .settings-status .ss-value { color: #e1e4e8; font-weight: 500; }
+
+  .changelog-list {
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .cl-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid #21262d;
+  }
+  .cl-section:last-child { border-bottom: none; }
+  .cl-date {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e1e4e8;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cl-date .cl-count { font-size: 11px; color: #484f58; font-weight: 400; }
+  .cl-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  /* Header variant for Alt B */
+  .header-simple .sync-status { cursor: default; }
+  .header-simple .sync-status:hover { background: transparent; }
+</style>
+</head>
+<body>
+
+<h1>Clonarr — TRaSH Status & Changelog Mockups</h1>
+
+<!-- ============================================ -->
+<h2>Alt A: Header dropdown</h2>
+<p class="note">
+  Headeren viser sync-status (tidspunkt + commit). Klikk på statusen åpner en dropdown med siste changelog-entries fra updates.txt.<br>
+  Fordeler: Alltid tilgjengelig, rask tilgang. Ulempe: Kan virke travelt i headeren.
+</p>
+
+<div style="position:relative">
+  <div class="header">
+    <span class="logo">Clonarr</span>
+    <div class="tabs">
+      <span class="tab active">Radarr</span>
+      <span class="tab">Sonarr</span>
+      <span class="tab">Settings</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="sync-status" title="Click for changelog">
+      <span class="dot"></span>
+      <span>TRaSH synced</span>
+      <span class="sync-time">17 Mar 14:32</span>
+      <span class="sync-hash">c9a906e</span>
+      <span class="sync-arrow open">▾</span>
+    </div>
+    <button class="btn-pull">Pull</button>
+
+    <!-- Dropdown open -->
+    <div class="changelog-dropdown">
+      <div class="cd-header">
+        Guide Updates
+        <span>from docs/updates.txt</span>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-date">15 Mar 2026</div>
+        <div class="cd-entry">
+          <span class="cd-type fix">fix</span>
+          <span><span class="cd-scope">starr-german:</span> <span class="cd-msg">Align custom format naming</span> <a class="cd-pr" href="#">#2646</a></span>
+        </div>
+        <div class="cd-entry">
+          <span class="cd-type fix">fix</span>
+          <span><span class="cd-scope">guide-sync:</span> <span class="cd-msg">Sonarr WEB 1080p/2160p Alternative Quality Profile JSON Ordering</span> <a class="cd-pr" href="#">#2651</a></span>
+        </div>
+        <div class="cd-entry">
+          <span class="cd-type feat">feat</span>
+          <span><span class="cd-scope">starr-german:</span> <span class="cd-msg">German Anime Guide</span> <a class="cd-pr" href="#">#2619</a></span>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-date">8 Mar 2026</div>
+        <div class="cd-entry">
+          <span class="cd-type feat">feat</span>
+          <span><span class="cd-scope">radarr:</span> <span class="cd-msg">update Custom Format Special Edition</span> <a class="cd-pr" href="#">#2640</a></span>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-date">1 Mar 2026</div>
+        <div class="cd-entry">
+          <span class="cd-type feat">feat</span>
+          <span><span class="cd-scope">starr-french:</span> <span class="cd-msg">Add VF and VOSTFR quality profiles for Radarr and Sonarr</span> <a class="cd-pr" href="#">#2634</a></span>
+        </div>
+        <div class="cd-entry">
+          <span class="cd-type feat">feat</span>
+          <span><span class="cd-scope">guide:</span> <span class="cd-msg">Add custom format group informational tables</span> <a class="cd-pr" href="#">#2638</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="height: 360px"></div>
+
+<!-- ============================================ -->
+<h2>Alt B: Header clean + Settings changelog</h2>
+<p class="note">
+  Headeren viser kun sync-status uten interaktivitet. Changelog lever i Settings-tabben som en egen seksjon.<br>
+  Fordeler: Ren header, mer plass til changelog. Ulempe: Krever navigering til Settings for å se endringer.
+</p>
+
+<div class="header header-simple">
+  <span class="logo">Clonarr</span>
+  <div class="tabs">
+    <span class="tab">Radarr</span>
+    <span class="tab">Sonarr</span>
+    <span class="tab active">Settings</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="sync-status">
+    <span class="dot"></span>
+    <span>TRaSH synced</span>
+    <span class="sync-time">17 Mar 14:32</span>
+    <span class="sync-hash">c9a906e</span>
+  </div>
+  <button class="btn-pull">Pull</button>
+</div>
+
+<div style="height: 24px"></div>
+
+<div class="settings-panel">
+  <div class="settings-title">TRaSH Guides Repository</div>
+  <div class="settings-subtitle">Sync status and recent guide updates</div>
+
+  <div class="settings-status">
+    <div class="ss-item">
+      <span class="ss-label">Last Pull</span>
+      <span class="ss-value">17 Mar 2026, 14:32</span>
+    </div>
+    <div class="ss-item">
+      <span class="ss-label">Commit</span>
+      <span class="ss-value" style="font-family:monospace">c9a906e</span>
+    </div>
+    <div class="ss-item">
+      <span class="ss-label">Pull Interval</span>
+      <span class="ss-value">24h</span>
+    </div>
+    <div class="ss-item">
+      <span class="ss-label">Radarr CFs</span>
+      <span class="ss-value">142</span>
+    </div>
+    <div class="ss-item">
+      <span class="ss-label">Sonarr CFs</span>
+      <span class="ss-value">128</span>
+    </div>
+  </div>
+
+  <div class="changelog-list">
+    <div class="cl-section">
+      <div class="cl-date">
+        15 Mar 2026
+        <span class="cl-count">3 changes</span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type fix">fix</span>
+        <span><span class="cd-scope">starr-german:</span> <span class="cd-msg">Align custom format naming</span> <a class="cd-pr" href="#">#2646</a></span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type fix">fix</span>
+        <span><span class="cd-scope">guide-sync:</span> <span class="cd-msg">Sonarr WEB 1080p/2160p Alternative Quality Profile JSON Ordering</span> <a class="cd-pr" href="#">#2651</a></span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type feat">feat</span>
+        <span><span class="cd-scope">starr-german:</span> <span class="cd-msg">German Anime Guide</span> <a class="cd-pr" href="#">#2619</a></span>
+      </div>
+    </div>
+
+    <div class="cl-section">
+      <div class="cl-date">
+        8 Mar 2026
+        <span class="cl-count">1 change</span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type feat">feat</span>
+        <span><span class="cd-scope">radarr:</span> <span class="cd-msg">update Custom Format Special Edition</span> <a class="cd-pr" href="#">#2640</a></span>
+      </div>
+    </div>
+
+    <div class="cl-section">
+      <div class="cl-date">
+        1 Mar 2026
+        <span class="cl-count">2 changes</span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type feat">feat</span>
+        <span><span class="cd-scope">starr-french:</span> <span class="cd-msg">Add VF and VOSTFR quality profiles for Radarr and Sonarr</span> <a class="cd-pr" href="#">#2634</a></span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type feat">feat</span>
+        <span><span class="cd-scope">guide:</span> <span class="cd-msg">Add custom format group informational tables</span> <a class="cd-pr" href="#">#2638</a></span>
+      </div>
+    </div>
+
+    <div class="cl-section" style="background:#161b22">
+      <div class="cl-date">
+        22 Feb 2026
+        <span class="cl-count">8 changes</span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type refactor">refactor</span>
+        <span><span class="cd-scope">guide-sync:</span> <span class="cd-msg">migrate CF groups to include semantics and invert quality order</span> <a class="cd-pr" href="#">#2590</a></span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type feat">feat</span>
+        <span><span class="cd-scope">starr:</span> <span class="cd-msg">Add RlsGrp BLOOM to WEB Tier 03</span> <a class="cd-pr" href="#">#2626</a></span>
+      </div>
+      <div class="cl-entry">
+        <span class="cd-type fix">fix</span>
+        <span><span class="cd-scope">starr:</span> <span class="cd-msg">iT CF matching italian language code</span> <a class="cd-pr" href="#">#2540</a></span>
+      </div>
+      <div style="font-size:11px;color:#484f58;padding:4px 0 0 42px">+ 5 more</div>
+    </div>
+  </div>
+</div>
+
+<div style="height: 60px"></div>
+
+<h2>Sammenligning</h2>
+<table style="font-size:13px;border-collapse:collapse;width:100%;max-width:600px">
+  <tr style="border-bottom:1px solid #30363d">
+    <th style="text-align:left;padding:8px;color:#8b949e">—</th>
+    <th style="text-align:left;padding:8px;color:#58a6ff">Alt A: Dropdown</th>
+    <th style="text-align:left;padding:8px;color:#58a6ff">Alt B: Settings</th>
+  </tr>
+  <tr style="border-bottom:1px solid #21262d">
+    <td style="padding:8px;color:#8b949e">Tilgang</td>
+    <td style="padding:8px">Ett klikk fra alle sider</td>
+    <td style="padding:8px">Må navigere til Settings</td>
+  </tr>
+  <tr style="border-bottom:1px solid #21262d">
+    <td style="padding:8px;color:#8b949e">Plass</td>
+    <td style="padding:8px">Begrenset (dropdown)</td>
+    <td style="padding:8px">Full bredde, scrollbar</td>
+  </tr>
+  <tr style="border-bottom:1px solid #21262d">
+    <td style="padding:8px;color:#8b949e">Header</td>
+    <td style="padding:8px">Interaktiv (klikk for mer)</td>
+    <td style="padding:8px">Ren status, ingen klikk</td>
+  </tr>
+  <tr>
+    <td style="padding:8px;color:#8b949e">Anbefaling</td>
+    <td style="padding:8px;color:#3fb950">✓ Rask tilgang, passer godt med eksisterende header</td>
+    <td style="padding:8px;color:#8b949e">Ryddigere, men gjemt bort</td>
+  </tr>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clonarr — Settings v2 Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e1e4e8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; }
+  h1 { font-size: 20px; margin-bottom: 8px; color: #58a6ff; }
+  h2 { font-size: 16px; margin: 48px 0 12px; color: #d29922; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+  h3 { font-size: 14px; margin: 24px 0 12px; color: #e1e4e8; }
+  .note { font-size: 12px; color: #8b949e; margin-bottom: 24px; line-height: 1.6; max-width: 800px; }
+
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; max-width: 840px; overflow: hidden; }
+  .input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e1e4e8; padding: 5px 8px; font-size: 12px; }
+  select.input { cursor: pointer; }
+  .toggle-track { width: 32px; height: 18px; background: #30363d; border-radius: 9px; position: relative; cursor: pointer; flex-shrink: 0; }
+  .toggle-track.on { background: #238636; }
+  .toggle-dot { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.15s; }
+  .toggle-track.on .toggle-dot { left: 16px; }
+  .btn { background: transparent; border: 1px solid #30363d; color: #8b949e; padding: 5px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .btn-primary { background: #238636; border-color: #238636; color: #fff; }
+  .btn-blue { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+  .cat-bar { width: 3px; border-radius: 2px; flex-shrink: 0; }
+  .cat-gold { background: #d29922; }
+  .cat-green { background: #3fb950; }
+  .cat-teal { background: #2ea6a6; }
+  .cat-blue { background: #58a6ff; }
+  .cat-purple { background: #a371f7; }
+  .cat-gray { background: #484f58; }
+  .cat-red { background: #f47067; }
+  .cat-white { background: #e1e4e8; }
+</style>
+</head>
+<body>
+
+<h1>Profile Settings v2 — Refined</h1>
+<p class="note">
+  Fokus: (1) Symmetri og alignment i settings, (2) Lik kategori-stil overalt,
+  (3) Beholder spacing + x/y teller fra builder.
+</p>
+
+<!-- ========================================================= -->
+<h2>Alt A Refined: Card Grid — Builder</h2>
+<p class="note">
+  Samme som forrige Alt A, men tydligere grid. Alle inputs har fast bredde og labels over.
+</p>
+
+<div class="panel" style="padding:20px">
+  <div style="margin-bottom:20px">
+    <input type="text" class="input" value="My Custom SQP" style="font-size:16px;padding:8px 12px;width:100%;font-weight:600;border-color:#21262d">
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <!-- Scoring card -->
+    <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Score Set</div>
+          <select class="input" style="width:100%"><option>default</option></select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Language</div>
+          <select class="input" style="width:100%"><option>Original</option></select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Min Score</div>
+          <input type="number" class="input" value="0" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Cutoff Score</div>
+          <input type="number" class="input" value="10000" style="width:100%">
+        </div>
+      </div>
+    </div>
+
+    <!-- Quality card -->
+    <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Quality</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+        <div style="grid-column:1/3">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Quality Preset</div>
+          <select class="input" style="width:100%"><option>None</option></select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Min Upgrade</div>
+          <input type="number" class="input" value="1" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Upgrades</div>
+          <div style="display:flex;align-items:center;gap:8px;height:28px">
+            <div class="toggle-track on"><div class="toggle-dot"></div></div>
+            <span style="font-size:12px;color:#3fb950">Allowed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import -->
+  <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 14px;display:flex;gap:10px;align-items:center">
+    <span style="font-size:10px;color:#484f58;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap">Import</span>
+    <select class="input" style="flex:1"><option>Template...</option></select>
+    <button class="btn" style="font-size:11px">Apply</button>
+    <span style="color:#21262d">|</span>
+    <select class="input" style="width:130px"><option>Instance...</option></select>
+    <select class="input" style="width:130px"><option>Profile...</option></select>
+    <button class="btn" style="font-size:11px">Apply</button>
+  </div>
+</div>
+
+<!-- Categories -->
+<div style="max-width:840px;margin-top:16px;display:flex;flex-direction:column;gap:4px">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-gold" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Golden Rule</span>
+    <span style="font-size:11px;color:#484f58;margin-left:2px">0/4</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-purple" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Audio</span>
+    <span style="font-size:11px;color:#484f58;margin-left:2px">0/23</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-green" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">HDR Formats</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">4/4</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-teal" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Streaming Services</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">35/37</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-red" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Unwanted</span>
+    <span style="font-size:11px;color:#484f58;margin-left:2px">0/9</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track"><div class="toggle-dot"></div></div>
+  </div>
+</div>
+
+<!-- ========================================================= -->
+<h2>Alt A Refined: Card Grid — Sync</h2>
+<p class="note">
+  Nøkkelen: alle rader i sync-kortet har <strong>fast grid med 3 kolonner</strong> — label, verdi, TRaSH-referanse.
+  Alt ligger på linje. Ingen hoppende toggles.
+  Toggle er erstattet med en enkel indikator: grønn = synced fra TRaSH, blå link = custom override.
+</p>
+
+<div class="panel" style="padding:20px">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <span style="font-size:18px;font-weight:700">[SQP] SQP-3 (Audio)</span>
+    <span class="badge" style="background:#1c2333;color:#58a6ff">sqp-3</span>
+    <div style="flex:1"></div>
+    <span style="font-size:12px;color:#8b949e">Radarr-test — 34 Required + 68 groups</span>
+    <button class="btn-blue btn">Sync</button>
+  </div>
+
+  <!-- Two cards side by side -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+    <!-- Scoring card -->
+    <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Scoring</div>
+
+      <!-- Fixed 3-column grid: label | value | trash -->
+      <div style="display:grid;grid-template-columns:100px 1fr 60px;gap:8px 12px;align-items:center">
+        <span style="font-size:12px;color:#8b949e">Score Set</span>
+        <span style="font-size:12px;font-weight:500">sqp-3</span>
+        <span></span>
+
+        <span style="font-size:12px;color:#8b949e">Cutoff</span>
+        <span style="font-size:12px;font-weight:500">WEB|Remux|2160p</span>
+        <span></span>
+
+        <span style="font-size:12px;color:#8b949e">Min Score</span>
+        <span style="font-size:12px;font-weight:500">3350</span>
+        <span style="font-size:11px;color:#3fb950;text-align:right">3350</span>
+
+        <span style="font-size:12px;color:#8b949e">Cutoff Score</span>
+        <span style="font-size:12px;font-weight:500">10000</span>
+        <span style="font-size:11px;color:#3fb950;text-align:right">10000</span>
+      </div>
+    </div>
+
+    <!-- Profile card -->
+    <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Profile</div>
+
+      <div style="display:grid;grid-template-columns:100px 1fr 60px;gap:8px 12px;align-items:center">
+        <span style="font-size:12px;color:#8b949e">Language</span>
+        <span style="font-size:12px;font-weight:500">Original</span>
+        <span style="font-size:11px;color:#3fb950;text-align:right">Original</span>
+
+        <span style="font-size:12px;color:#8b949e">Upgrades</span>
+        <span style="font-size:12px;font-weight:500">Yes</span>
+        <span style="font-size:11px;color:#3fb950;text-align:right">Yes</span>
+
+        <span style="font-size:12px;color:#8b949e">Min Upgrade</span>
+        <span style="font-size:12px;font-weight:500">1</span>
+        <span style="font-size:11px;color:#3fb950;text-align:right">1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Override bar — only shows when user wants to customize -->
+  <div style="margin-top:12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:8px 14px;display:flex;align-items:center;gap:8px">
+    <span style="font-size:11px;color:#8b949e">All values follow TRaSH defaults.</span>
+    <div style="flex:1"></div>
+    <button class="btn" style="font-size:11px;border-color:#d29922;color:#d29922">Customize overrides...</button>
+  </div>
+</div>
+
+<!-- Sync categories — same style as builder but with "Required" section -->
+<div style="max-width:840px;margin-top:16px;display:flex;flex-direction:column;gap:4px">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-white" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Required Custom Formats</span>
+    <span style="font-size:11px;color:#e1e4e8;margin-left:2px">34 CFs</span>
+    <div style="flex:1"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-gold" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Golden Rule</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">2/2</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-green" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">HDR Formats</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">4/4</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-teal" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Streaming Services</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">35/37</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-gray" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Miscellaneous</span>
+    <span style="font-size:11px;color:#3fb950;margin-left:2px">1/11</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track on"><div class="toggle-dot"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+    <div class="cat-bar cat-blue" style="height:24px"></div>
+    <span style="font-size:11px;color:#484f58">&#9654;</span>
+    <span style="font-size:13px;font-weight:600">Optional</span>
+    <span style="font-size:11px;color:#484f58;margin-left:2px">0/26</span>
+    <div style="flex:1"></div>
+    <div class="toggle-track"><div class="toggle-dot"></div></div>
+  </div>
+</div>
+
+<!-- ========================================================= -->
+<h2>Alt A Refined: Sync med override-modus åpen</h2>
+<p class="note">
+  Når bruker klikker "Customize overrides" ekspanderer kortet med editerbare felter.
+  Rent grid: label | input | TRaSH-verdi. Alle på linje. Grønt = matcher TRaSH, gult = avviker.
+</p>
+
+<div class="panel" style="padding:20px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <span style="font-size:18px;font-weight:700">[SQP] SQP-3 (Audio)</span>
+    <span class="badge" style="background:#1c2333;color:#58a6ff">sqp-3</span>
+    <div style="flex:1"></div>
+    <button class="btn-blue btn">Sync</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Scoring card — edit mode -->
+    <div style="background:#0d1117;border:1px solid #d29922;border-radius:6px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:10px;color:#d29922;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Scoring — Overrides</span>
+        <button class="btn" style="font-size:10px;padding:2px 8px;border-color:#d29922;color:#d29922">Reset to TRaSH</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:100px 1fr 60px;gap:10px 12px;align-items:center">
+        <span style="font-size:12px;color:#8b949e">Score Set</span>
+        <span style="font-size:12px;color:#484f58">sqp-3</span>
+        <span></span>
+
+        <span style="font-size:12px;color:#8b949e">Cutoff</span>
+        <span style="font-size:12px;color:#484f58">WEB|Remux|2160p</span>
+        <span></span>
+
+        <span style="font-size:12px;color:#8b949e">Min Score</span>
+        <input type="number" class="input" value="3350" style="width:100%">
+        <span style="font-size:11px;color:#3fb950;text-align:right">3350</span>
+
+        <span style="font-size:12px;color:#8b949e">Cutoff Score</span>
+        <input type="number" class="input" value="8000" style="width:100%;border-color:#d29922">
+        <span style="font-size:11px;color:#d29922;text-align:right">10000</span>
+      </div>
+    </div>
+
+    <!-- Profile card — edit mode -->
+    <div style="background:#0d1117;border:1px solid #d29922;border-radius:6px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:10px;color:#d29922;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Profile — Overrides</span>
+        <button class="btn" style="font-size:10px;padding:2px 8px;border-color:#d29922;color:#d29922">Reset to TRaSH</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:100px 1fr 60px;gap:10px 12px;align-items:center">
+        <span style="font-size:12px;color:#8b949e">Language</span>
+        <select class="input" style="width:100%;border-color:#d29922"><option>Norwegian</option></select>
+        <span style="font-size:11px;color:#d29922;text-align:right">Original</span>
+
+        <span style="font-size:12px;color:#8b949e">Upgrades</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="toggle-track on"><div class="toggle-dot"></div></div>
+          <span style="font-size:12px">Yes</span>
+        </div>
+        <span style="font-size:11px;color:#3fb950;text-align:right">Yes</span>
+
+        <span style="font-size:12px;color:#8b949e">Min Upgrade</span>
+        <input type="number" class="input" value="1" style="width:100%">
+        <span style="font-size:11px;color:#3fb950;text-align:right">1</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="note" style="margin-top:12px">
+  Legg merke til: Cutoff Score er satt til 8000 (custom) mens TRaSH anbefaler 10000 — vises i gult.
+  Language er satt til Norwegian i stedet for Original — også gult.
+  Verdier som matcher TRaSH vises i grønt. Alt ligger symmetrisk på grid.
+</p>
+
+<!-- ========================================================= -->
+<h2>Alt C Refined: Sidebar — med sticky scroll</h2>
+<p class="note">
+  Settings-sidebar er <strong>sticky</strong> — den følger med når du scroller gjennom kategorier.
+  Løser scrolling-problemet: selv med utvidet kategori er settings alltid synlig uten å scrolle tilbake.
+  Kategori-kolonnen scroller uavhengig.
+</p>
+
+<div class="panel" style="max-width:960px">
+  <div style="padding:14px 20px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:12px">
+    <input type="text" class="input" value="My Custom SQP" style="font-size:15px;padding:4px 0;font-weight:600;background:transparent;border:none;flex:1">
+    <span style="font-size:12px;color:#8b949e">24 CFs</span>
+    <button class="btn">Cancel</button>
+    <button class="btn-primary btn">Create Profile</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:220px 1fr">
+    <!-- Left: sticky settings -->
+    <div style="border-right:1px solid #21262d;padding:16px;position:sticky;top:0;align-self:start">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:12px">Settings</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Score Set</div>
+          <select class="input" style="width:100%"><option>default</option></select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Language</div>
+          <select class="input" style="width:100%"><option>Original</option></select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Quality Preset</div>
+          <select class="input" style="width:100%"><option>None</option></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Min Score</div>
+            <input type="number" class="input" value="0" style="width:100%">
+          </div>
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Cutoff</div>
+            <input type="number" class="input" value="10000" style="width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Min Upgrade</div>
+            <input type="number" class="input" value="1" style="width:100%">
+          </div>
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Upgrades</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
+              <div class="toggle-track on"><div class="toggle-dot"></div></div>
+              <span style="font-size:11px;color:#3fb950">On</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid #21262d;padding-top:10px;margin-top:2px">
+          <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:8px">Import</div>
+          <select class="input" style="width:100%;margin-bottom:6px;font-size:11px"><option>Template...</option></select>
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <select class="input" style="flex:1;font-size:11px"><option>Instance</option></select>
+            <select class="input" style="flex:1;font-size:11px"><option>Profile</option></select>
+          </div>
+          <button class="btn" style="width:100%;font-size:11px">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: categories (scrollable) -->
+    <div style="padding:16px;max-height:500px;overflow-y:auto">
+      <div style="font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:10px">Custom Format Categories</div>
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-gold" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Golden Rule</span>
+          <span style="font-size:11px;color:#484f58;margin-left:2px">0/4</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track"><div class="toggle-dot"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-purple" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Audio</span>
+          <span style="font-size:11px;color:#484f58;margin-left:2px">0/23</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track"><div class="toggle-dot"></div></div>
+        </div>
+
+        <!-- Simulated expanded category -->
+        <div style="background:#0d1117;border-radius:5px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
+            <div class="cat-bar cat-green" style="height:24px"></div>
+            <span style="font-size:11px;color:#58a6ff">&#9660;</span>
+            <span style="font-size:13px;font-weight:600">HDR Formats</span>
+            <span style="font-size:11px;color:#3fb950;margin-left:2px">4/4</span>
+            <div style="flex:1"></div>
+            <div class="toggle-track on"><div class="toggle-dot"></div></div>
+          </div>
+          <div style="padding:0 12px 10px 32px;display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:#161b22;border-radius:3px;font-size:12px">
+              <input type="checkbox" checked style="accent-color:#3fb950"> DV HDR10Plus <span style="color:#484f58;margin-left:auto;font-size:10px">+1500</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:#161b22;border-radius:3px;font-size:12px">
+              <input type="checkbox" checked style="accent-color:#3fb950"> DV HDR10 <span style="color:#484f58;margin-left:auto;font-size:10px">+1000</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:#161b22;border-radius:3px;font-size:12px">
+              <input type="checkbox" checked style="accent-color:#3fb950"> HDR10Plus <span style="color:#484f58;margin-left:auto;font-size:10px">+600</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:#161b22;border-radius:3px;font-size:12px">
+              <input type="checkbox" checked style="accent-color:#3fb950"> HDR10 <span style="color:#484f58;margin-left:auto;font-size:10px">+500</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-teal" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Streaming Services</span>
+          <span style="font-size:11px;color:#3fb950;margin-left:2px">35/37</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track on"><div class="toggle-dot"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-gray" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Miscellaneous</span>
+          <span style="font-size:11px;color:#484f58;margin-left:2px">0/11</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track"><div class="toggle-dot"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-blue" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Optional</span>
+          <span style="font-size:11px;color:#484f58;margin-left:2px">0/43</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track"><div class="toggle-dot"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0d1117;border-radius:5px">
+          <div class="cat-bar cat-red" style="height:24px"></div>
+          <span style="font-size:11px;color:#484f58">&#9654;</span>
+          <span style="font-size:13px;font-weight:600">Unwanted</span>
+          <span style="font-size:11px;color:#484f58;margin-left:2px">0/9</span>
+          <div style="flex:1"></div>
+          <div class="toggle-track"><div class="toggle-dot"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="note" style="margin-top:12px">
+  <strong>Scrolling:</strong> Kategorier-kolonnen har sin egen scrollbar (500px høyde i mockup).
+  Settings-sidebar er sticky — den følger ikke med scrollingen.
+  Ekspandert HDR Formats viser 4 CFs — Settings forblir synlig til venstre.
+</p>
+
+</body>
+</html>

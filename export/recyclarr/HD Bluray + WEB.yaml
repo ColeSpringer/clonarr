@@ -1,0 +1,166 @@
+radarr:
+  exported-profile:
+    quality_definition:
+      type: movie
+
+    quality_profiles:
+      - name: HD Bluray + WEB
+        score_set: default
+        upgrade:
+          allowed: true
+          until_quality: Bluray-1080p
+          until_score: 10000
+        min_format_score: 0
+        min_upgrade_format_score: 1
+        reset_unmatched_scores:
+          enabled: true
+          except:
+            - "P2P Internal"
+        quality_sort: top
+        qualities:
+          - name: Bluray-1080p
+          - name: WEB 1080p
+            qualities:
+              - WEBRip-1080p
+              - WEBDL-1080p
+          - name: Bluray-720p
+          - name: Raw-HD
+            enabled: false
+          - name: BR-DISK
+            enabled: false
+          - name: Remux-2160p
+            enabled: false
+          - name: Bluray-2160p
+            enabled: false
+          - name: WEB 2160p
+            qualities:
+              - WEBRip-2160p
+              - WEBDL-2160p
+            enabled: false
+          - name: HDTV-2160p
+            enabled: false
+          - name: Remux-1080p
+            enabled: false
+          - name: HDTV-1080p
+            enabled: false
+          - name: WEB 720p
+            qualities:
+              - WEBRip-720p
+              - WEBDL-720p
+            enabled: false
+          - name: HDTV-720p
+            enabled: false
+          - name: Bluray-576p
+            enabled: false
+          - name: Bluray-480p
+            enabled: false
+          - name: WEB 480p
+            qualities:
+              - WEBRip-480p
+              - WEBDL-480p
+            enabled: false
+          - name: DVD-R
+            enabled: false
+          - name: DVD
+            enabled: false
+          - name: SDTV
+            enabled: false
+          - name: DVDSCR
+            enabled: false
+          - name: REGIONAL
+            enabled: false
+          - name: TELECINE
+            enabled: false
+          - name: TELESYNC
+            enabled: false
+          - name: CAM
+            enabled: false
+          - name: WORKPRINT
+            enabled: false
+          - name: Unknown
+            enabled: false
+
+    custom_formats:
+      - trash_ids:
+          - 496f355514737f7d83bf7aa4d24f8169 # TrueHD ATMOS
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 5000
+      - trash_ids:
+          - ed27ebfef2f323e964fb1f61391bcb35 # HD Bluray Tier 01
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 1800
+      - trash_ids:
+          - c20c8647f2746a1f4c4262b0fbbeeeae # HD Bluray Tier 02
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 1750
+      - trash_ids:
+          - 5608c71bcebba0a5e666223bae8c9227 # HD Bluray Tier 03
+          - c20f169ef63c5f40c2def54abaf4438e # WEB Tier 01
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 1700
+      - trash_ids:
+          - 403816d65392c79236dcb6dd591aeda4 # WEB Tier 02
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 1650
+      - trash_ids:
+          - af94e0fe497124d1f9ce732069ec8c3b # WEB Tier 03
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 1600
+      - trash_ids:
+          - 5caaaa1c08c1742aa4342d8c4cc463f2 # Repack3
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 7
+      - trash_ids:
+          - ae43b294509409a6a13919dedd4764c4 # Repack2
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 6
+      - trash_ids:
+          - e7718d7a3ce595f289bfee26adc178f5 # Repack/Proper
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 5
+      - trash_ids:
+          - 170b1d363bd8516fbf3a3eb05d4faff6 # NF
+          - 185f1dd7264c4562b9022d963ac37424 # DD+
+          - 1af239278386be2919e1bcee0bde047e # DD+ ATMOS
+          - 1c1a4c5e823891c75bc50380a6866f73 # DTS
+          - 240770601cc226190c367ef59aba7463 # AAC
+          - 2f22d89048b01681dde8afe203bf2e95 # DTS X
+          - 3cafb66171b47f226146a0770576870f # TrueHD
+          - 40e9380490e748672c2522eaaeb692f7 # ATVP
+          - 417804f7f2c4308c1f4c5d380d4c4475 # ATMOS (undefined)
+          - 8e109e50e0a0b83a5098b056e13bf6db # DTS-HD HRA
+          - a570d4a0e56a2874b64e5bfa55202a1b # FLAC
+          - b337d6812e06c200ec9a2d3cfa9d20a7 # DV Boost
+          - b3b3a6ac74ecbd56bcdbefa4799fb9df # AMZN
+          - c2998bd0d90ed5621d8df281e839436e # DD
+          - dcf3ec6938fa32445f590a4da84256cd # DTS-HD MA
+          - e7c2fcae07cbada050a0af3357491d7b # PCM
+          - f9f847ac70a0af62ea4a08280b859636 # DTS-ES
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 0
+      - trash_ids:
+          - 0a3f082873eb454bde444150b70253cc # Extras
+          - 5c44f52a8714fdd79bb4d98e2673be1f # Retags
+          - 712d74cd88bceb883ee32f773656b1f5 # Sing-Along Versions
+          - 7357cf5161efbf8c4d5d0c30b4815ee2 # Obfuscated
+          - 839bea857ed2c0a8e084f3cbdbd65ecb # x265 (no HDR/DV)
+          - 90a6f9a284dff5103f6346090e6280c8 # LQ
+          - b6832f586342ef70d9c128d40c07b872 # Bad Dual Groups
+          - b8cd450cbfa689c0259a01d9e29ba3d6 # 3D
+          - cae4ca30163749b891686f95532519bd # AV1
+          - e204b80c87be9497a8a6eaff48f72905 # LQ (Release Title)
+          - e6886871085226c3da1830830146846c # Generated Dynamic HDR
+          - ed38b889b31be83fda192888e2286d83 # BR-DISK
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: -10000

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup — File Naming Edition Toggle</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; padding: 32px; }
+  [x-cloak] { display: none !important; }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; margin-bottom: 12px; }
+  code { background: #21262d; padding: 1px 5px; border-radius: 3px; color: #d2a8ff; font-size: 11px; }
+  .toggle { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #30363d; border-radius: 20px; transition: 0.2s; }
+  .toggle .slider:before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #8b949e; border-radius: 50%; transition: 0.2s; }
+  .toggle input:checked + .slider { background: #238636; }
+  .toggle input:checked + .slider:before { transform: translateX(16px); background: #fff; }
+  .scheme-box { margin-bottom: 10px; padding: 8px; background: #0d1117; border-radius: 4px; border: 1px solid #21262d; }
+  .pattern { font-family: monospace; font-size: 11px; color: #7ee787; background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 6px 8px; word-break: break-all; }
+  .example { font-family: monospace; font-size: 10px; color: #6e7681; margin-top: 4px; word-break: break-all; }
+  .badge-rec { font-size: 10px; background: #238636; color: #fff; padding: 1px 6px; border-radius: 3px; }
+  .action-link { font-size: 10px; cursor: pointer; }
+  h2 { font-size: 14px; margin-bottom: 16px; color: #8b949e; font-weight: 400; }
+</style>
+</head>
+<body x-data="{ plexSingleEntry: false }">
+
+<h2>Mockup: File Naming — Edition Tags Toggle (Radarr)</h2>
+
+<!-- ===== Edition Tags Info + Toggle ===== -->
+<div class="card" style="padding:16px;margin-bottom:12px;border-left:3px solid #d29922">
+  <div style="display:flex;align-items:flex-start;gap:12px">
+    <div style="flex:1">
+      <div style="font-weight:600;margin-bottom:8px;color:#e1e4e8">Edition Tags &amp; Plex</div>
+      <div style="font-size:12px;color:#8b949e;line-height:1.6">
+        The recommended naming includes <code>{edition-{Edition Tags}}</code> which tells Plex to recognize movie editions
+        (e.g. Director's Cut, Theatrical) and display them in the interface.
+      </div>
+      <div style="font-size:12px;color:#8b949e;line-height:1.6;margin-top:8px">
+        However, if you keep two copies of a movie with different editions in a <strong style="color:#c9d1d9">merged library</strong>
+        (e.g. 1080p Director's Cut + 2160p Theatrical), Plex will show them as <strong style="color:#f85149">two separate items</strong>.
+        Enable the toggle to use <code>{Edition Tags}</code> instead — editions still appear in the filename but Plex treats all copies as one entry.
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:4px;flex-shrink:0">
+      <label class="toggle">
+        <input type="checkbox" x-model="plexSingleEntry">
+        <span class="slider"></span>
+      </label>
+      <span style="font-size:10px;color:#8b949e" x-text="plexSingleEntry ? 'Single entry' : 'Per edition'"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Movie File Format (Plex section) ===== -->
+<div class="card" style="padding:16px;margin-bottom:12px">
+  <div style="font-weight:600;margin-bottom:4px;color:#e1e4e8">Movie File Format</div>
+  <div style="font-size:12px;color:#8b949e;margin-bottom:12px;line-height:1.5">
+    How movie files are named. Includes quality, audio, HDR, and release group info. Plex/Emby/Jellyfin variants add media server IDs for better matching.
+  </div>
+
+  <!-- Standard -->
+  <div class="scheme-box">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:12px;font-weight:600;color:#c9d1d9">Standard</span>
+      <span class="badge-rec">Recommended</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="action-link" style="color:#58a6ff">Copy</span>
+        <span class="action-link" style="color:#d29922">Apply</span>
+      </span>
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;line-height:1.4">The recommended naming scheme. Includes all non-recoverable information in brackets.</div>
+    <div class="pattern" x-text="plexSingleEntry
+      ? '{Movie CleanTitle} {(Release Year)} {Edition Tags} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group}'
+      : '{Movie CleanTitle} {(Release Year)} {edition-{Edition Tags}} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group}'">
+    </div>
+    <div class="example" x-text="plexSingleEntry
+      ? 'The Movie Title (2010) Ultimate Extended Edition [IMAX HYBRID][Bluray-1080p Proper][3D][DV HDR10][DTS 5.1][x264]-RlsGrp'
+      : 'The Movie Title (2010) {edition-Ultimate Extended Edition} [IMAX HYBRID][Bluray-1080p Proper][3D][DV HDR10][DTS 5.1][x264]-RlsGrp'">
+    </div>
+  </div>
+
+  <!-- Plex (IMDb) -->
+  <div class="scheme-box">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:12px;font-weight:600;color:#c9d1d9">Plex (IMDb)</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="action-link" style="color:#58a6ff">Copy</span>
+        <span class="action-link" style="color:#d29922">Apply</span>
+      </span>
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;line-height:1.4">For the Plex agent. IMDb IDs are very stable and rarely change.</div>
+    <div class="pattern" x-text="plexSingleEntry
+      ? '{Movie CleanTitle} {(Release Year)} {Edition Tags} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group} {imdb-{ImdbId}}'
+      : '{Movie CleanTitle} {(Release Year)} {edition-{Edition Tags}} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group} {imdb-{ImdbId}}'">
+    </div>
+  </div>
+
+  <!-- Plex (TMDb) -->
+  <div class="scheme-box">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:12px;font-weight:600;color:#c9d1d9">Plex (TMDb)</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="action-link" style="color:#58a6ff">Copy</span>
+        <span class="action-link" style="color:#d29922">Apply</span>
+      </span>
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;line-height:1.4">For the Plex agent. TMDb is more aligned with Radarr but IDs can occasionally change.</div>
+    <div class="pattern" x-text="plexSingleEntry
+      ? '{Movie CleanTitle} {(Release Year)} {Edition Tags} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group} {tmdb-{TmdbId}}'
+      : '{Movie CleanTitle} {(Release Year)} {edition-{Edition Tags}} {[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}-{Release Group} {tmdb-{TmdbId}}'">
+    </div>
+  </div>
+
+  <!-- Original Title (no edition tag — unaffected) -->
+  <div class="scheme-box">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:12px;font-weight:600;color:#c9d1d9">Original Title</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="action-link" style="color:#58a6ff">Copy</span>
+        <span class="action-link" style="color:#d29922">Apply</span>
+      </span>
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;line-height:1.4">Uses the release title as-is. Prevents download loops from title/content mismatches, but gives less control over naming.</div>
+    <div class="pattern">{Original Title}</div>
+    <div class="example">The.Movie.Title.2010.REMASTERED.1080p.BluRay.x264-RlsGrp</div>
+  </div>
+</div>
+
+<!-- Visual indicator when toggle is active -->
+<div x-show="plexSingleEntry" x-cloak class="card" style="padding:12px;border-left:3px solid #3fb950">
+  <div style="font-size:12px;color:#3fb950;display:flex;align-items:center;gap:8px">
+    <span>&#10003;</span>
+    <span>Plex single-entry mode active — <code style="color:#3fb950">{edition-{Edition Tags}}</code> replaced with <code style="color:#3fb950">{Edition Tags}</code> in all patterns above</span>
+  </div>
+</div>
+
+</body>
+</html>

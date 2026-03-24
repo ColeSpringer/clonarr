@@ -10,6 +10,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
   [x-cloak] { display: none !important; }
+  .group-desc-html b, .group-desc-html strong { color: #d29922; font-style: normal; }
 
   /* Top nav */
   .topnav { display: flex; align-items: center; background: #161b22; border-bottom: 1px solid #30363d; padding: 0 24px; height: 56px; }
@@ -2152,53 +2153,66 @@
               <div style="padding:8px 16px;font-size:12px;color:#8b949e;border-bottom:1px solid #161b22;line-height:1.5">
                 These CFs are added to the profile's <code style="background:#21262d;padding:1px 4px;border-radius:2px;color:#c9d1d9;font-size:11px">formatItems</code> — they are mandatory and always synced. End users cannot disable them.
               </div>
-              <!-- Selected formatItem CFs (shown first) -->
-              <template x-for="cf in pbFormatItemCFList()" :key="'fis-'+cf.trashId">
-                <div class="pb-cf-row">
-                  <label class="toggle toggle-sm">
-                    <input type="checkbox" checked
-                           @change="pbToggleFormatItem(cf.trashId); const s = {...pb.selectedCFs}; delete s[cf.trashId]; pb.selectedCFs = s">
-                    <span class="slider"></span>
-                  </label>
-                  <div class="pb-cf-name">
-                    <span x-text="cf.name"></span>
-                    <span class="cf-info" x-show="cf.description"
-                          @mouseenter="showCFTooltip($event, cf.description)"
-                          @mouseleave="hideCFTooltip()">ⓘ</span>
-                    <template x-if="config.devMode">
-                      <span style="font-size:10px;color:#484f58;font-family:monospace" x-text="cf.trashId.substring(0,8)"></span>
-                    </template>
-                  </div>
-                  <input type="number" class="pb-score-input"
-                         :class="{ overridden: pbIsScoreOverridden(cf) }"
-                         :value="pbGetScore(cf)"
-                         @input="pbSetScore(cf.trashId, $event.target.value)"
-                         @blur="pbCleanScore(cf.trashId)">
-                </div>
-              </template>
-              <!-- Add more CFs (collapsed) -->
-              <div style="padding:6px 16px;border-top:1px solid #161b22">
-                <span style="font-size:11px;color:#58a6ff;cursor:pointer"
-                      @click="pbExpandedCats['__addMore__'] = !pbExpandedCats['__addMore__']"
-                      x-text="pbExpandedCats['__addMore__'] ? '▾ Hide available CFs' : '▸ Add more CFs...'"></span>
+              <!-- Clear All button (above CFs) -->
+              <div x-show="pbFormatItemCFList().length > 0" style="padding:6px 16px 0;display:flex;justify-content:flex-end">
+                <button class="btn" style="font-size:10px;padding:2px 10px;color:#f85149;border-color:#f85149"
+                        @click="const fis = Object.keys(pb.formatItemCFs || {}); fis.forEach(tid => { delete pb.formatItemCFs[tid]; delete pb.selectedCFs[tid]; }); pb.formatItemCFs = {...pb.formatItemCFs}; pb.selectedCFs = {...pb.selectedCFs}">
+                  Clear All
+                </button>
               </div>
-              <div x-show="pbExpandedCats['__addMore__']" x-cloak>
-                <template x-for="cf in pbAvailableFormatItemCFs()" :key="'fia-'+cf.trashId">
-                  <div class="pb-cf-row" style="opacity:0.6">
-                    <label class="toggle toggle-sm">
-                      <input type="checkbox"
-                             @change="pbToggleFormatItem(cf.trashId); pb.selectedCFs = {...pb.selectedCFs, [cf.trashId]: true}">
+              <!-- Selected formatItem CFs (multi-column compact view) -->
+              <div x-show="pbFormatItemCFList().length > 0"
+                   :style="'padding:10px 28px 14px;border-bottom:1px solid #161b22;column-count:' + (pbFormatItemCFList().length > 20 ? 3 : pbFormatItemCFList().length > 10 ? 2 : 1) + ';column-gap:32px'">
+                <template x-for="cf in pbFormatItemCFList()" :key="'fis-'+cf.trashId">
+                  <div style="break-inside:avoid;display:flex;align-items:center;gap:6px;padding:3px 0">
+                    <label class="toggle toggle-sm" style="flex-shrink:0">
+                      <input type="checkbox" checked
+                             @change="pbToggleFormatItem(cf.trashId); const s = {...pb.selectedCFs}; delete s[cf.trashId]; pb.selectedCFs = s">
                       <span class="slider"></span>
                     </label>
-                    <div class="pb-cf-name">
-                      <span x-text="cf.name"></span>
-                      <span class="cf-info" x-show="cf.description"
-                            @mouseenter="showCFTooltip($event, cf.description)"
-                            @mouseleave="hideCFTooltip()">ⓘ</span>
-                    </div>
+                    <span style="font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="cf.name"></span>
+                    <span class="cf-info" x-show="cf.description" style="flex-shrink:0"
+                          @mouseenter="showCFTooltip($event, cf.description)"
+                          @mouseleave="hideCFTooltip()">ⓘ</span>
+                    <input type="number" class="pb-score-input" style="flex-shrink:0"
+                           :class="{ overridden: pbIsScoreOverridden(cf) }"
+                           :value="pbGetScore(cf)"
+                           @input="pbSetScore(cf.trashId, $event.target.value)"
+                           @blur="pbCleanScore(cf.trashId)">
                   </div>
                 </template>
               </div>
+              <!-- Add more CFs (collapsed, with search) -->
+              <div style="padding:6px 16px;border-top:1px solid #161b22;display:flex;align-items:center;gap:12px">
+                <span style="font-size:11px;color:#58a6ff;cursor:pointer;flex-shrink:0"
+                      @click="pbAddMoreOpen = !pbAddMoreOpen; pbFormatItemSearch = ''"
+                      x-text="pbAddMoreOpen ? '▾ Hide available CFs' : '▸ Add more CFs...'"></span>
+                <template x-if="pbAddMoreOpen">
+                  <input type="text" class="pb-input" x-model="pbFormatItemSearch"
+                         placeholder="Search CFs..."
+                         style="flex:1;font-size:12px;padding:4px 8px;max-width:300px">
+                </template>
+              </div>
+              <template x-if="pbAddMoreOpen">
+                <div :style="'padding:14px 28px;column-count:' + (pbFilteredAvailableCFs().length > 20 ? 3 : pbFilteredAvailableCFs().length > 10 ? 2 : 1) + ';column-gap:32px'">
+                  <template x-for="cf in pbFilteredAvailableCFs()" :key="'fia-'+cf.trashId">
+                    <div style="break-inside:avoid;display:flex;align-items:center;gap:6px;padding:3px 0;opacity:0.6">
+                      <label class="toggle toggle-sm" style="flex-shrink:0">
+                        <input type="checkbox"
+                               @change="pbToggleFormatItem(cf.trashId); pb.selectedCFs = {...pb.selectedCFs, [cf.trashId]: true}">
+                        <span class="slider"></span>
+                      </label>
+                      <span style="font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="cf.name"></span>
+                      <span class="cf-info" x-show="cf.description" style="flex-shrink:0"
+                            @mouseenter="showCFTooltip($event, cf.description)"
+                            @mouseleave="hideCFTooltip()">ⓘ</span>
+                    </div>
+                  </template>
+                  <div x-show="pbFilteredAvailableCFs().length === 0" style="font-size:12px;color:#484f58;padding:4px 0">
+                    No matching CFs found
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -2471,17 +2485,18 @@
                 <div style="grid-column:1/3">
                   <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Cutoff</div>
                   <div style="display:flex;align-items:center;gap:8px;height:28px">
-                    <span style="font-size:12px;font-weight:500" x-text="profileDetail?.detail?.profile?.cutoff || '—'"></span>
+                    <template x-if="!pdOverrideActive">
+                      <span style="font-size:12px;font-weight:500" x-text="profileDetail?.detail?.profile?.cutoff || '—'"></span>
+                    </template>
                     <template x-if="pdOverrideActive">
-                      <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
-                        <span style="font-size:11px" :style="pdOverrides.cutoffQuality === '__skip__' ? 'color:#d29922' : 'color:#484f58'"
-                              x-text="pdOverrides.cutoffQuality === '__skip__' ? 'Skip during sync' : 'Sync from TRaSH'"></span>
-                        <label class="toggle toggle-sm" @click.stop>
-                          <input type="checkbox" :checked="pdOverrides.cutoffQuality !== '__skip__'"
-                                 @change="pdOverrides.cutoffQuality = $event.target.checked ? (profileDetail?.detail?.profile?.cutoff || '') : '__skip__'">
-                          <span class="slider"></span>
-                        </label>
-                      </div>
+                      <select class="pb-input" style="width:100%;font-size:12px" x-model="pdOverrides.cutoffQuality"
+                              :style="pdOverrides.cutoffQuality !== (profileDetail?.detail?.profile?.cutoff || '') && pdOverrides.cutoffQuality !== '' ? 'border-color:#d29922' : ''">
+                        <option :value="profileDetail?.detail?.profile?.cutoff || ''" x-text="(profileDetail?.detail?.profile?.cutoff || '—') + ' (TRaSH default)'"></option>
+                        <template x-for="item in (profileDetail?.detail?.profile?.items || []).filter(i => i.allowed !== false && i.name !== (profileDetail?.detail?.profile?.cutoff || ''))" :key="item.name">
+                          <option :value="item.name" x-text="item.name"></option>
+                        </template>
+                        <option value="__skip__">— Don't sync cutoff —</option>
+                      </select>
                     </template>
                   </div>
                 </div>
@@ -2507,14 +2522,8 @@
                         <span class="slider"></span>
                       </label>
                     </template>
-                    <template x-if="!pdOverrideActive">
-                      <label class="toggle" style="pointer-events:none">
-                        <input type="checkbox" :checked="pdOverrides.upgradeAllowed.value === true || pdOverrides.upgradeAllowed.value === 'true'" disabled>
-                        <span class="slider"></span>
-                      </label>
-                    </template>
-                    <span style="font-size:12px"
-                          :style="(pdOverrides.upgradeAllowed.value === true || pdOverrides.upgradeAllowed.value === 'true') ? 'color:#3fb950' : 'color:#8b949e'"
+                    <span style="font-size:12px;font-weight:500"
+                          :style="(pdOverrides.upgradeAllowed.value === true || pdOverrides.upgradeAllowed.value === 'true') ? '' : 'color:#8b949e'"
                           x-text="(pdOverrides.upgradeAllowed.value === true || pdOverrides.upgradeAllowed.value === 'true') ? 'Allowed' : 'Off'"></span>
                   </div>
                 </div>
@@ -2669,151 +2678,95 @@
 
         <!-- Comparison dropdown -->
 
-        <template x-if="profileDetail?.detail?.requiredCFCategories">
+        <!-- TRaSH group-based sync view -->
+        <template x-if="profileDetail?.detail?.trashGroups">
           <div style="background:#0d1117;padding:8px 12px">
-            <!-- Required Custom Formats (categorized) -->
-            <div class="detail-section cat-required-core">
-              <div class="detail-section-header" @click="toggleDetailSection('core')">
-                <span class="detail-section-chevron" :class="{ open: detailSections.core }">&#9654;</span>
-                <div style="font-size:13px;font-weight:600">Required Custom Formats</div>
-                <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="(profileDetail.detail.totalCoreCFs || 0) + ' CFs'"></div>
+            <!-- Profile section: formatItems not in any group -->
+            <template x-if="(profileDetail.detail.formatItemNames || []).length > 0">
+              <div class="detail-section cat-required-core">
+                <div class="detail-section-header" @click="toggleDetailSection('core')">
+                  <span class="detail-section-chevron" :class="{ open: detailSections.core }">&#9654;</span>
+                  <div style="font-size:13px;font-weight:600">Profile</div>
+                  <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="profileDetail.detail.formatItemNames.length + ' custom formats'"></div>
+                </div>
+                <div class="section-desc" x-show="detailSections.core">
+                  Required for this profile. Always included when syncing.
+                </div>
+                <div x-show="detailSections.core"
+                     :style="'padding:14px 28px;column-count:' + (profileDetail.detail.formatItemNames.length > 20 ? 3 : profileDetail.detail.formatItemNames.length > 10 ? 2 : 1) + ';column-gap:32px'">
+                  <template x-for="fi in profileDetail.detail.formatItemNames" :key="fi.trashId">
+                    <div style="font-size:12px;color:#8b949e;padding:2px 0;break-inside:avoid" x-text="fi.name"></div>
+                  </template>
+                </div>
               </div>
-              <div class="section-desc" x-show="detailSections.core">
-                Required for this profile. Always included when syncing. Scores are set by TRaSH Guides.
-              </div>
-              <div x-show="detailSections.core">
-                <template x-for="rcat in profileDetail.detail.requiredCFCategories" :key="rcat.category">
-                  <div class="detail-section" :class="getCategoryClass(rcat.category)" style="margin-bottom:2px">
-                    <div class="detail-section-header"
-                         @click="toggleGroupExpanded('required', rcat.category)">
-                      <span class="detail-section-chevron" :class="{ open: groupExpanded['required/' + rcat.category] }">&#9654;</span>
-                      <div style="font-size:13px;font-weight:600" x-text="rcat.category"></div>
-                      <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="rcat.cfs.length + '/' + rcat.cfs.length"></div>
-                    </div>
-                    <div x-show="groupExpanded['required/' + rcat.category]">
-                      <template x-for="cf in rcat.cfs" :key="cf.trashId">
-                        <div class="cf-row">
-                          <div class="cf-name">
-                            <span x-text="cf.name"></span>
-                            <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                          </div>
-                          <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                            <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
-                          </div>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                </template>
-              </div>
+            </template>
+
+            <!-- Groups section header -->
+            <div style="font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:0.5px;padding:12px 0 6px;font-weight:600">
+              Groups
+              <span style="text-transform:none;letter-spacing:0;font-weight:400"> — toggle to include/exclude from sync</span>
             </div>
 
-            <!-- CF Category Sections -->
-            <template x-for="cat in (profileDetail.detail.cfCategories || [])" :key="cat.category">
-              <div class="detail-section" :class="getCategoryClass(cat.category)">
-                <div class="detail-section-header" @click="toggleDetailSection(cat.category)">
-                  <span class="detail-section-chevron" :class="{ open: detailSections[cat.category] }">&#9654;</span>
-                  <div style="font-size:13px;font-weight:600" x-text="cat.category"></div>
-                  <div style="font-size:11px;color:#484f58;margin-right:auto" x-text="countSelectedCategoryCFs(cat) + '/' + countCategoryCFs(cat)"></div>
-                  <label class="toggle toggle-sm" @click.stop x-show="cat.category !== 'Golden Rule'">
-                    <input type="checkbox" :checked="isCategoryEnabled(cat)"
-                           @change="toggleCategory(cat)">
+            <!-- Flat list of TRaSH CF groups -->
+            <template x-for="group in (profileDetail.detail.trashGroups || [])" :key="group.name">
+              <div class="detail-section" :class="getCategoryClass(group.category)" style="margin-bottom:4px">
+                <div class="detail-section-header" @click="toggleGroupExpanded('tg', group.name)">
+                  <span class="detail-section-chevron" :class="{ open: groupExpanded['tg/' + group.name] }">&#9654;</span>
+                  <div style="font-size:13px;font-weight:500" x-text="group.name"></div>
+                  <span x-show="group.exclusive" style="font-size:9px;color:#d29922;background:#3d2e0a;padding:1px 5px;border-radius:3px">pick one</span>
+                  <span x-show="group.defaultEnabled" style="font-size:9px;color:#3fb950;background:#0d2f1a;padding:1px 5px;border-radius:3px">default</span>
+                  <div style="font-size:11px;color:#484f58;margin-right:auto;margin-left:8px"
+                       x-text="(() => { const on = selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled; if (!on) return '0/' + group.cfs.length; return group.cfs.filter(cf => cf.required || selectedOptionalCFs[cf.trashId]).length + '/' + group.cfs.length; })()"></div>
+                  <!-- Group toggle (not for exclusive/pick-one groups) -->
+                  <label class="toggle toggle-sm" @click.stop x-show="!group.exclusive">
+                    <input type="checkbox"
+                           :checked="selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled"
+                           @change="selectedOptionalCFs['__grp_' + group.name] = $event.target.checked; group.cfs.forEach(cf => { if (!cf.required) selectedOptionalCFs[cf.trashId] = $event.target.checked }); selectedOptionalCFs = {...selectedOptionalCFs}">
                     <span class="slider"></span>
                   </label>
                 </div>
-                <div x-show="detailSections[cat.category]">
-                  <template x-for="group in cat.groups" :key="group.name">
-                    <div class="cf-section">
-                      <!-- Single-CF group in multi-group category: show inline without sub-header -->
-                      <template x-if="cat.groups.length > 1 && group.cfs.length === 1 && !group.exclusive">
-                        <div>
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div>
-                              <div class="cf-row">
-                                <label class="toggle toggle-sm">
-                                  <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
-                                         @change="toggleOptionalCF(cf.trashId)">
-                                  <span class="slider"></span>
-                                </label>
-                                <div class="cf-name">
-                                  <span x-text="cf.name"></span>
-                                  <span x-show="cf.isCustom" style="font-size:10px;color:#d29922;border:1px solid #d29922;border-radius:3px;padding:0 4px">Custom</span>
-                                  <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                  <span class="cf-default-badge" x-show="cf.default">recommended</span>
-                                  <span class="cf-trash-default-badge" x-show="group.defaultEnabled">TRaSH default</span>
-                                </div>
-                                <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                                  <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
-                                </div>
-                              </div>
-                              <div x-show="group.exclusive" class="group-description" style="margin-left:36px;margin-top:-2px;margin-bottom:6px;color:#d29922;font-size:11px">Please ensure you only score or enable one of them in your Quality Profile!</div>
-                            </div>
-                          </template>
-                        </div>
+                <!-- Expanded: description + CFs -->
+                <div x-show="groupExpanded['tg/' + group.name]">
+                  <!-- Description -->
+                  <div x-show="group.trashDescription" class="group-desc-html"
+                       style="padding:8px 16px;font-size:13px;color:#9eaab6;font-style:italic;line-height:1.5;border-bottom:1px solid #21262d"
+                       x-html="group.trashDescription"></div>
+                  <!-- "All" toggle for optional groups with 3+ CFs (only when group is active) -->
+                  <div x-show="!group.cfs.every(cf => cf.required) && !group.exclusive && group.cfs.length >= 3 && (selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled)"
+                       style="display:flex;align-items:center;padding:6px 16px;gap:8px;background:#12161d;border-bottom:1px solid #21262d">
+                    <label class="toggle toggle-sm" @click.stop>
+                      <input type="checkbox"
+                             :checked="group.cfs.filter(cf => !cf.required).every(cf => selectedOptionalCFs[cf.trashId])"
+                             @change="group.cfs.forEach(cf => { if (!cf.required) selectedOptionalCFs[cf.trashId] = $event.target.checked }); selectedOptionalCFs = {...selectedOptionalCFs}">
+                      <span class="slider"></span>
+                    </label>
+                    <span style="font-size:12px;color:#58a6ff;font-weight:500">All</span>
+                    <span style="font-size:11px;color:#484f58"
+                          x-text="group.cfs.filter(cf => !cf.required && selectedOptionalCFs[cf.trashId]).length + ' of ' + group.cfs.filter(cf => !cf.required).length + ' enabled'"></span>
+                  </div>
+                  <!-- CF list -->
+                  <template x-for="cf in group.cfs" :key="cf.trashId">
+                    <div class="cf-row" :style="(() => { const grpOn = selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled; if (cf.required) return grpOn ? '' : 'opacity:0.35'; return (grpOn || selectedOptionalCFs[cf.trashId]) ? '' : 'opacity:0.35'; })()">
+                      <!-- Required CFs in group: no individual toggle, lock icon -->
+                      <template x-if="cf.required">
+                        <span style="font-size:11px;color:#484f58;width:28px;text-align:center;flex-shrink:0" title="Included when group is active">🔒</span>
                       </template>
-                      <!-- Multi-CF group (or exclusive): show collapsible group sub-headers -->
-                      <template x-if="cat.groups.length > 1 && (group.cfs.length > 1 || group.exclusive)">
-                        <div>
-                          <div class="cf-section-title"
-                               @click="toggleGroupExpanded(cat.category, group.shortName)">
-                            <span class="detail-section-chevron" style="font-size:9px"
-                                  :class="{ open: groupExpanded[cat.category + '/' + group.shortName] }">&#9654;</span>
-                            <span class="group-name" x-text="group.shortName"></span>
-                            <span class="cf-trash-default-badge" x-show="group.defaultEnabled">TRaSH default</span>
-                            <span x-show="group.exclusive" style="font-size:9px;color:#d29922;background:#3d2e0a;padding:1px 5px;border-radius:3px">pick one</span>
-                            <span class="group-count" x-text="countSelectedGroupCFs(cat.category, group) + '/' + group.cfs.length"></span>
-                            <label class="toggle toggle-sm" @click.stop x-show="!group.exclusive">
-                              <input type="checkbox" :checked="isGroupEnabled(cat.category, group.shortName)"
-                                     @change="toggleGroup(cat.category, group.shortName, group.cfs)">
-                              <span class="slider"></span>
-                            </label>
-                          </div>
-                          <div x-show="groupExpanded[cat.category + '/' + group.shortName]">
-                            <div x-show="group.exclusive" class="group-description" style="color:#d29922;font-size:11px;padding:4px 16px">Please ensure you only score or enable one of them in your Quality Profile!</div>
-                            <template x-for="cf in group.cfs" :key="cf.trashId">
-                              <div class="cf-row">
-                                <label class="toggle toggle-sm">
-                                  <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
-                                         @change="group.exclusive ? toggleExclusiveCF(cf.trashId, group.cfs) : toggleOptionalCF(cf.trashId)">
-                                  <span class="slider"></span>
-                                </label>
-                                <div class="cf-name">
-                                  <span x-text="cf.name"></span>
-                                  <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                  <span class="cf-default-badge" x-show="cf.default">recommended</span>
-                                </div>
-                                <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                                  <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
-                                </div>
-                              </div>
-                            </template>
-                          </div>
-                        </div>
+                      <!-- Optional CFs in group: individual toggle -->
+                      <template x-if="!cf.required">
+                        <label class="toggle toggle-sm">
+                          <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
+                                 @change="group.exclusive ? toggleExclusiveCF(cf.trashId, group.cfs) : toggleOptionalCF(cf.trashId)">
+                          <span class="slider"></span>
+                        </label>
                       </template>
-                      <!-- Single-group category: show CFs directly, no sub-header -->
-                      <template x-if="cat.groups.length === 1">
-                        <div>
-                          <div x-show="group.exclusive" class="group-description" style="color:#d29922;font-size:11px;padding:4px 16px">Please ensure you only score or enable one of them in your Quality Profile!</div>
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div class="cf-row">
-                              <label class="toggle toggle-sm">
-                                <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
-                                       @change="group.exclusive ? toggleExclusiveCF(cf.trashId, group.cfs) : toggleOptionalCF(cf.trashId)">
-                                <span class="slider"></span>
-                              </label>
-                              <div class="cf-name">
-                                <span x-text="cf.name"></span>
-                                <span x-show="cf.isCustom" style="font-size:10px;color:#d29922;border:1px solid #d29922;border-radius:3px;padding:0 4px">Custom</span>
-                                <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                <span class="cf-default-badge" x-show="cf.default">recommended</span>
-                              </div>
-                              <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                                <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
-                              </div>
-                            </div>
-                          </template>
-                        </div>
-                      </template>
+                      <div class="cf-name">
+                        <span x-text="cf.name"></span>
+                        <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
+                        <span class="cf-default-badge" x-show="cf.default">recommended</span>
+                      </div>
+                      <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                        <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -2822,7 +2775,7 @@
           </div>
         </template>
 
-        <template x-if="!profileDetail?.detail?.requiredCFCategories && !profileDetail?.detail?.imported">
+        <template x-if="!profileDetail?.detail?.trashGroups && !profileDetail?.detail?.imported">
           <div class="empty-state" style="padding:24px">
             <div class="desc">Loading profile details...</div>
           </div>
@@ -4417,6 +4370,8 @@ function clonarr() {
     pbCategories: [],
     pbScoreSets: [],
     pbExpandedCats: {},
+    pbFormatItemSearch: '',
+    pbAddMoreOpen: false,
     pbQualityPresets: [],
     pbExpandedGroups: {},
     pbEditDescription: false,
@@ -5082,6 +5037,7 @@ function clonarr() {
         this.pb.cfStateOverrides = { ...existing.cfStateOverrides };
       }
       this.pbExpandedCats = {};
+      this.pbAddMoreOpen = false;
       this.pbSettingsOpen = !existing; // collapse settings when editing
       this.pbInstanceImportId = '';
       this.pbInstanceImportProfiles = [];
@@ -5546,6 +5502,14 @@ function clonarr() {
       return result;
     },
 
+    // Get available CFs filtered by search term
+    pbFilteredAvailableCFs() {
+      const all = this.pbAvailableFormatItemCFs();
+      const q = (this.pbFormatItemSearch || '').trim().toLowerCase();
+      if (!q) return all;
+      return all.filter(cf => cf.name.toLowerCase().includes(q));
+    },
+
     // Get all groups as a flat sorted list (not nested under categories)
     pbSortedGroups() {
       const groupOrder = [
@@ -5822,6 +5786,9 @@ function clonarr() {
           if (prof.minFormatScore != null) this.pb.minFormatScore = prof.minFormatScore;
           if (prof.minUpgradeFormatScore != null) this.pb.minUpgradeFormatScore = prof.minUpgradeFormatScore;
           if (prof.upgradeAllowed != null) this.pb.upgradeAllowed = prof.upgradeAllowed;
+          // Reset expanded state
+          this.pbExpandedCats = {};
+          this.pbAddMoreOpen = false;
           // Apply required CFs (core profile definition → formatItems)
           this.pb.selectedCFs = {};
           this.pb.scoreOverrides = {};
@@ -8100,17 +8067,35 @@ function clonarr() {
 
     initSelectedCFs(detail) {
       const selected = {};
-      for (const cat of (detail.cfCategories || [])) {
-        for (const group of cat.groups) {
+      // Use trashGroups (new system) if available, fall back to cfCategories (legacy)
+      if (detail.trashGroups?.length) {
+        for (const group of detail.trashGroups) {
           if (group.defaultEnabled) {
             if (group.exclusive) {
               // Exclusive group: only enable the default CF
               for (const cf of (group.cfs || [])) {
-                selected[cf.trashId] = !!cf.default;
+                if (!cf.required) selected[cf.trashId] = !!cf.default;
               }
             } else {
+              // Only set optional CFs individually; required CFs are handled by group state
               for (const cf of (group.cfs || [])) {
-                selected[cf.trashId] = true;
+                if (!cf.required) selected[cf.trashId] = true;
+              }
+            }
+          }
+        }
+      } else {
+        for (const cat of (detail.cfCategories || [])) {
+          for (const group of cat.groups) {
+            if (group.defaultEnabled) {
+              if (group.exclusive) {
+                for (const cf of (group.cfs || [])) {
+                  selected[cf.trashId] = !!cf.default;
+                }
+              } else {
+                for (const cf of (group.cfs || [])) {
+                  selected[cf.trashId] = true;
+                }
               }
             }
           }
@@ -8223,6 +8208,18 @@ function clonarr() {
     },
 
     countAllCategoryCFs() {
+      // Use trashGroups if available
+      const groups = this.profileDetail?.detail?.trashGroups || [];
+      if (groups.length) {
+        let count = 0;
+        for (const group of groups) {
+          const grpOn = this.selectedOptionalCFs['__grp_' + group.name] !== undefined
+            ? this.selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled;
+          if (grpOn) count += group.cfs.length;
+        }
+        return count;
+      }
+      // Legacy fallback
       let count = 0;
       for (const cat of (this.profileDetail?.detail?.cfCategories || [])) {
         count += this.countCategoryCFs(cat);
@@ -8515,28 +8512,51 @@ function clonarr() {
       this.showSyncModal = true;
     },
 
-    getSelectedOptionalCount() {
-      return Object.values(this.selectedOptionalCFs).filter(v => v).length;
-    },
-
     getSyncOptionalBreakdown() {
       const sel = this.selectedOptionalCFs || {};
-      const cats = (this.profileDetail?.detail?.cfCategories || []);
+      const groups = this.profileDetail?.detail?.trashGroups || [];
       const breakdown = [];
-      for (const cat of cats) {
-        let count = 0;
-        for (const g of cat.groups) {
-          for (const cf of g.cfs) {
-            if (sel[cf.trashId]) count++;
-          }
+      if (groups.length) {
+        // New: use trashGroups
+        for (const group of groups) {
+          const grpOn = sel['__grp_' + group.name] !== undefined ? sel['__grp_' + group.name] : group.defaultEnabled;
+          if (!grpOn) continue;
+          const count = group.cfs.filter(cf => cf.required || sel[cf.trashId]).length;
+          if (count > 0) breakdown.push({ category: group.name, count });
         }
-        if (count > 0) breakdown.push({ category: cat.category, count });
+      } else {
+        // Legacy: use cfCategories
+        for (const cat of (this.profileDetail?.detail?.cfCategories || [])) {
+          let count = 0;
+          for (const g of cat.groups) {
+            for (const cf of g.cfs) { if (sel[cf.trashId]) count++; }
+          }
+          if (count > 0) breakdown.push({ category: cat.category, count });
+        }
       }
       return breakdown;
     },
 
     getSelectedCFIds() {
-      return Object.entries(this.selectedOptionalCFs).filter(([_, v]) => v).map(([k]) => k);
+      const idSet = new Set();
+      // Include individually toggled optional CFs
+      for (const [k, v] of Object.entries(this.selectedOptionalCFs)) {
+        if (v && !k.startsWith('__grp_')) idSet.add(k);
+      }
+      // Include required CFs from active TRaSH groups
+      const groups = this.profileDetail?.detail?.trashGroups || [];
+      for (const group of groups) {
+        const grpOn = this.selectedOptionalCFs['__grp_' + group.name] !== undefined
+          ? this.selectedOptionalCFs['__grp_' + group.name]
+          : group.defaultEnabled;
+        if (!grpOn) continue;
+        for (const cf of group.cfs) {
+          if (cf.required) {
+            idSet.add(cf.trashId);
+          }
+        }
+      }
+      return [...idSet];
     },
 
     // --- Sync ---
@@ -8681,7 +8701,8 @@ function clonarr() {
       if (!ov.minFormatScore.enabled) { overrides.minFormatScore = ov.minFormatScore.value; hasOverrides = true; }
       if (!ov.minUpgradeFormatScore.enabled) { overrides.minUpgradeFormatScore = ov.minUpgradeFormatScore.value; hasOverrides = true; }
       if (!ov.cutoffFormatScore.enabled) { overrides.cutoffFormatScore = ov.cutoffFormatScore.value; hasOverrides = true; }
-      if (ov.cutoffQuality === '__skip__') { overrides.cutoffQuality = '__skip__'; hasOverrides = true; }
+      const defaultCutoff = this.profileDetail?.detail?.profile?.cutoff || '';
+      if (ov.cutoffQuality && ov.cutoffQuality !== defaultCutoff) { overrides.cutoffQuality = ov.cutoffQuality; hasOverrides = true; }
       if (hasOverrides) body.overrides = overrides;
       // Sync behavior rules
       if (this.syncForm.behavior) body.behavior = this.syncForm.behavior;
@@ -8714,10 +8735,11 @@ function clonarr() {
     async startDryRun() {
       this.syncing = true;
       try {
+        const body = this.buildSyncBody();
         const r = await fetch('/api/sync/dry-run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.buildSyncBody())
+          body: JSON.stringify(body)
         });
         const data = await r.json();
         if (!r.ok) {
@@ -8857,7 +8879,8 @@ function clonarr() {
       return !this.pdOverrides.language.enabled || !this.pdOverrides.upgradeAllowed.enabled ||
              !this.pdOverrides.minFormatScore.enabled || !this.pdOverrides.minUpgradeFormatScore.enabled ||
              !this.pdOverrides.cutoffFormatScore.enabled ||
-             this.pdOverrides.cutoffQuality === '__skip__';
+             this.pdOverrides.cutoffFormatScore.enabled ||
+             (this.pdOverrides.cutoffQuality && this.pdOverrides.cutoffQuality !== (this.profileDetail?.detail?.profile?.cutoff || ''));
     },
 
     // Finalize override editing: mark changed fields as enabled=false so buildSyncBody sends them
