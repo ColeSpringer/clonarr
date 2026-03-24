@@ -4,14 +4,10 @@ clonarr.json
 config/
 profiles/
 data/
-test/
-mockups/
-screenshots/
+dev/
 docs/
 .git/
 .github/
 *.md
 LICENSE
 unraid-template.xml
-PROJECT.md
-DESIGN_NOTES.md

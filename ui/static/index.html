@@ -686,14 +686,20 @@
                 <span style="font-size:11px;color:#484f58">Instance:</span>
                 <select class="input" style="width:200px;font-size:12px;padding:4px 8px"
                         :value="qsInstanceId[tab.type] || ''"
-                        @change="qsInstanceId = { ...qsInstanceId, [tab.type]: $event.target.value }; if ($event.target.value) loadInstanceQS(tab.type, $event.target.value)">
+                        @change="qsInstanceId = { ...qsInstanceId, [tab.type]: $event.target.value }; if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); loadInstanceQS(tab.type, $event.target.value); }">
                   <option value="">TRaSH only</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
                     <option :value="inst.id" x-text="inst.name"></option>
                   </template>
                 </select>
-                <template x-if="qsInstanceId[tab.type]">
+                <template x-if="qsInstanceId[tab.type] && instanceStatus[qsInstanceId[tab.type]] === 'connected'">
                   <span style="font-size:11px;color:#3fb950">Connected</span>
+                </template>
+                <template x-if="qsInstanceId[tab.type] && instanceStatus[qsInstanceId[tab.type]] === 'failed'">
+                  <span style="font-size:11px;color:#f85149">Connection failed</span>
+                </template>
+                <template x-if="qsInstanceId[tab.type] && !instanceStatus[qsInstanceId[tab.type]]">
+                  <span style="font-size:11px;color:#d29922">Not tested</span>
                 </template>
                 <template x-if="!qsInstanceId[tab.type]">
                   <span style="font-size:11px;color:#484f58">Select an instance to compare and sync</span>
@@ -877,14 +883,20 @@
                 <span style="font-size:11px;color:#484f58">Instance:</span>
                 <select class="input" style="width:200px;font-size:12px;padding:4px 8px"
                   x-model="namingSelectedInstance[tab.type]"
-                  @change="loadInstanceNaming(tab.type)">
+                  @change="if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); } loadInstanceNaming(tab.type)">
                   <option value="">Select instance...</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
                     <option :value="inst.id" x-text="inst.name"></option>
                   </template>
                 </select>
-                <template x-if="namingSelectedInstance[tab.type] && namingInstanceData[tab.type]">
+                <template x-if="namingSelectedInstance[tab.type] && instanceStatus[namingSelectedInstance[tab.type]] === 'connected'">
                   <span style="font-size:11px;color:#3fb950">Connected</span>
+                </template>
+                <template x-if="namingSelectedInstance[tab.type] && instanceStatus[namingSelectedInstance[tab.type]] === 'failed'">
+                  <span style="font-size:11px;color:#f85149">Connection failed</span>
+                </template>
+                <template x-if="namingSelectedInstance[tab.type] && !instanceStatus[namingSelectedInstance[tab.type]]">
+                  <span style="font-size:11px;color:#d29922">Not tested</span>
                 </template>
                 <template x-if="!namingSelectedInstance[tab.type]">
                   <span style="font-size:11px;color:#484f58">Select an instance to enable sync</span>
@@ -1009,16 +1021,18 @@
                 <span style="font-size:13px;color:#8b949e">Instance:</span>
                 <select class="input" style="width:250px"
                         x-model="maintenanceInstanceId"
-                        @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { loadInstanceProfiles(maintenanceInstance); }">
+                        @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { testInstance(maintenanceInstance); loadInstanceProfiles(maintenanceInstance); }">
                   <option value="">Select instance...</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
                     <option :value="inst.id" x-text="inst.name"></option>
                   </template>
                 </select>
                 <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type">
-                  <span style="font-size:12px;color:#3fb950;display:flex;align-items:center;gap:6px">
+                  <span style="font-size:12px;display:flex;align-items:center;gap:6px"
+                        :style="instanceStatus[maintenanceInstance.id] === 'failed' ? 'color:#f85149' : instanceStatus[maintenanceInstance.id] === 'connected' ? 'color:#3fb950' : 'color:#d29922'">
                     <img style="width:16px;height:16px;border-radius:3px" :src="instanceIconUrl(maintenanceInstance)" :alt="maintenanceInstance.type">
                     <span x-text="maintenanceInstance.name"></span>
+                    <span x-show="instanceStatus[maintenanceInstance.id] === 'failed'" style="font-size:10px">— Connection failed</span>
                   </span>
                 </template>
               </div>
