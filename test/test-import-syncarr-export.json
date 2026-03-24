@@ -1,0 +1,42 @@
+{
+  "id": "test-export-001",
+  "name": "Test Syncarr Export",
+  "appType": "radarr",
+  "source": "custom",
+  "scoreSet": "sqp-5",
+  "upgradeAllowed": true,
+  "cutoff": "WEBDL|Bluray|2160p",
+  "cutoffScore": 10000,
+  "minFormatScore": 550,
+  "minUpgradeFormatScore": 1,
+  "language": "Original",
+  "formatItems": {
+    "3a3ff47579026e76d6504ebea39390de": 1800,
+    "9f98181fe5a3fbeb0cc29340da2a468a": 1750,
+    "8baaf0b3142bf4d94c42a724f034e27a": 1700,
+    "4d74ac4c4db0b64bff6ce0cffef99bf0": 1800,
+    "a58f517a70193f8e578056642178419d": 1750,
+    "e71939fae578037e7aed3ee219bbe7c1": 1700,
+    "c20f169ef63c5f40c2def54abaf4438e": 1800,
+    "403816d65392c79236dcb6dd591aeda4": 1750,
+    "af94e0fe497124d1f9ce732069ec8c3b": 1700,
+    "ed38b889b31be83fda192888e2286d83": -10000,
+    "90a6f9a284dff5103f6346090e6280c8": -10000,
+    "e204b80c87be9497a8a6eaff48f72905": -10000
+  },
+  "formatComments": {
+    "3a3ff47579026e76d6504ebea39390de": "Remux Tier 01",
+    "9f98181fe5a3fbeb0cc29340da2a468a": "Remux Tier 02",
+    "8baaf0b3142bf4d94c42a724f034e27a": "Remux Tier 03",
+    "4d74ac4c4db0b64bff6ce0cffef99bf0": "UHD Bluray Tier 01",
+    "a58f517a70193f8e578056642178419d": "UHD Bluray Tier 02",
+    "e71939fae578037e7aed3ee219bbe7c1": "UHD Bluray Tier 03",
+    "c20f169ef63c5f40c2def54abaf4438e": "WEB Tier 01",
+    "403816d65392c79236dcb6dd591aeda4": "WEB Tier 02",
+    "af94e0fe497124d1f9ce732069ec8c3b": "WEB Tier 03",
+    "ed38b889b31be83fda192888e2286d83": "BR-DISK",
+    "90a6f9a284dff5103f6346090e6280c8": "LQ",
+    "e204b80c87be9497a8a6eaff48f72905": "LQ (Release Title)"
+  },
+  "importedAt": "2026-03-06T12:00:00Z"
+}

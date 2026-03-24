@@ -1,0 +1,127 @@
+{
+  "trash_id": "",
+  "name": "Test V8 User Profile",
+  "group": 99,
+  "upgradeAllowed": true,
+  "cutoff": "Remux-2160p",
+  "minFormatScore": 1500,
+  "cutoffFormatScore": 10000,
+  "minUpgradeFormatScore": 100,
+  "language": "Original",
+  "items": [
+    {
+      "name": "Remux-2160p",
+      "allowed": true
+    },
+    {
+      "name": "WEB 2160p",
+      "allowed": true,
+      "items": [
+        "WEBDL-2160p",
+        "WEBRip-2160p"
+      ]
+    },
+    {
+      "name": "Remux-1080p",
+      "allowed": true
+    },
+    {
+      "name": "WEB 1080p",
+      "allowed": false,
+      "items": [
+        "WEBDL-1080p",
+        "WEBRip-1080p"
+      ]
+    }
+  ],
+  "formatItems": {
+    "DD+ ATMOS": {
+      "trash_id": "1af239278386be2919e1bcee0bde047e",
+      "score": 3000
+    },
+    "DTS X": {
+      "trash_id": "2f22d89048b01681dde8afe203bf2e95",
+      "score": 4500
+    },
+    "Remux Tier 01": {
+      "trash_id": "3a3ff47579026e76d6504ebea39390de",
+      "score": 1950
+    },
+    "TrueHD": {
+      "trash_id": "3cafb66171b47f226146a0770576870f",
+      "score": 2750
+    },
+    "ATVP": {
+      "trash_id": "40e9380490e748672c2522eaaeb692f7",
+      "score": 0
+    },
+    "ATMOS (undefined)": {
+      "trash_id": "417804f7f2c4308c1f4c5d380d4c4475",
+      "score": 3000
+    },
+    "HDR": {
+      "trash_id": "493b6d1dbec3c3364c59d7607f7e3405",
+      "score": 500
+    },
+    "TrueHD ATMOS": {
+      "trash_id": "496f355514737f7d83bf7aa4d24f8169",
+      "score": 5000
+    },
+    "LQ": {
+      "trash_id": "90a6f9a284dff5103f6346090e6280c8",
+      "score": -10000
+    },
+    "DV (w/o HDR fallback)": {
+      "trash_id": "923b6abef9b17f937fab56cfcf89e1f1",
+      "score": -10000
+    },
+    "Remux Tier 02": {
+      "trash_id": "9f98181fe5a3fbeb0cc29340da2a468a",
+      "score": 1900
+    },
+    "Repack2": {
+      "trash_id": "ae43b294509409a6a13919dedd4764c4",
+      "score": 6
+    },
+    "DV Boost": {
+      "trash_id": "b337d6812e06c200ec9a2d3cfa9d20a7",
+      "score": 1000
+    },
+    "AMZN": {
+      "trash_id": "b3b3a6ac74ecbd56bcdbefa4799fb9df",
+      "score": 0
+    },
+    "3D": {
+      "trash_id": "b8cd450cbfa689c0259a01d9e29ba3d6",
+      "score": -10000
+    },
+    "Upscaled": {
+      "trash_id": "bfd8eb01832d646a0a89c4deb46f8564",
+      "score": -10000
+    },
+    "WEB Tier 01": {
+      "trash_id": "c20f169ef63c5f40c2def54abaf4438e",
+      "score": 1700
+    },
+    "BCORE": {
+      "trash_id": "cc5e51a9e85a6296ceefe097a77f12f4",
+      "score": 0
+    },
+    "LQ (Release Title)": {
+      "trash_id": "e204b80c87be9497a8a6eaff48f72905",
+      "score": -10000
+    },
+    "Repack/Proper": {
+      "trash_id": "e7718d7a3ce595f289bfee26adc178f5",
+      "score": 5
+    },
+    "BR-DISK": {
+      "trash_id": "ed38b889b31be83fda192888e2286d83",
+      "score": -10000
+    },
+    "2160p": {
+      "trash_id": "fb392fb0d61a010ae38e49ceaa24a1ef",
+      "score": 151
+    }
+  }
+}

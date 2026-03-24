@@ -1,0 +1,71 @@
+{
+  "id": "83fe5c15b5f02eb75511683f9edbf1de",
+  "name": "Test Classic Profile",
+  "appType": "radarr",
+  "qualityType": "movie",
+  "upgradeAllowed": true,
+  "cutoff": "Bluray|WEB-1080p",
+  "cutoffScore": 10000,
+  "minFormatScore": 0,
+  "resetUnmatchedScores": true,
+  "qualities": [
+    {
+      "name": "Bluray|WEB-1080p",
+      "allowed": true,
+      "items": [
+        "WEBDL-1080p",
+        "WEBRip-1080p",
+        "Bluray-1080p"
+      ]
+    }
+  ],
+  "formatItems": {
+    "170b1d363bd8516fbf3a3eb05d4faff6": 0,
+    "185f1dd7264c4562b9022d963ac37424": 1750,
+    "2f22d89048b01681dde8afe203bf2e95": 5000,
+    "3cafb66171b47f226146a0770576870f": 4500,
+    "403816d65392c79236dcb6dd591aeda4": 1650,
+    "40e9380490e748672c2522eaaeb692f7": 0,
+    "493b6d1dbec3c3364c59d7607f7e3405": 500,
+    "496f355514737f7d83bf7aa4d24f8169": 5000,
+    "90a6f9a284dff5103f6346090e6280c8": -10000,
+    "923b6abef9b17f937fab56cfcf89e1f1": -10000,
+    "b3b3a6ac74ecbd56bcdbefa4799fb9df": 0,
+    "b8cd450cbfa689c0259a01d9e29ba3d6": -10000,
+    "c20f169ef63c5f40c2def54abaf4438e": 1700,
+    "dcf3ec6938fa32445f590a4da84256cd": 4500,
+    "e7718d7a3ce595f289bfee26adc178f5": 5,
+    "ed38b889b31be83fda192888e2286d83": -10000
+  },
+  "formatComments": {
+    "170b1d363bd8516fbf3a3eb05d4faff6": "NF",
+    "185f1dd7264c4562b9022d963ac37424": "DD+",
+    "2f22d89048b01681dde8afe203bf2e95": "DTS X",
+    "3cafb66171b47f226146a0770576870f": "TrueHD",
+    "403816d65392c79236dcb6dd591aeda4": "WEB Tier 02",
+    "40e9380490e748672c2522eaaeb692f7": "ATVP",
+    "493b6d1dbec3c3364c59d7607f7e3405": "HDR",
+    "496f355514737f7d83bf7aa4d24f8169": "TrueHD ATMOS",
+    "90a6f9a284dff5103f6346090e6280c8": "LQ",
+    "923b6abef9b17f937fab56cfcf89e1f1": "DV (w/o HDR fallback)",
+    "b3b3a6ac74ecbd56bcdbefa4799fb9df": "AMZN",
+    "b8cd450cbfa689c0259a01d9e29ba3d6": "3D",
+    "c20f169ef63c5f40c2def54abaf4438e": "WEB Tier 01",
+    "dcf3ec6938fa32445f590a4da84256cd": "DTS-HD MA",
+    "e7718d7a3ce595f289bfee26adc178f5": "Repack/Proper",
+    "ed38b889b31be83fda192888e2286d83": "BR-DISK"
+  },
+  "formatGroups": {
+    "170b1d363bd8516fbf3a3eb05d4faff6": "[Streaming Services] General",
+    "185f1dd7264c4562b9022d963ac37424": "[Audio] Audio Formats",
+    "2f22d89048b01681dde8afe203bf2e95": "[Audio] Audio Formats",
+    "3cafb66171b47f226146a0770576870f": "[Audio] Audio Formats",
+    "40e9380490e748672c2522eaaeb692f7": "[Streaming Services] General",
+    "493b6d1dbec3c3364c59d7607f7e3405": "[HDR Formats] HDR",
+    "496f355514737f7d83bf7aa4d24f8169": "[Audio] Audio Formats",
+    "923b6abef9b17f937fab56cfcf89e1f1": "[HDR Formats] DV (w/o HDR fallback)",
+    "b3b3a6ac74ecbd56bcdbefa4799fb9df": "[Streaming Services] General",
+    "dcf3ec6938fa32445f590a4da84256cd": "[Audio] Audio Formats"
+  },
+  "importedAt": "2026-03-06T08:22:01Z"
+}
