@@ -1299,6 +1299,168 @@ func ProfileCFCategories(ad *AppData, profileTrashID string) []CFCategory {
 	return categories
 }
 
+// ProfileDetailResult holds all data needed for the sync/detail view.
+type ProfileDetailResult struct {
+	// FormatItemNames are CFs in formatItems that do NOT belong to any TRaSH CF group.
+	// Displayed as compact multi-column "Profile" section (just names, no toggles).
+	FormatItemNames []ResolvedCF `json:"formatItemNames"`
+	// Groups are all TRaSH CF groups linked to this profile, as a flat list.
+	// Includes both required and optional groups — NOT filtered by formatItems.
+	Groups []CategoryCFGroup `json:"groups"`
+}
+
+// ProfileDetailData builds the sync/detail view data using TRaSH CF groups.
+// formatItems CFs that also appear in a group are shown in the group (not in Profile section).
+// formatItems CFs that don't belong to any group are returned in FormatItemNames.
+func ProfileDetailData(ad *AppData, profileTrashID string) *ProfileDetailResult {
+	if ad == nil {
+		return nil
+	}
+
+	var profile *TrashQualityProfile
+	for _, p := range ad.Profiles {
+		if p.TrashID == profileTrashID {
+			profile = p
+			break
+		}
+	}
+	if profile == nil {
+		return nil
+	}
+
+	scoreCtx := profile.TrashScoreSet
+	if scoreCtx == "" {
+		scoreCtx = "default"
+	}
+
+	// Build set of formatItems CFs
+	formatItemSet := make(map[string]bool)
+	for _, cfTrashID := range profile.FormatItems {
+		formatItemSet[cfTrashID] = true
+	}
+
+	// Track which formatItems CFs appear in at least one group
+	formatItemInGroup := make(map[string]bool)
+
+	// Build flat list of TRaSH groups (do NOT skip formatItems CFs)
+	groups := make([]CategoryCFGroup, 0)
+	for _, group := range ad.CFGroups {
+		// Check if this group's quality_profiles.include references our profile
+		found := false
+		for _, profTrashID := range group.QualityProfiles.Include {
+			if profTrashID == profileTrashID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+
+		category, shortName := parseCategoryPrefix(group.Name)
+
+		defaultEnabled := group.Default == "true"
+		if category == "Streaming Services" && shortName != "General" {
+			defaultEnabled = false
+		}
+
+		exclusive := strings.Contains(strings.ToLower(group.TrashDescription), "only score or enable one") ||
+			strings.Contains(strings.ToLower(group.TrashDescription), "only enable one")
+
+		cg := CategoryCFGroup{
+			Name:             group.Name,
+			ShortName:        shortName,
+			Category:         category,
+			TrashDescription: group.TrashDescription,
+			DefaultEnabled:   defaultEnabled,
+			Exclusive:        exclusive,
+		}
+
+		for _, cfEntry := range group.CustomFormats {
+			entry := ProfileCFGroupEntry{
+				TrashID:  cfEntry.TrashID,
+				Name:     cfEntry.Name,
+				Required: cfEntry.Required,
+			}
+			if cfEntry.Default != nil && *cfEntry.Default {
+				entry.Default = true
+			}
+
+			if cf, ok := ad.CustomFormats[cfEntry.TrashID]; ok {
+				if s, ok := cf.TrashScores[scoreCtx]; ok {
+					entry.Score = s
+					entry.HasScore = true
+				} else if s, ok := cf.TrashScores["default"]; ok {
+					entry.Score = s
+					entry.HasScore = true
+				}
+				entry.Description = cf.Description
+			}
+
+			cg.CFs = append(cg.CFs, entry)
+
+			// Track that this formatItem CF is covered by a group
+			if formatItemSet[cfEntry.TrashID] {
+				formatItemInGroup[cfEntry.TrashID] = true
+			}
+		}
+
+		if len(cg.CFs) == 0 {
+			continue
+		}
+
+		groups = append(groups, cg)
+	}
+
+	// Sort groups by category order, then defaultEnabled first, then name
+	sort.Slice(groups, func(i, j int) bool {
+		oi := getCategoryOrder(groups[i].Category)
+		oj := getCategoryOrder(groups[j].Category)
+		if oi != oj {
+			return oi < oj
+		}
+		if groups[i].DefaultEnabled != groups[j].DefaultEnabled {
+			return groups[i].DefaultEnabled
+		}
+		return groups[i].Name < groups[j].Name
+	})
+
+	// formatItems CFs NOT in any group → "Profile" section
+	formatItemNames := make([]ResolvedCF, 0)
+	for cfName, cfTrashID := range profile.FormatItems {
+		if formatItemInGroup[cfTrashID] {
+			continue
+		}
+		rc := ResolvedCF{
+			TrashID: cfTrashID,
+			Name:    cfName,
+		}
+		if cf, ok := ad.CustomFormats[cfTrashID]; ok {
+			rc.Name = cf.Name
+			if s, ok := cf.TrashScores[scoreCtx]; ok {
+				rc.Score = s
+				rc.HasScore = true
+			} else if s, ok := cf.TrashScores["default"]; ok {
+				rc.Score = s
+				rc.HasScore = true
+			}
+		}
+		formatItemNames = append(formatItemNames, rc)
+	}
+	// Sort by score descending, then name
+	sort.Slice(formatItemNames, func(i, j int) bool {
+		if formatItemNames[i].Score != formatItemNames[j].Score {
+			return formatItemNames[i].Score > formatItemNames[j].Score
+		}
+		return formatItemNames[i].Name < formatItemNames[j].Name
+	})
+
+	return &ProfileDetailResult{
+		FormatItemNames: formatItemNames,
+		Groups:          groups,
+	}
+}
+
 func ResolveProfileCFs(ad *AppData, profileTrashID string) ([]ResolvedCF, string) {
 	if ad == nil {
 		return nil, ""
@@ -1350,31 +1512,6 @@ func ResolveProfileCFs(ad *AppData, profileTrashID string) ([]ResolvedCF, string
 	return resolved, scoreCtx
 }
 
-// buildCFCategoryLookup builds a cfTrashID → category mapping from all CF groups.
-// Uses [Prefix] from group names as primary source, then falls back to name-based
-// categorization matching TRaSH's collection-of-custom-formats structure.
-func buildCFCategoryLookup(ad *AppData) map[string]string {
-	lookup := make(map[string]string)
-	for _, group := range ad.CFGroups {
-		category, _ := parseCategoryPrefix(group.Name)
-		for _, cfEntry := range group.CustomFormats {
-			// First assignment wins — a CF may appear in multiple groups
-			if _, exists := lookup[cfEntry.TrashID]; !exists {
-				lookup[cfEntry.TrashID] = category
-			}
-		}
-	}
-
-	// Name-based fallback for CFs not in any [Prefix] group.
-	// Matches TRaSH collection-of-custom-formats structure.
-	for trashID, cf := range ad.CustomFormats {
-		if _, exists := lookup[trashID]; exists {
-			continue
-		}
-		lookup[trashID] = categorizeCFByName(cf.Name)
-	}
-	return lookup
-}
 
 // categorizeCFByName returns a category for a CF based on its name,
 // matching TRaSH's collection-of-custom-formats page structure.
@@ -1478,37 +1615,3 @@ func categorizeCFByName(name string) string {
 	return "Other"
 }
 
-// CategorizeResolvedCFs groups a flat list of ResolvedCFs into categories using CF group data.
-// Categories come from TRaSH CF group [Prefix] names (e.g. [Audio], [Unwanted], [HQ Release Groups]).
-func CategorizeResolvedCFs(cfs []ResolvedCF, categoryLookup map[string]string) []ResolvedCFCategory {
-	catMap := make(map[string][]ResolvedCF)
-	for _, cf := range cfs {
-		cat := categoryLookup[cf.TrashID]
-		if cat == "" {
-			cat = "Other"
-		}
-		catMap[cat] = append(catMap[cat], cf)
-	}
-
-	var categories []ResolvedCFCategory
-	for cat, cfList := range catMap {
-		// Sort CFs: by score descending, alphabetical by name when scores are equal
-		sort.Slice(cfList, func(i, j int) bool {
-			if cfList[i].Score != cfList[j].Score {
-				return cfList[i].Score > cfList[j].Score
-			}
-			return cfList[i].Name < cfList[j].Name
-		})
-		categories = append(categories, ResolvedCFCategory{
-			Category: cat,
-			CFs:      cfList,
-		})
-	}
-
-	// Sort categories by display order
-	sort.Slice(categories, func(i, j int) bool {
-		return getCategoryOrder(categories[i].Category) < getCategoryOrder(categories[j].Category)
-	})
-
-	return categories
-}

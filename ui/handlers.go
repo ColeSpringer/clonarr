@@ -1878,22 +1878,24 @@ func (app *App) handleTrashProfileDetail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Required CFs: categorized by CF group membership
+	// Resolve formatItems CFs for sync engine (still needed for sync)
 	resolvedCFs, scoreCtx := ResolveProfileCFs(ad, trashID)
-	categoryLookup := buildCFCategoryLookup(ad)
-	requiredCFCategories := CategorizeResolvedCFs(resolvedCFs, categoryLookup)
 
-	// Category-based groups (optional/streaming/etc.)
+	// New: TRaSH group-based detail data for sync view
+	detailData := ProfileDetailData(ad, trashID)
+
+	// Legacy: category-based groups (kept for backward compat until frontend fully migrated)
 	cfCategories := ProfileCFCategories(ad, trashID)
 
 	// Build response
 	resp := map[string]any{
-		"profile":              profile,
-		"scoreCtx":             scoreCtx,
-		"coreCFs":              resolvedCFs,
-		"totalCoreCFs":         len(resolvedCFs),
-		"requiredCFCategories": requiredCFCategories,
-		"cfCategories":         cfCategories,
+		"profile":          profile,
+		"scoreCtx":         scoreCtx,
+		"coreCFs":          resolvedCFs,
+		"totalCoreCFs":     len(resolvedCFs),
+		"cfCategories":     cfCategories,
+		"formatItemNames":  detailData.FormatItemNames,
+		"trashGroups":      detailData.Groups,
 	}
 
 	writeJSON(w, resp)

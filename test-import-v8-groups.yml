@@ -1,0 +1,79 @@
+# Recyclarr v8 format — guide-backed profile + custom_format_groups
+# Uses real TRaSH trash_ids for validation against live TRaSH data
+#
+# Tests:
+# 1. Guide-backed quality_profile (trash_id resolves name, qualities, scores, language)
+# 2. custom_format_groups with add/skip/select/exclude/select_all
+# 3. Mixed: guide-backed profile + explicit custom_formats overrides
+# 4. assign_scores_to referencing profile by name (created from trash_id)
+
+radarr:
+  test-v8-groups:
+    base_url: http://radarr:7878
+    api_key: test123
+
+    quality_definition:
+      type: movie
+
+    quality_profiles:
+      # Guide-backed profile — trash_id should resolve to "HD Bluray + WEB"
+      # with all qualities, language, cutoff, scores from TRaSH guide
+      - trash_id: d1d67249d3890e49bc12e275d989a7e9
+        score_set: default
+        reset_unmatched_scores:
+          enabled: true
+          except:
+            - "P2P Internal"
+
+    custom_format_groups:
+      # Skip a default group (streaming services — we handle manually)
+      skip:
+        - d9cc9a504e5ede6294c8b973aad4f028 # [Streaming Services] General
+
+      add:
+        # Audio formats — select_all (include all CFs from group)
+        - trash_id: 9d5acd8f1da78dfbae788182f7605200 # [Audio] Audio Formats
+          select_all: true
+          assign_scores_to:
+            - name: HD Bluray + WEB
+
+        # HDR — DV Boost (small group, just 1 CF)
+        - trash_id: 1616617ab3a14397a2b2321bcbda44d1 # [HDR Formats] DV Boost
+          assign_scores_to:
+            - name: HD Bluray + WEB
+
+        # Optional Misc — select specific CFs only
+        - trash_id: 9337080378236ce4c0b183e35790d2a7 # [Optional] Miscellaneous
+          select:
+            - b6832f586342ef70d9c128d40c07b872 # Bad Dual Groups
+            - 7357cf5161efbf8c4d5d0c30b4815ee2 # Obfuscated
+            - 5c44f52a8714fdd79bb4d98e2673be1f # Retags
+          assign_scores_to:
+            - name: HD Bluray + WEB
+              score: -10000
+
+        # Golden Rule HD — exclude one CF from the group
+        - trash_id: f8bf8eab4617f12dfdbd16303d8da245 # [Required] Golden Rule HD
+          exclude:
+            - dc98083864ea246d05a42df0d05f81cc # x265 (HD) — we allow x265
+          assign_scores_to:
+            - name: HD Bluray + WEB
+              score: -10000
+
+    # Explicit custom_formats override (should take precedence over groups)
+    custom_formats:
+      # Override TrueHD Atmos score (group gives default, we want 5000)
+      - trash_ids:
+          - 496f355514737f7d83bf7aa4d24f8169 # TrueHD Atmos
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 5000
+
+      # Add streaming services manually (since we skipped the group)
+      - trash_ids:
+          - b3b3a6ac74ecbd56bcdbefa4799fb9df # AMZN
+          - 40e9380490e748672c2522eaaeb692f7 # ATVP
+          - 170b1d363bd8516fbf3a3eb05d4faff6 # NF
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: 0
