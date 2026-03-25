@@ -1889,13 +1889,14 @@ func (app *App) handleTrashProfileDetail(w http.ResponseWriter, r *http.Request)
 
 	// Build response
 	resp := map[string]any{
-		"profile":          profile,
-		"scoreCtx":         scoreCtx,
-		"coreCFs":          resolvedCFs,
-		"totalCoreCFs":     len(resolvedCFs),
-		"cfCategories":     cfCategories,
-		"formatItemNames":  detailData.FormatItemNames,
-		"trashGroups":      detailData.Groups,
+		"profile":            profile,
+		"scoreCtx":           scoreCtx,
+		"coreCFs":            resolvedCFs,
+		"totalCoreCFs":       len(resolvedCFs),
+		"cfCategories":       cfCategories,
+		"formatItemNames":    detailData.FormatItemNames,
+		"trashGroups":        detailData.Groups,
+		"formatItemsOrder":   profile.FormatItemsOrder,
 	}
 
 	writeJSON(w, resp)

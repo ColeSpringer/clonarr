@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -73,6 +74,7 @@ type TrashQualityProfile struct {
 	Language              string            `json:"language"`
 	Items                 []QualityItem     `json:"items"`
 	FormatItems           map[string]string `json:"formatItems"`
+	FormatItemsOrder      []string          `json:"-"` // original insertion order of FormatItems keys (CF names)
 }
 
 // QualityItem is a quality level or group within a profile.
@@ -489,10 +491,15 @@ func (ts *trashStore) parseAppData(app string) (AppData, error) {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 				continue
 			}
-			p, err := parseJSON[TrashQualityProfile](filepath.Join(profDir, e.Name()))
+			profPath := filepath.Join(profDir, e.Name())
+			p, err := parseJSON[TrashQualityProfile](profPath)
 			if err != nil {
 				log.Printf("Warning: skip profile %s/%s: %v", app, e.Name(), err)
 				continue
+			}
+			// Extract formatItems key order from raw JSON (Go maps lose insertion order)
+			if order, err := extractFormatItemsOrder(profPath); err == nil {
+				p.FormatItemsOrder = order
 			}
 			ad.Profiles = append(ad.Profiles, p)
 		}
@@ -883,6 +890,62 @@ func QualityPresets(ad *AppData) []QualityPreset {
 		return presets[i].Name < presets[j].Name
 	})
 	return presets
+}
+
+// extractFormatItemsOrder reads a TRaSH profile JSON and returns formatItems keys in original order.
+// Uses json.Decoder token-by-token parsing to preserve insertion order.
+func extractFormatItemsOrder(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	// Find "formatItems" key
+	depth := 0
+	found := false
+	for {
+		t, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		switch v := t.(type) {
+		case json.Delim:
+			if v == '{' || v == '[' {
+				depth++
+			} else {
+				depth--
+			}
+		case string:
+			if depth == 1 && v == "formatItems" {
+				found = true
+			}
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		return nil, nil
+	}
+	// Read the opening { of formatItems object
+	t, err := dec.Token()
+	if err != nil || t != json.Delim('{') {
+		return nil, nil
+	}
+	// Read keys in order
+	var order []string
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			break
+		}
+		if key, ok := t.(string); ok {
+			order = append(order, key)
+			// Skip the value
+			dec.Token()
+		}
+	}
+	return order, nil
 }
 
 // parseJSON reads a JSON file and unmarshals into T.
