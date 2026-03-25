@@ -2097,8 +2097,8 @@
               </div>
             </div>
 
-            <!-- Group variant selectors (only shown when conflicting groups exist and no template filters them) -->
-            <template x-if="!pb.trashProfileName && pbHasGroupVariants()">
+            <!-- Group variant selectors -->
+            <template x-if="pbHasGroupVariants()">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px" x-show="pbGroupVariant('Golden Rule')">
                   <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Golden Rule</div>
@@ -5265,13 +5265,22 @@ function clonarr() {
         // Filter by template profile if set
         if (this.pb.trashProfileName) {
           const profName = this.pb.trashProfileName;
-          filtered = filtered.filter(g =>
-            !g.includeProfiles || g.includeProfiles.length === 0 || g.includeProfiles.includes(profName)
-          );
+          const fiSet = this.pb.formatItemCFs || {};
+          const selSet = this.pb.selectedCFs || {};
+          const enSet = this.pb.enabledGroups || {};
+          filtered = filtered.filter(g => {
+            // Always show if group includes this profile
+            if (!g.includeProfiles || g.includeProfiles.length === 0 || g.includeProfiles.includes(profName)) return true;
+            // Show if group is enabled
+            if (g.groupTrashId && enSet[g.groupTrashId]) return true;
+            // Show if any of the group's CFs are in formatItems or selected
+            if (g.cfs?.some(cf => fiSet[cf.trashId] || selSet[cf.trashId])) return true;
+            return false;
+          });
         }
 
-        // Filter by variant dropdowns (only when no template)
-        if (!this.pb.trashProfileName) {
+        // Filter by variant dropdowns
+        {
           if (this.pb.variantGoldenRule === 'HD') {
             filtered = filtered.filter(g => g.name !== '[Required] Golden Rule UHD');
           } else if (this.pb.variantGoldenRule === 'UHD') {
@@ -5493,11 +5502,15 @@ function clonarr() {
     pbFormatItemCFList() {
       const result = [];
       const fiSet = this.pb.formatItemCFs || {};
+      const seen = new Set();
+      // Include ALL CFs that are in formatItemCFs, regardless of group membership
       for (const cat of this.pbCategories) {
         for (const g of cat.groups) {
-          if (g.groupTrashId) continue; // skip grouped CFs
           for (const cf of g.cfs) {
-            if (fiSet[cf.trashId]) result.push(cf);
+            if (fiSet[cf.trashId] && !seen.has(cf.trashId)) {
+              result.push(cf);
+              seen.add(cf.trashId);
+            }
           }
         }
       }
@@ -5510,7 +5523,7 @@ function clonarr() {
       const fiSet = this.pb.formatItemCFs || {};
       for (const cat of this.pbCategories) {
         for (const g of cat.groups) {
-          if (g.groupTrashId) continue;
+          if (g.groupTrashId) continue; // only ungrouped CFs available to add
           for (const cf of g.cfs) {
             if (!fiSet[cf.trashId]) result.push(cf);
           }
@@ -5815,25 +5828,65 @@ function clonarr() {
           this.pb.cfStateOverrides = {};
           const baselineCFs = new Set();
           const coreCFIds = [];
+          const coreCFSet = new Set((detail.coreCFs || []).map(cf => cf.trashId));
+
+          // Build lookup: which CFs belong to which groups (regardless of profile include)
+          const cfToGroup = {};
+          for (const cat of this.pbCategories) {
+            for (const g of cat.groups) {
+              if (!g.groupTrashId) continue;
+              for (const cf of g.cfs) {
+                cfToGroup[cf.trashId] = g;
+              }
+            }
+          }
+
+          // Check if entire groups are in formatItems (all group CFs are in coreCFs)
+          const groupsInFormatItems = new Set();
+          for (const cat of this.pbCategories) {
+            for (const g of cat.groups) {
+              if (!g.groupTrashId) continue;
+              const allInCore = g.cfs.every(cf => coreCFSet.has(cf.trashId));
+              if (allInCore && g.cfs.length > 0) {
+                groupsInFormatItems.add(g.groupTrashId);
+              }
+            }
+          }
+
           for (const cf of (detail.coreCFs || [])) {
             this.pb.selectedCFs[cf.trashId] = true;
-            this.pb.formatItemCFs[cf.trashId] = true;
             baselineCFs.add(cf.trashId);
             coreCFIds.push(cf.trashId);
             if (cf.score != null) this.pb.scoreOverrides[cf.trashId] = cf.score;
+
+            const group = cfToGroup[cf.trashId];
+            if (group && groupsInFormatItems.has(group.groupTrashId)) {
+              // CF belongs to a group that's entirely in formatItems → set as Fmt in group
+              this.pb.formatItemCFs[cf.trashId] = true;
+              this.pb.enabledGroups[group.groupTrashId] = true;
+              // Set CF state to formatItems within the group
+              if (!this.pb.cfStateOverrides) this.pb.cfStateOverrides = {};
+              this.pb.cfStateOverrides[cf.trashId] = 'formatItems';
+            } else if (group) {
+              // CF is in a group but not all group CFs are in formatItems — treat as individual formatItem
+              this.pb.formatItemCFs[cf.trashId] = true;
+            } else {
+              // Ungrouped CF — normal formatItem
+              this.pb.formatItemCFs[cf.trashId] = true;
+            }
           }
+
           // Apply CFs from groups — only enable groups that include this profile
-          // Only default-enabled groups are auto-enabled; non-default remain available but off
           for (const cat of this.pbCategories) {
             for (const g of cat.groups) {
-              // Check if this group includes the current profile
               const includesProfile = g.includeProfiles?.includes(this.pb.trashProfileName);
               if (!includesProfile) continue;
+              // Skip groups already handled as formatItems
+              if (groupsInFormatItems.has(g.groupTrashId)) continue;
               // Only auto-enable default groups
               if (g.groupTrashId && g.defaultEnabled) {
                 this.pb.enabledGroups[g.groupTrashId] = true;
               }
-              // Select CFs from default-enabled groups only
               if (g.defaultEnabled) {
                 for (const cf of g.cfs) {
                   this.pb.selectedCFs[cf.trashId] = true;
@@ -5845,6 +5898,23 @@ function clonarr() {
           // Store baseline so export knows what TRaSH defines vs user additions
           this.pb.baselineCFs = [...baselineCFs];
           this.pb.coreCFIds = coreCFIds;
+          // Store original formatItems key order from TRaSH profile (for identical export)
+          this.pb.formatItemsOrder = detail.formatItemsOrder || [];
+          // Detect Golden Rule and Misc variants from groups that include this profile
+          const includedGroupNames = new Set();
+          for (const cat of this.pbCategories) {
+            for (const g of cat.groups) {
+              if (g.includeProfiles?.includes(this.pb.trashProfileName)) {
+                includedGroupNames.add(g.name);
+              }
+            }
+          }
+          if (includedGroupNames.has('[Required] Golden Rule HD')) this.pb.variantGoldenRule = 'HD';
+          else if (includedGroupNames.has('[Required] Golden Rule UHD')) this.pb.variantGoldenRule = 'UHD';
+          else this.pb.variantGoldenRule = 'none';
+          if (includedGroupNames.has('[Optional] Miscellaneous SQP')) this.pb.variantMisc = 'SQP';
+          else if (includedGroupNames.has('[Optional] Miscellaneous')) this.pb.variantMisc = 'Standard';
+          else this.pb.variantMisc = 'none';
         } else if (tid.startsWith('import:')) {
           const importId = tid.slice(7);
           const profiles = this.importedProfiles[this.pb.appType] || [];
@@ -6092,6 +6162,7 @@ function clonarr() {
           defaultOnCFs: Object.keys(this.pb.defaultOnCFs || {}).filter(k => this.pb.defaultOnCFs[k] && this.pb.selectedCFs[k]),
           baselineCFs: this.pb.baselineCFs?.length ? this.pb.baselineCFs : undefined,
           coreCFIds: this.pb.coreCFIds?.length ? this.pb.coreCFIds : undefined,
+          formatItemsOrder: this.pb.formatItemsOrder?.length ? this.pb.formatItemsOrder : undefined,
           // Builder state (preserved for edit)
           formatItemCFs: Object.keys(this.pb.formatItemCFs || {}).length > 0 ? this.pb.formatItemCFs : undefined,
           enabledGroups: Object.keys(this.pb.enabledGroups || {}).length > 0 ? this.pb.enabledGroups : undefined,
@@ -6546,15 +6617,97 @@ function clonarr() {
       const formatItemSet = new Set(Object.keys(p.formatItemCFs || {}));
       const coreCFs = new Set(p.coreCFIds || []);
       const requiredSet = new Set(p.requiredCFs || []);
-      const formatItems = {};
+
+      // Collect eligible trash IDs
+      const eligibleTids = [];
       for (const [tid] of Object.entries(p.formatItems || {})) {
-        // New model: use formatItemCFs if populated
         if (formatItemSet.size > 0) {
           if (!formatItemSet.has(tid)) continue;
-        }
-        // Fallback for old profiles: use requiredCFs or coreCFIds
-        else if (requiredSet.size > 0 && !requiredSet.has(tid)) continue;
+        } else if (requiredSet.size > 0 && !requiredSet.has(tid)) continue;
         else if (requiredSet.size === 0 && coreCFs.size > 0 && !coreCFs.has(tid)) continue;
+        eligibleTids.push(tid);
+      }
+
+      // Sort formatItems to match TRaSH's convention:
+      // 1. Grouped CFs (Audio, HQ Groups) — by group order, score descending within
+      // 2. Tiers (Remux/HD Bluray/WEB) — by name (natural order: 01, 02, 03)
+      // 3. Repack — fixed order: Proper, 2, 3
+      // 4. Unwanted — fixed order matching TRaSH convention
+      // 5. Misc (10 bit, AV1, etc.)
+      // 6. Resolution (1080p, 2160p, 720p) — last
+      const comments = p.formatComments || {};
+      const scores = p.formatItems || {};
+
+      // Build CF group membership from pbCategories
+      const cfGroupIdx = {};
+      let gIdx = 0;
+      for (const cat of (this.pbCategories || [])) {
+        for (const g of (cat.groups || [])) {
+          if (!g.groupTrashId) continue;
+          for (const cf of (g.cfs || [])) {
+            cfGroupIdx[cf.trashId] = gIdx;
+          }
+          gIdx++;
+        }
+      }
+
+      // Assign sort bucket to each CF
+      const unwantedOrder = ['BR-DISK', 'Generated Dynamic HDR', 'LQ', 'LQ (Release Title)',
+        'x265 (HD)', '3D', 'Upscaled', 'Extras', 'Sing-Along Versions'];
+      const repackOrder = ['Repack/Proper', 'Repack2', 'Repack3'];
+      const resolutionOrder = ['720p', '1080p', '2160p'];
+      const getBucket = (tid) => {
+        const name = comments[tid] || tid;
+        if (resolutionOrder.includes(name)) return 5; // resolution — always last
+        if (cfGroupIdx[tid] !== undefined) return 0; // grouped CF
+        if (/Tier \d/.test(name) || name === 'BHDStudio' || name === 'hallowed') return 1; // tiers/hq groups
+        if (repackOrder.includes(name)) return 2;
+        if (unwantedOrder.includes(name) || (scores[tid] ?? 0) <= -10000) return 3;
+        return 4; // misc
+      };
+
+      eligibleTids.sort((a, b) => {
+        const ba = getBucket(a), bb = getBucket(b);
+        if (ba !== bb) return ba - bb;
+
+        const nameA = comments[a] || a, nameB = comments[b] || b;
+
+        // Bucket 0: grouped CFs — by group index, then score descending
+        if (ba === 0) {
+          const gi = cfGroupIdx[a] ?? 999, gj = cfGroupIdx[b] ?? 999;
+          if (gi !== gj) return gi - gj;
+          const sa = scores[a] ?? 0, sb = scores[b] ?? 0;
+          if (sa !== sb) return sb - sa;
+          return nameA.localeCompare(nameB);
+        }
+        // Bucket 1: tiers — score descending
+        if (ba === 1) {
+          const sa = scores[a] ?? 0, sb = scores[b] ?? 0;
+          if (sa !== sb) return sb - sa;
+          return nameA.localeCompare(nameB);
+        }
+        // Bucket 2: repack — fixed order
+        if (ba === 2) return repackOrder.indexOf(nameA) - repackOrder.indexOf(nameB);
+        // Bucket 3: unwanted — fixed order, then alphabetical for unknowns
+        if (ba === 3) {
+          const ia = unwantedOrder.indexOf(nameA), ib = unwantedOrder.indexOf(nameB);
+          if (ia >= 0 && ib >= 0) return ia - ib;
+          if (ia >= 0) return -1;
+          if (ib >= 0) return 1;
+          return nameA.localeCompare(nameB);
+        }
+        // Bucket 4: misc — score descending
+        if (ba === 4) {
+          const sa = scores[a] ?? 0, sb = scores[b] ?? 0;
+          if (sa !== sb) return sb - sa;
+          return nameA.localeCompare(nameB);
+        }
+        // Bucket 5: resolution — fixed order (720p, 1080p, 2160p)
+        return resolutionOrder.indexOf(nameA) - resolutionOrder.indexOf(nameB);
+      });
+
+      const formatItems = {};
+      for (const tid of eligibleTids) {
         const name = (p.formatComments || {})[tid] || tid;
         formatItems[name] = tid;
       }
