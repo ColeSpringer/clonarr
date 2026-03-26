@@ -534,7 +534,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 	}
 	nameToID := make(map[string]int)
 	for _, cf := range existingCFs {
-		nameToID[cf.Name] = cf.ID
+		nameToID[strings.ToLower(cf.Name)] = cf.ID
 	}
 
 	if req.ArrProfileID == 0 {
@@ -704,7 +704,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			} else {
 				continue
 			}
-			arrID, ok := nameToID[cfName]
+			arrID, ok := nameToID[strings.ToLower(cfName)]
 			if !ok {
 				continue
 			}
@@ -759,7 +759,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 					cfName = ccf.Name
 				}
 				if cfName != "" {
-					if arrID, ok := nameToID[cfName]; ok {
+					if arrID, ok := nameToID[strings.ToLower(cfName)]; ok {
 						syncedArrIDs[arrID] = true
 					}
 				}
@@ -889,7 +889,7 @@ func BuildArrProfile(
 			continue
 		}
 
-		arrID, ok := cfNameToID[cfName]
+		arrID, ok := cfNameToID[strings.ToLower(cfName)]
 		if !ok {
 			continue
 		}
