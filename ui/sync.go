@@ -43,13 +43,15 @@ type ScoreAction struct {
 // HasChanges returns true if the plan contains any create/update actions.
 func (p *SyncPlan) HasChanges() bool {
 	return p.Summary.CFsToCreate > 0 || p.Summary.CFsToUpdate > 0 ||
-		p.Summary.ScoresToSet > 0 || p.Summary.ScoresToZero > 0 || p.CreateProfile
+		p.Summary.ScoresToSet > 0 || p.Summary.ScoresToZero > 0 ||
+		p.Summary.QualityChanged || p.CreateProfile
 }
 
 // SyncSummary holds counts of planned changes.
 type SyncSummary struct {
-	CFsToCreate     int `json:"cfsToCreate"`
-	CFsToUpdate     int `json:"cfsToUpdate"`
+	CFsToCreate     int  `json:"cfsToCreate"`
+	CFsToUpdate     int  `json:"cfsToUpdate"`
+	QualityChanged  bool `json:"qualityChanged,omitempty"` // quality items differ from TRaSH
 	CFsUnchanged    int `json:"cfsUnchanged"`
 	ScoresToSet     int `json:"scoresToSet"`
 	ScoresUnchanged int `json:"scoresUnchanged"`
@@ -382,6 +384,43 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 			}
 		}
 		// else "do_not_adjust": leave unsynced CF scores as-is
+
+		// Compare quality items: check if TRaSH profile's allowed qualities differ from Arr
+		if len(profile.Items) > 0 {
+			trashAllowed := make(map[string]bool)
+			for _, item := range profile.Items {
+				if item.Allowed {
+					trashAllowed[item.Name] = true
+				}
+			}
+			arrAllowed := make(map[string]bool)
+			for _, item := range targetProfile.Items {
+				if item.Allowed {
+					name := item.Name
+					if name == "" && item.Quality != nil {
+						name = item.Quality.Name
+					}
+					if name != "" {
+						arrAllowed[name] = true
+					}
+				}
+			}
+			// Check for differences
+			for name := range trashAllowed {
+				if !arrAllowed[name] {
+					plan.Summary.QualityChanged = true
+					break
+				}
+			}
+			if !plan.Summary.QualityChanged {
+				for name := range arrAllowed {
+					if !trashAllowed[name] {
+						plan.Summary.QualityChanged = true
+						break
+					}
+				}
+			}
+		}
 	} else {
 		// Create mode: all scores are "set" actions
 		plan.CreateProfile = true
@@ -431,14 +470,18 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 
 // SyncResult reports what was actually applied.
 type SyncResult struct {
-	CFsCreated     int      `json:"cfsCreated"`
-	CFsUpdated     int      `json:"cfsUpdated"`
-	ScoresUpdated  int      `json:"scoresUpdated"`
-	ScoresZeroed   int      `json:"scoresZeroed"`
-	ProfileCreated bool     `json:"profileCreated,omitempty"`
-	ArrProfileID   int      `json:"arrProfileId,omitempty"`
-	ArrProfileName string   `json:"arrProfileName,omitempty"`
-	Errors         []string `json:"errors"`
+	CFsCreated      int      `json:"cfsCreated"`
+	CFsUpdated      int      `json:"cfsUpdated"`
+	ScoresUpdated   int      `json:"scoresUpdated"`
+	ScoresZeroed    int      `json:"scoresZeroed"`
+	QualityUpdated  bool     `json:"qualityUpdated,omitempty"`
+	QualityDetails  []string `json:"qualityDetails,omitempty"`  // e.g. "Remux-1080p: Enabled → Disabled"
+	CFDetails       []string `json:"cfDetails,omitempty"`       // e.g. "Created: HDR", "Updated: Hulu"
+	ScoreDetails    []string `json:"scoreDetails,omitempty"`    // e.g. "BHDStudio: 1000 → 2240"
+	ProfileCreated  bool     `json:"profileCreated,omitempty"`
+	ArrProfileID    int      `json:"arrProfileId,omitempty"`
+	ArrProfileName  string   `json:"arrProfileName,omitempty"`
+	Errors          []string `json:"errors"`
 }
 
 // ExecuteSyncPlan applies a previously built sync plan.
@@ -513,6 +556,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			}
 			createdCFIDs[action.Name] = created.ID
 			result.CFsCreated++
+			result.CFDetails = append(result.CFDetails, "Created: "+action.Name)
 			time.Sleep(100 * time.Millisecond)
 
 		case "update":
@@ -522,6 +566,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 				continue
 			}
 			result.CFsUpdated++
+			result.CFDetails = append(result.CFDetails, "Updated: "+action.Name)
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
@@ -723,6 +768,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			fi := &targetProfile.FormatItems[i]
 			if newScore, ok := scoreMap[fi.Format]; ok {
 				if fi.Score != newScore {
+					result.ScoreDetails = append(result.ScoreDetails, fmt.Sprintf("%s: %d → %d", fi.Name, fi.Score, newScore))
 					fi.Score = newScore
 					updated = true
 					result.ScoresUpdated++
@@ -774,10 +820,79 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			}
 		}
 
-		if updated {
-			if err := client.UpdateProfile(targetProfile); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("update profile scores: %v", err))
+		// Update quality items from TRaSH profile
+		if len(profile.Items) > 0 {
+			qualityDefs, err := client.ListQualityDefinitions()
+			if err != nil {
+				log.Printf("Sync: failed to fetch quality defs: %v", err)
+				result.Errors = append(result.Errors, fmt.Sprintf("fetch quality defs: %v", err))
+			} else {
+				qualityByName := make(map[string]*ArrQualityDefinition)
+				for i := range qualityDefs {
+					qualityByName[qualityDefs[i].Quality.Name] = &qualityDefs[i]
+				}
+				// Build old allowed map for comparison
+					oldAllowed := make(map[string]bool)
+					for _, item := range targetProfile.Items {
+						name := item.Name
+						if name == "" && item.Quality != nil { name = item.Quality.Name }
+						if name != "" { oldAllowed[name] = item.Allowed }
+					}
+
+					newItems, err := resolveQualityItems(profile.Items, qualityByName)
+				if err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("resolve quality items: %v", err))
+				} else {
+					// Track quality changes
+					for _, item := range newItems {
+						name := item.Name
+						if name == "" && item.Quality != nil { name = item.Quality.Name }
+						if name == "" { continue }
+						oldState, exists := oldAllowed[name]
+						if exists && oldState != item.Allowed {
+							if item.Allowed {
+								result.QualityDetails = append(result.QualityDetails, name+": Disabled → Enabled")
+							} else {
+								result.QualityDetails = append(result.QualityDetails, name+": Enabled → Disabled")
+							}
+						}
+					}
+					usedQualities := make(map[int]bool)
+					collectUsedQualities(newItems, usedQualities)
+					unused := make([]ArrQualityItem, 0)
+					for _, def := range qualityDefs {
+						if !usedQualities[def.Quality.ID] {
+							unused = append(unused, ArrQualityItem{
+								Quality: &ArrQualityRef{ID: def.Quality.ID, Name: def.Quality.Name},
+								Allowed: false,
+							})
+						}
+					}
+					for i, j := 0, len(newItems)-1; i < j; i, j = i+1, j-1 {
+						newItems[i], newItems[j] = newItems[j], newItems[i]
+					}
+					targetProfile.Items = append(unused, newItems...)
+					if len(result.QualityDetails) > 0 {
+						result.QualityUpdated = true
+						updated = true
+					}
+					log.Printf("Sync: updated quality items: %d items (%d from TRaSH, %d unused)",
+						len(targetProfile.Items), len(newItems), len(unused))
+				}
 			}
+		}
+
+		if updated {
+			log.Printf("Sync: sending profile update to %s (quality=%v, items=%d, formatItems=%d)",
+				instance.Name, result.QualityUpdated, len(targetProfile.Items), len(targetProfile.FormatItems))
+			if err := client.UpdateProfile(targetProfile); err != nil {
+				log.Printf("Sync: profile update failed: %v", err)
+				result.Errors = append(result.Errors, fmt.Sprintf("update profile scores: %v", err))
+			} else {
+				log.Printf("Sync: profile update successful")
+			}
+		} else {
+			log.Printf("Sync: no profile changes to send")
 		}
 	}
 

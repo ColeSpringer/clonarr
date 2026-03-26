@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.6.0-beta
+
+### Features
+- **Quality items sync** — Auto-sync now detects and updates quality item changes (allowed/disallowed qualities). Previously only CFs and scores were synced.
+- **Detailed Discord notifications** — Auto-sync notifications now show exactly what changed: CF names created/updated, score changes (old → new), and quality item changes (Enabled → Disabled)
+- **Startup auto-repair** — On container start, resets auto-sync commit hashes (ensures all rules re-evaluate) and removes broken rules with arrProfileId=0
+
+### Bug fixes
+- **Quality items not applied** — Quality item rebuild was running before the `updated` flag, so changes were never sent to Arr
+- **Quality items reversed** — Update mode now correctly reverses item order to match Arr API expectations (same as create mode)
+- **Spurious quality notification** — "Quality items updated" no longer shown when nothing actually changed
+
 ## v1.5.0-beta
 
 ### Features
