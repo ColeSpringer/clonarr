@@ -1386,15 +1386,19 @@ type ArrCFState struct {
 
 // ProfileComparison compares a specific Arr profile against a TRaSH profile.
 type ProfileComparison struct {
-	ArrProfileID     int                      `json:"arrProfileId"`
-	ArrProfileName   string                   `json:"arrProfileName"`
-	TrashProfileID   string                   `json:"trashProfileId"`
-	TrashProfileName string                   `json:"trashProfileName"`
-	CFStates         map[string]ArrCFState    `json:"cfStates"`          // keyed by trash_id
-	ExtraCFs         []ArrProfileFormatItem   `json:"extraCFs"`          // CFs in Arr profile not in TRaSH profile
-	OptionalCategories []CompareCategory      `json:"optionalCategories"` // optional CF groups categorized
-	Summary          ComparisonSummary        `json:"summary"`
-	Error            string                   `json:"error,omitempty"`
+	ArrProfileID       int                      `json:"arrProfileId"`
+	ArrProfileName     string                   `json:"arrProfileName"`
+	TrashProfileID     string                   `json:"trashProfileId"`
+	TrashProfileName   string                   `json:"trashProfileName"`
+	CFStates           map[string]ArrCFState    `json:"cfStates"`          // keyed by trash_id
+	ExtraCFs           []ArrProfileFormatItem   `json:"extraCFs"`          // CFs in Arr profile not in TRaSH profile
+	// NEW: TRaSH group-based comparison
+	FormatItems        []CompareFormatItem      `json:"formatItems"`
+	Groups             []CompareGroup           `json:"groups"`
+	// LEGACY (keep for now)
+	OptionalCategories []CompareCategory        `json:"optionalCategories"` // optional CF groups categorized
+	Summary            ComparisonSummary        `json:"summary"`
+	Error              string                   `json:"error,omitempty"`
 }
 
 // ComparisonSummary holds counts for the comparison.
@@ -1403,6 +1407,49 @@ type ComparisonSummary struct {
 	WrongScore   int `json:"wrongScore"`   // CFs exist but score differs
 	Matching     int `json:"matching"`     // CFs exist with correct score
 	Extra        int `json:"extra"`        // CFs in Arr profile not in TRaSH profile
+}
+
+// CompareFormatItem is a formatItem CF with comparison status.
+type CompareFormatItem struct {
+	TrashID      string `json:"trashId"`
+	Name         string `json:"name"`
+	Exists       bool   `json:"exists"`
+	ArrID        int    `json:"arrId,omitempty"`
+	CurrentScore int    `json:"currentScore"`
+	DesiredScore int    `json:"desiredScore"`
+	ScoreMatch   bool   `json:"scoreMatch"`
+}
+
+// CompareGroup is a TRaSH CF group with comparison status per CF.
+type CompareGroup struct {
+	Name             string      `json:"name"`
+	ShortName        string      `json:"shortName"`
+	Category         string      `json:"category"`
+	TrashDescription string      `json:"trashDescription"`
+	DefaultEnabled   bool        `json:"defaultEnabled"`
+	Exclusive        bool        `json:"exclusive"`
+	CFs              []CompareCF `json:"cfs"`
+	// Summary counts
+	Total     int `json:"total"`
+	Present   int `json:"present"`
+	Matching  int `json:"matching"`
+	WrongScore int `json:"wrongScore"`
+	Missing   int `json:"missing"`
+}
+
+// CompareCF is a single CF within a group with comparison status.
+type CompareCF struct {
+	TrashID      string `json:"trashId"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	Required     bool   `json:"required"`
+	Default      bool   `json:"default"`
+	Exists       bool   `json:"exists"`
+	InUse        bool   `json:"inUse"`          // non-zero score in Arr (user actively chose this)
+	ArrID        int    `json:"arrId,omitempty"`
+	CurrentScore int    `json:"currentScore"`
+	DesiredScore int    `json:"desiredScore"`
+	ScoreMatch   bool   `json:"scoreMatch"`
 }
 
 // CompareCategory groups optional CF groups under a category (Streaming Services, Optional, etc.)
@@ -1437,12 +1484,14 @@ type OptionalCFState struct {
 }
 
 // buildProfileComparison compares a specific Arr profile against a TRaSH profile.
-// Scoped to only the TRaSH profile's CFs (core formatItems).
+// Uses TRaSH CF groups consistently: ungrouped formatItems in FormatItems, grouped CFs in Groups.
 func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, arrProfileID int) *ProfileComparison {
 	comp := &ProfileComparison{
 		ArrProfileID:   arrProfileID,
 		TrashProfileID: trashProfileID,
 		CFStates:       make(map[string]ArrCFState),
+		FormatItems:    []CompareFormatItem{},
+		Groups:         []CompareGroup{},
 	}
 
 	// Find TRaSH profile
@@ -1458,11 +1507,6 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 		return comp
 	}
 	comp.TrashProfileName = trashProfile.Name
-
-	scoreCtx := trashProfile.TrashScoreSet
-	if scoreCtx == "" {
-		scoreCtx = "default"
-	}
 
 	client := NewArrClient(inst.URL, inst.APIKey)
 
@@ -1505,66 +1549,139 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 		arrScores[fi.Format] = fi.Score
 	}
 
-	// Build set of TRaSH CF trash_ids in this profile
-	trashCFSet := make(map[string]bool)
-	for _, cfTrashID := range trashProfile.FormatItems {
-		trashCFSet[cfTrashID] = true
-	}
+	// Get TRaSH group data via ProfileDetailData
+	detailData := ProfileDetailData(ad, trashProfileID)
 
-	// Build reverse map: Arr CF ID → trash_id (for detecting extra CFs)
-	arrIDToTrashID := make(map[int]string)
+	// Track all Arr CF IDs matched by TRaSH CFs (for extra CF detection)
+	trackedArrIDs := make(map[int]bool)
 
-	// Compare each CF in the TRaSH profile against the Arr instance
-	for cfTrashID := range trashCFSet {
-		trashCF, ok := ad.CustomFormats[cfTrashID]
-		if !ok {
-			continue
-		}
-
-		var desiredScore int
-		if s, ok := trashCF.TrashScores[scoreCtx]; ok {
-			desiredScore = s
-		} else if s, ok := trashCF.TrashScores["default"]; ok {
-			desiredScore = s
-		}
-
-		arrCF, exists := arrByName[strings.ToLower(trashCF.Name)]
-		if !exists {
-			comp.CFStates[cfTrashID] = ArrCFState{
-				Exists:       false,
-				TrashName:    trashCF.Name,
-				Description:  trashCF.Description,
+	// Compare formatItems (ungrouped CFs not in any TRaSH group)
+	if detailData != nil {
+		for _, fi := range detailData.FormatItemNames {
+			desiredScore := fi.Score
+			cfi := CompareFormatItem{
+				TrashID:      fi.TrashID,
+				Name:         fi.Name,
 				DesiredScore: desiredScore,
 			}
-			comp.Summary.Missing++
-			continue
+			if arrCF, ok := arrByName[strings.ToLower(fi.Name)]; ok {
+				cfi.Exists = true
+				cfi.ArrID = arrCF.ID
+				cfi.CurrentScore = arrScores[arrCF.ID]
+				cfi.ScoreMatch = cfi.CurrentScore == cfi.DesiredScore
+				trackedArrIDs[arrCF.ID] = true
+				if cfi.ScoreMatch {
+					comp.Summary.Matching++
+				} else {
+					comp.Summary.WrongScore++
+				}
+			} else {
+				comp.Summary.Missing++
+			}
+			comp.FormatItems = append(comp.FormatItems, cfi)
+			// Populate cfStates for backward compat with single-CF sync
+			comp.CFStates[fi.TrashID] = ArrCFState{
+				Exists:       cfi.Exists,
+				ArrID:        cfi.ArrID,
+				TrashName:    fi.Name,
+				CurrentScore: cfi.CurrentScore,
+				DesiredScore: desiredScore,
+				ScoreMatch:   cfi.ScoreMatch,
+			}
+			if cfi.Exists {
+				comp.CFStates[fi.TrashID] = ArrCFState{
+					Exists:       true,
+					ArrID:        cfi.ArrID,
+					ArrName:      fi.Name,
+					TrashName:    fi.Name,
+					CurrentScore: cfi.CurrentScore,
+					DesiredScore: desiredScore,
+					ScoreMatch:   cfi.ScoreMatch,
+				}
+			}
 		}
 
-		arrIDToTrashID[arrCF.ID] = cfTrashID
-		currentScore := arrScores[arrCF.ID]
-		match := currentScore == desiredScore
-		comp.CFStates[cfTrashID] = ArrCFState{
-			Exists:       true,
-			ArrID:        arrCF.ID,
-			ArrName:      arrCF.Name,
-			TrashName:    trashCF.Name,
-			Description:  trashCF.Description,
-			CurrentScore: currentScore,
-			DesiredScore: desiredScore,
-			ScoreMatch:   match,
-		}
-		if match {
-			comp.Summary.Matching++
-		} else {
-			comp.Summary.WrongScore++
+		// Compare groups — simple verification model:
+		// 1. Required CFs in default groups: must exist with correct score
+		// 2. Optional/non-default CFs: only verify if user has them (non-zero score in Arr)
+		// 3. Exclusive groups: verify one is chosen with correct score, don't try to add both
+		for _, group := range detailData.Groups {
+			cg := CompareGroup{
+				Name:             group.Name,
+				ShortName:        group.ShortName,
+				Category:         group.Category,
+				TrashDescription: group.TrashDescription,
+				DefaultEnabled:   group.DefaultEnabled,
+				Exclusive:        group.Exclusive,
+				Total:            len(group.CFs),
+				CFs:              []CompareCF{},
+			}
+			for _, cf := range group.CFs {
+				var desiredScore int
+				if cf.HasScore {
+					desiredScore = cf.Score
+				}
+				ccf := CompareCF{
+					TrashID:      cf.TrashID,
+					Name:         cf.Name,
+					Description:  cf.Description,
+					Required:     cf.Required,
+					Default:      cf.Default,
+					DesiredScore: desiredScore,
+				}
+				if arrCF, ok := arrByName[strings.ToLower(cf.Name)]; ok {
+					ccf.Exists = true
+					ccf.ArrID = arrCF.ID
+					ccf.CurrentScore = arrScores[arrCF.ID]
+					trackedArrIDs[arrCF.ID] = true
+					// CF is "in use" if it has non-zero score, OR if it's required in a default group
+				// (required CFs with score 0 are still actively configured — TRaSH wants score 0)
+				ccf.InUse = ccf.CurrentScore != 0 || (group.DefaultEnabled && cf.Required)
+
+					if ccf.InUse {
+						// CF is actively scored by user — verify score matches TRaSH
+						ccf.ScoreMatch = ccf.CurrentScore == desiredScore
+						cg.Present++
+						if ccf.ScoreMatch {
+							cg.Matching++
+						} else {
+							cg.WrongScore++
+						}
+					} else {
+						// CF exists with score 0 — user hasn't actively chosen it
+						ccf.ScoreMatch = true // not an error
+					}
+				} else {
+					// CF doesn't exist in Arr
+					if group.DefaultEnabled && cf.Required {
+						// Required CF in default group is genuinely missing
+						cg.Missing++
+					}
+					// Optional/non-default CFs not in Arr = fine, user didn't want them
+				}
+				cg.CFs = append(cg.CFs, ccf)
+				// Populate cfStates for syncSingleCF backward compat
+				comp.CFStates[cf.TrashID] = ArrCFState{
+					Exists:       ccf.Exists,
+					ArrID:        ccf.ArrID,
+					TrashName:    cf.Name,
+					Description:  cf.Description,
+					CurrentScore: ccf.CurrentScore,
+					DesiredScore: desiredScore,
+					ScoreMatch:   ccf.ScoreMatch,
+				}
+			}
+			comp.Groups = append(comp.Groups, cg)
+			// Global summary: always count present/matching/wrong from groups
+			// Missing only from default+required
+			comp.Summary.Matching += cg.Matching
+			comp.Summary.WrongScore += cg.WrongScore
+			comp.Summary.Missing += cg.Missing
 		}
 	}
 
-	// Find extra CFs: in the Arr profile with non-zero score, not in TRaSH profile
-	// Also track which Arr CFs are accounted for by optional groups
+	// LEGACY: keep OptionalCategories populated for old frontend code
 	optionalArrIDs := make(map[int]bool)
-
-	// Compare optional CF groups, categorized by [Prefix]
 	requiredGroups, optionalGroups := ProfileCFGroups(ad, trashProfileID)
 	catMap := make(map[string][]OptionalGroupState)
 	for _, groups := range [][]ProfileCFGroup{requiredGroups, optionalGroups} {
@@ -1612,7 +1729,6 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 			catMap[category] = append(catMap[category], gs)
 		}
 	}
-	// Sort categories by display order
 	var catNames []string
 	for cat := range catMap {
 		catNames = append(catNames, cat)
@@ -1627,15 +1743,16 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 		})
 	}
 
+	// Extra CFs: in Arr profile with non-zero score, not tracked by any TRaSH CF
 	for _, fi := range arrProfile.FormatItems {
 		if fi.Score == 0 {
 			continue
 		}
-		if _, inTrash := arrIDToTrashID[fi.Format]; inTrash {
+		if trackedArrIDs[fi.Format] {
 			continue
 		}
 		if optionalArrIDs[fi.Format] {
-			continue // accounted for by optional group
+			continue // accounted for by legacy optional group
 		}
 		comp.ExtraCFs = append(comp.ExtraCFs, fi)
 		comp.Summary.Extra++

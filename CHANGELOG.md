@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.4.0-beta
+
+### Features
+- **Profiles tab reorganized** — Three sub-tabs: TRaSH Sync, Profile Builder, and Compare
+- **Compare Profiles redesigned** — Uses TRaSH CF groups with per-group status badges, only flags actual errors (wrong scores on active CFs, missing required CFs)
+- **Compare: auto-sync from Compare** — Sync fixes and enable auto-sync directly from comparison results
+- **Auto-select instance** — When only one instance per type exists, automatically selected across all functions
+- **Auto-sync rule auto-update** — Existing auto-sync rules automatically updated with new selections when you re-sync
+
+### Improvements
+- **Compare: smart verification** — Optional CFs with score 0 are not flagged as errors, exclusive groups (Golden Rule, SDR) verified correctly
+- **Compare: "Extra in Arr"** — CFs not in the TRaSH profile shown with removal option
+- **Sync Rules & History** — Visible in TRaSH Sync tab with auto-sync badges and re-sync/remove buttons
+- **Profile Builder** — Moved to dedicated tab with description and prominent Create/Import buttons
+- **Consistent status display** — All instance selectors show Connected/Failed/Not tested uniformly
+- **Descriptions** — Added tab descriptions for TRaSH Sync, Profile Builder, and Compare
+
+### Bug fixes
+- **Compare: HTML rendering** — TRaSH descriptions now render HTML correctly (was showing raw tags)
+- **Compare: category colors** — Group cards show colored left borders matching TRaSH categories
+- **Maintenance cleaned up** — Only Cleanup and Backup/Restore remain (Compare moved to Profiles)
+
+## v1.3.0-beta
+
+### Features
+- **TRaSH JSON export sort order** — Matches TRaSH convention (grouped CFs by score, Tiers, Repack, Unwanted, Resolution)
+- **Case-insensitive CF matching** — Handles name mismatches like HULU/Hulu across sync, compare, and single-CF operations
+- **Builder: formatItems group display** — CFs in formatItems shown in their TRaSH group with Fmt state (e.g. Audio in SQP-3 Audio)
+- **Variant dropdowns with templates** — Golden Rule and Misc variants auto-detected and visible when loading templates
+
+### Bug fixes
+- **syncSingleCF updates CF specs** — Not just score, also corrects name and specifications
+- **pdHasOverrides tautology** — Copy-paste error causing override banner to always show
+- **SelectedCFs deep copy** — Fixed concurrency bug in config store
+- **Resync restore** — Correctly sets deselected CFs to false (not just selected to true)
+- **Resync loads sync history** — Synced Profiles section now appears immediately in Maintenance
+
 ## v1.2.0-beta
 
 ### Features

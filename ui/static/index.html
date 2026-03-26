@@ -266,6 +266,10 @@
   .subtab { padding: 10px 16px; font-size: 13px; color: #8b949e; cursor: pointer; border-bottom: 2px solid transparent; user-select: none; }
   .subtab:hover { color: #e1e4e8; }
   .subtab.active { color: #e1e4e8; border-bottom-color: #58a6ff; }
+  .profile-tabs { display: flex; gap: 0; padding: 0 24px; background: #0d1117; border-bottom: 1px solid #21262d; }
+  .profile-tab { padding: 8px 14px; font-size: 12px; color: #6e7681; cursor: pointer; border-bottom: 2px solid transparent; user-select: none; font-weight: 500; }
+  .profile-tab:hover { color: #8b949e; }
+  .profile-tab.active { color: #e1e4e8; border-bottom-color: #58a6ff; }
 
   /* Section description */
   .section-desc { font-size: 12px; color: #8b949e; padding: 4px 20px 8px; line-height: 1.4; }
@@ -289,7 +293,7 @@
   .compare-stat.missing { background: #3d1f1f; color: #f85149; }
   .compare-stat.wrong { background: #3d2e0a; color: #d29922; }
   .compare-stat.match { background: #1a3a1a; color: #3fb950; }
-  .compare-stat.extra { background: #1f2937; color: #8b949e; }
+  .compare-stat.extra { background: #0d2847; color: #58a6ff; }
   .compare-cf-row { display: flex; align-items: center; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #161b22; }
   .compare-cf-name { flex: 1; color: #c9d1d9; min-width: 0; }
   .compare-cf-scores { display: flex; gap: 4px; align-items: center; width: 150px; flex-shrink: 0; justify-content: flex-end; font-variant-numeric: tabular-nums; }
@@ -484,19 +488,57 @@
       </div>
 
       <!-- ===== Profiles sub-tab ===== -->
-      <div class="page" x-show="getSubTab(tab.type) === 'profiles'">
-        <div style="padding:12px 20px;font-size:12px;color:#8b949e;border-bottom:1px solid #21262d;line-height:1.5;display:flex;align-items:flex-start;gap:16px">
-          <div style="flex:1">
-            TRaSH Guides quality profiles — pre-configured sets of custom formats, scores, quality groups, and settings.
-            Click a profile to see its contents, then use <strong style="color:#c9d1d9">Sync</strong> to deploy it to your instance.
-            Creating a profile automatically merges qualities, sets cutoff, scores, and all settings — no manual setup needed in <span x-text="tab.label"></span>.
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0;padding-top:2px">
-            <button class="btn btn-sm" style="background:#1f6feb;color:#fff" title="Create a new custom profile from scratch or from a template" @click="openProfileBuilder(tab.type)">Create</button>
-            <button class="btn btn-sm" style="background:#238636;color:#fff" @click="showImportModal = tab.type">Import</button>
-          </div>
+      <div x-show="getSubTab(tab.type) === 'profiles'">
+        <!-- Profile-level tabs -->
+        <div class="profile-tabs">
+          <div class="profile-tab" :class="{ active: getProfileTab(tab.type) === 'trash-sync' }" @click="setProfileTab(tab.type, 'trash-sync')">TRaSH Sync</div>
+          <div class="profile-tab" :class="{ active: getProfileTab(tab.type) === 'builder' }" @click="setProfileTab(tab.type, 'builder')">Profile Builder</div>
+          <div class="profile-tab" :class="{ active: getProfileTab(tab.type) === 'compare' }" @click="setProfileTab(tab.type, 'compare')">Compare</div>
         </div>
-        <template x-if="trashProfiles[tab.type] && trashProfiles[tab.type].length > 0">
+
+        <!-- ===== TRaSH Sync tab ===== -->
+        <div class="page" x-show="getProfileTab(tab.type) === 'trash-sync'">
+          <div style="font-size:12px;color:#8b949e;margin-bottom:16px;line-height:1.5">
+            TRaSH Guides quality profiles — click a profile to view its contents, customize groups, and sync to your <span x-text="tab.label"></span> instance. Enable auto-sync to keep profiles updated automatically when TRaSH Guides changes.
+          </div>
+          <!-- Collapsible Sync Rules & History (always visible) -->
+            <div class="card" style="margin-bottom:20px">
+              <div style="display:flex;align-items:center;padding:12px 16px;cursor:pointer;gap:8px;border-left:3px solid #e1e4e8" @click="syncRulesExpanded = { ...syncRulesExpanded, [tab.type]: !syncRulesExpanded[tab.type] }">
+                <span class="profile-group-chevron" :class="{ open: syncRulesExpanded[tab.type] }">&#9654;</span>
+                <span style="font-size:13px;font-weight:500">Sync Rules & History</span>
+                <span style="font-size:11px;color:#8b949e;margin-left:auto"
+                      x-text="(() => { let count = 0; for (const inst of instancesOfType(tab.type)) count += (syncHistory[inst.id]?.length || 0); return count > 0 ? count + ' synced profile' + (count !== 1 ? 's' : '') : 'No syncs yet'; })()"></span>
+              </div>
+              <div x-show="syncRulesExpanded[tab.type]" style="border-top:1px solid #21262d">
+                <template x-for="inst in instancesOfType(tab.type)" :key="'sr-'+inst.id">
+                  <template x-if="syncHistory[inst.id] && syncHistory[inst.id].length > 0">
+                    <div>
+                      <div style="padding:8px 16px;font-size:11px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:#0d1117;border-bottom:1px solid #21262d" x-text="inst.name"></div>
+                      <template x-for="sh in syncHistory[inst.id]" :key="sh.profileTrashId">
+                        <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
+                          <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
+                          <template x-if="autoSyncRules.some(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId && r.enabled)">
+                            <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#0d2f1a;color:#3fb950;border:1px solid #238636">auto-sync</span>
+                          </template>
+                          <span style="color:#484f58">&rarr;</span>
+                          <span style="color:#e1e4e8" x-text="sh.arrProfileName"></span>
+                          <span style="color:#8b949e;margin-left:auto" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
+                          <span style="color:#8b949e" x-text="timeAgo(sh.lastSync)"></span>
+                          <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)">Re-sync</button>
+                          <button class="btn btn-sm" style="color:#f85149;border-color:#f85149" @click.stop="removeSyncHistory(inst.id, sh.profileTrashId)">Remove</button>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </template>
+                <template x-if="!instancesOfType(tab.type).some(inst => syncHistory[inst.id]?.length > 0)">
+                  <div style="padding:16px;text-align:center;color:#484f58;font-size:12px">No sync history yet. Sync a profile from the list below to get started.</div>
+                </template>
+              </div>
+            </div>
+
+          <!-- TRaSH Profiles list -->
+          <template x-if="trashProfiles[tab.type] && trashProfiles[tab.type].length > 0">
           <div>
             <template x-for="group in groupedProfiles(tab.type)" :key="group.name">
               <div class="card" :class="'grp-' + group.name.toLowerCase().replace(/[^a-z]/g, '')">
@@ -531,18 +573,32 @@
           </div>
         </template>
 
-        <!-- Imported Profiles -->
-        <div class="card grp-imported" style="margin-top:12px">
-          <div class="profile-group-header" @click="toggleProfileGroup(tab.type, '__imported__')">
-            <span class="profile-group-chevron" :class="{ open: isProfileGroupExpanded(tab.type, '__imported__') }">&#9654;</span>
-            <span>Imported / Custom Profiles</span>
-            <span class="profile-group-count" x-text="(importedProfiles[tab.type]?.length || 0) + ((importedProfiles[tab.type]?.length || 0) === 1 ? ' profile' : ' profiles')"></span>
+        </div>
+        <!-- end TRaSH Sync tab -->
+
+        <!-- ===== Profile Builder tab ===== -->
+        <div class="page" x-show="getProfileTab(tab.type) === 'builder'">
+          <div style="margin-bottom:16px">
+            <div style="font-size:18px;font-weight:600">Profile Builder</div>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5">Create custom profiles from TRaSH templates or from scratch, import from Recyclarr or TRaSH JSON, and sync them to your <span x-text="tab.label"></span> instance.</div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-sm" style="background:#1f6feb;color:#fff" @click="openProfileBuilder(tab.type)">Create New Profile</button>
+              <button class="btn btn-sm" style="background:#238636;color:#fff" @click="showImportModal = tab.type">Import</button>
+            </div>
           </div>
-          <div x-show="isProfileGroupExpanded(tab.type, '__imported__')">
+
+          <!-- Your Profiles -->
+          <div class="card">
+            <div style="padding:10px 16px;font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;border-bottom:1px solid #21262d">
+              Your Profiles
+              <span style="background:#21262d;color:#8b949e;padding:0 6px;border-radius:8px;margin-left:6px;text-transform:none;letter-spacing:0" x-text="(importedProfiles[tab.type]?.length || 0)"></span>
+            </div>
             <template x-if="!importedProfiles[tab.type] || importedProfiles[tab.type].length === 0">
-              <div style="padding:12px 16px;color:#484f58;font-size:12px">No imported profiles. Import a Recyclarr YAML to add custom profiles.</div>
+              <div style="padding:24px;text-align:center;color:#484f58;font-size:13px">
+                No profiles yet. Create a new profile or import from Recyclarr YAML / TRaSH JSON.
+              </div>
             </template>
-            <div x-show="(importedProfiles[tab.type]?.length || 0) > 1" style="padding:4px 16px 8px;text-align:right">
+            <div x-show="(importedProfiles[tab.type]?.length || 0) > 1" style="padding:4px 16px 0;text-align:right">
               <button class="btn btn-sm btn-danger" style="font-size:10px;padding:2px 8px"
                       @click="confirmModal = { show: true, title: 'Delete All Profiles', message: 'Delete all ' + (importedProfiles[tab.type]?.length || 0) + ' imported/custom profiles for ' + tab.label + '?\n\nThis cannot be undone.', onConfirm: () => deleteAllImportedProfiles(tab.type) }">Delete All</button>
             </div>
@@ -565,6 +621,374 @@
             </template>
           </div>
         </div>
+        <!-- end Profile Builder tab -->
+
+        <!-- ===== Compare tab ===== -->
+        <div class="page" x-show="getProfileTab(tab.type) === 'compare'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Compare Profiles</div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:16px;line-height:1.5">Compare your <span x-text="tab.label"></span> profiles against TRaSH Guides profiles. See what's matching, what has wrong scores, and what's missing — then sync individual fixes or all at once.</div>
+
+          <!-- Instance selector for Compare -->
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap">
+              <span style="font-size:13px;color:#8b949e">Instance:</span>
+              <select class="input" style="width:250px"
+                      :value="getCompareInstanceId(tab.type)"
+                      @change="setCompareInstanceId(tab.type, $event.target.value); $nextTick(() => { const ci = getCompareInstance(tab.type); if (ci) { testInstance(ci); loadInstanceProfiles(ci); loadSyncHistory(ci.id); } })">
+                <option value="">Select instance...</option>
+                <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
+                  <option :value="inst.id" x-text="inst.name"></option>
+                </template>
+              </select>
+              <template x-if="getCompareInstance(tab.type) && getCompareInstance(tab.type)?.type === tab.type && instanceStatus[getCompareInstance(tab.type)?.id] === 'connected'">
+                <span style="font-size:11px;color:#3fb950">Connected</span>
+              </template>
+              <template x-if="getCompareInstance(tab.type) && getCompareInstance(tab.type)?.type === tab.type && instanceStatus[getCompareInstance(tab.type)?.id] === 'failed'">
+                <span style="font-size:11px;color:#f85149">Connection failed</span>
+              </template>
+              <template x-if="getCompareInstance(tab.type) && getCompareInstance(tab.type)?.type === tab.type && !instanceStatus[getCompareInstance(tab.type)?.id]">
+                <span style="font-size:11px;color:#d29922">Not tested</span>
+              </template>
+            </div>
+          </div>
+
+          <!-- Compare content -->
+          <template x-if="!getCompareInstance(tab.type) || getCompareInstance(tab.type)?.type !== tab.type">
+            <div style="padding:24px;text-align:center;color:#484f58;font-size:13px">Select an instance to compare profiles</div>
+          </template>
+          <template x-if="getCompareInstance(tab.type) && getCompareInstance(tab.type)?.type === tab.type">
+                  <!-- Instance Profiles (from Arr API) -->
+                  <div class="inst-profiles-section" style="padding:16px 20px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                      <div style="font-size:13px;font-weight:600;color:#e1e4e8">Profiles</div>
+                      <button class="btn btn-sm" @click="loadInstanceProfiles(getCompareInstance(tab.type))"
+                              :disabled="instProfilesLoading[getCompareInstance(tab.type)?.id]">
+                        <template x-if="instProfilesLoading[getCompareInstance(tab.type)?.id]"><span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span></template>
+                        <template x-if="!instProfilesLoading[getCompareInstance(tab.type)?.id]"><span x-text="instProfiles[getCompareInstance(tab.type)?.id] ? 'Refresh' : 'Load Profiles'"></span></template>
+                      </button>
+                    </div>
+                    <template x-if="instProfiles[getCompareInstance(tab.type)?.id]">
+                      <div style="border:1px solid #21262d;border-radius:6px;overflow:hidden">
+                        <template x-for="ap in instProfiles[getCompareInstance(tab.type)?.id]" :key="ap.id">
+                          <div>
+                            <div class="inst-profile-row" :class="{ active: instCompareProfile[getCompareInstance(tab.type)?.id] === ap.id }"
+                                 @click="selectInstProfile(getCompareInstance(tab.type), ap)">
+                              <div>
+                                <span style="font-size:13px;color:#e1e4e8" x-text="ap.name"></span>
+                                <span style="font-size:11px;color:#484f58;margin-left:8px"
+                                      x-text="ap.formatItems.filter(fi => fi.score !== 0).length + ' scored CFs'"></span>
+                              </div>
+                              <span class="detail-section-chevron" style="font-size:10px"
+                                    :class="{ open: instCompareProfile[getCompareInstance(tab.type)?.id] === ap.id }">&#9654;</span>
+                            </div>
+                            <!-- Compare panel -->
+                            <template x-if="instCompareProfile[getCompareInstance(tab.type)?.id] === ap.id">
+                              <div class="compare-panel">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                                  <label style="font-size:12px;color:#8b949e;white-space:nowrap">Compare against TRaSH profile:</label>
+                                  <select class="input" style="width:280px;font-size:12px"
+                                          :value="instCompareTrashId[getCompareInstance(tab.type)?.id] || ''"
+                                          @change="runProfileCompare(getCompareInstance(tab.type), ap.id, $event.target.value)">
+                                    <option value="">— Select —</option>
+                                    <template x-for="gn in getTrashProfileGroups(getCompareInstance(tab.type)?.type)" :key="gn">
+                                      <optgroup :label="gn">
+                                        <template x-for="tp in getTrashProfilesByGroup(getCompareInstance(tab.type)?.type, gn)" :key="tp.trashId">
+                                          <option :value="tp.trashId" x-text="tp.name"></option>
+                                        </template>
+                                      </optgroup>
+                                    </template>
+                                  </select>
+                                  <template x-if="instCompareLoading[getCompareInstance(tab.type)?.id]">
+                                    <span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
+                                  </template>
+                                </div>
+                                <!-- Compare results -->
+                                <template x-if="instCompareResult[getCompareInstance(tab.type)?.id]">
+                                  <div>
+                                    <template x-if="instCompareResult[getCompareInstance(tab.type)?.id].error">
+                                      <div style="color:#f85149;font-size:12px" x-text="instCompareResult[getCompareInstance(tab.type)?.id].error"></div>
+                                    </template>
+                                    <template x-if="!instCompareResult[getCompareInstance(tab.type)?.id].error">
+                                      <div x-data="{ get cr() { return instCompareResult[getCompareInstance(tab.type)?.id] }, get iid() { return getCompareInstance(tab.type)?.id }, get inst() { return getCompareInstance(tab.type) } }">
+
+                                        <!-- Summary banner -->
+                                        <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px 16px;margin-bottom:12px">
+                                          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                                            <strong style="color:#e1e4e8;font-size:13px" x-text="ap.name"></strong>
+                                            <span style="color:#484f58;font-size:12px">vs</span>
+                                            <strong style="color:#e1e4e8;font-size:13px" x-text="cr.trashProfileName"></strong>
+                                          </div>
+                                          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                                            <span class="compare-stat match" x-text="cr.summary.matching + ' matching'"></span>
+                                            <span class="compare-stat wrong" x-show="cr.summary.wrongScore > 0"
+                                                  x-text="cr.summary.wrongScore + ' wrong score'"></span>
+                                            <span class="compare-stat missing" x-show="cr.summary.missing > 0"
+                                                  x-text="cr.summary.missing + ' missing'"></span>
+                                            <span class="compare-stat extra" x-show="cr.summary.extra > 0"
+                                                  x-text="cr.summary.extra + ' extra'"></span>
+                                            <template x-if="cr.summary.wrongScore > 0 || cr.summary.missing > 0">
+                                              <button class="btn btn-sm btn-primary" style="margin-left:auto;font-size:10px;padding:3px 10px"
+                                                      @click="toggleAllCompareSection(iid, 'all'); syncFromCompare(inst, cr)">Sync All Fixes</button>
+                                            </template>
+                                            <span x-show="cr.summary.missing === 0 && cr.summary.wrongScore === 0 && cr.summary.extra === 0"
+                                                  style="color:#3fb950;font-size:12px;margin-left:auto">&#10003; Profile fully in sync</span>
+                                          </div>
+                                        </div>
+
+                                        <!-- FormatItems section -->
+                                        <template x-if="(cr.formatItems || []).length > 0">
+                                          <div style="margin-bottom:12px">
+                                            <div class="compare-section-header">
+                                              <span class="compare-section-title">Custom Formats</span>
+                                              <span style="font-size:10px;color:#484f58" x-text="cr.formatItems.length + ' total'"></span>
+                                              <span class="compare-section-toggle"
+                                                    x-show="cr.formatItems.some(fi => !fi.exists || !fi.scoreMatch)"
+                                                    @click="toggleAllCompareSection(iid, 'formatItems')">toggle all</span>
+                                            </div>
+                                            <div :style="'padding:8px 16px;column-count:' + (cr.formatItems.length > 20 ? 3 : cr.formatItems.length > 10 ? 2 : 1) + ';column-gap:32px'">
+                                              <template x-for="fi in cr.formatItems" :key="fi.trashId">
+                                                <div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px;break-inside:avoid">
+                                                  <!-- Status icon -->
+                                                  <template x-if="fi.exists && fi.scoreMatch">
+                                                    <span style="color:#3fb950;font-size:11px;width:14px;text-align:center;flex-shrink:0">&#10003;</span>
+                                                  </template>
+                                                  <template x-if="fi.exists && !fi.scoreMatch">
+                                                    <span style="color:#d29922;font-size:11px;width:14px;text-align:center;flex-shrink:0">&#9888;</span>
+                                                  </template>
+                                                  <template x-if="!fi.exists">
+                                                    <span style="color:#f85149;font-size:11px;width:14px;text-align:center;flex-shrink:0">&#10005;</span>
+                                                  </template>
+                                                  <!-- Checkbox for missing/wrong -->
+                                                  <template x-if="!fi.exists || !fi.scoreMatch">
+                                                    <label style="display:flex;align-items:center;flex-shrink:0;margin:0">
+                                                      <input type="checkbox" style="margin:0"
+                                                             :checked="(instCompareSelected[iid] || {})[fi.trashId]"
+                                                             @change="toggleCompareSelect(iid, fi.trashId, $event.target.checked)">
+                                                    </label>
+                                                  </template>
+                                                  <!-- Name -->
+                                                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                                                        :style="fi.exists && fi.scoreMatch ? 'color:#8b949e' : fi.exists ? 'color:#d29922' : 'color:#f85149'"
+                                                        x-text="fi.name"></span>
+                                                  <!-- Score info -->
+                                                  <template x-if="fi.exists && !fi.scoreMatch">
+                                                    <span style="font-size:10px;white-space:nowrap;flex-shrink:0">
+                                                      <span style="color:#8b949e" x-text="(fi.currentScore > 0 ? '+' : '') + fi.currentScore"></span>
+                                                      <span style="color:#484f58">&rarr;</span>
+                                                      <span :style="fi.desiredScore > 0 ? 'color:#3fb950' : fi.desiredScore < 0 ? 'color:#f85149' : 'color:#8b949e'"
+                                                            x-text="(fi.desiredScore > 0 ? '+' : '') + fi.desiredScore"></span>
+                                                    </span>
+                                                  </template>
+                                                  <template x-if="!fi.exists">
+                                                    <span style="font-size:10px;color:#484f58;white-space:nowrap;flex-shrink:0"
+                                                          x-text="'needs ' + (fi.desiredScore > 0 ? '+' : '') + fi.desiredScore"></span>
+                                                  </template>
+                                                  <!-- Individual sync button for missing/wrong -->
+                                                  <template x-if="!fi.exists || !fi.scoreMatch">
+                                                    <button class="btn btn-sm btn-blue" style="padding:1px 5px;font-size:9px;white-space:nowrap;flex-shrink:0"
+                                                            @click.stop="syncSingleCF(inst, fi.trashId, fi.desiredScore, cr.arrProfileId)">Sync</button>
+                                                  </template>
+                                                </div>
+                                              </template>
+                                            </div>
+                                          </div>
+                                        </template>
+
+                                        <!-- Groups section -->
+                                        <template x-if="(cr.groups || []).length > 0">
+                                          <div style="margin-bottom:12px">
+                                            <div class="compare-section-header">
+                                              <span class="compare-section-title">CF Groups</span>
+                                              <span style="font-size:10px;color:#484f58" x-text="cr.groups.length + ' groups'"></span>
+                                            </div>
+                                            <template x-for="group in cr.groups" :key="group.name">
+                                              <div class="card" :class="getCategoryClass(group.category)" style="margin-bottom:6px;overflow:hidden">
+                                                <!-- Group header -->
+                                                <div class="detail-section-header" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer"
+                                                     @click="groupExpanded = { ...groupExpanded, ['compare/' + group.name]: !groupExpanded['compare/' + group.name] }">
+                                                  <!-- Status icon: ✅ all ok, ⚠️ has issues, ○ nothing in use, ❌ required missing -->
+                                                  <span style="font-size:11px;width:14px;text-align:center;flex-shrink:0"
+                                                        :style="group.wrongScore > 0 || group.missing > 0 ? 'color:#d29922' : group.present > 0 && group.matching === group.present ? 'color:#3fb950' : 'color:#484f58'"
+                                                        x-text="group.wrongScore > 0 || group.missing > 0 ? '&#9888;' : group.present > 0 && group.matching === group.present ? '&#10003;' : '&#9675;'"></span>
+                                                  <!-- Group name -->
+                                                  <span style="font-size:12px;font-weight:600;flex:1"
+                                                        :style="group.present === 0 && !group.defaultEnabled ? 'color:#6e7681' : 'color:#c9d1d9'"
+                                                        x-text="group.name"></span>
+                                                  <!-- Badges -->
+                                                  <span x-show="group.exclusive" style="font-size:9px;color:#d29922;background:#3d2e0a;padding:1px 4px;border-radius:2px">pick one</span>
+                                                  <span x-show="group.defaultEnabled" style="font-size:9px;color:#3fb950;background:#0d2f1a;padding:1px 5px;border-radius:2px">default</span>
+                                                  <!-- Status summary -->
+                                                  <span style="display:flex;gap:4px;align-items:center;font-size:10px">
+                                                    <template x-if="group.present > 0">
+                                                      <span style="color:#3fb950;background:#1a3a1a;padding:1px 5px;border-radius:2px"
+                                                            x-text="group.present + '/' + group.total + ' in use'"></span>
+                                                    </template>
+                                                    <template x-if="group.present === 0">
+                                                      <span style="color:#484f58;background:#21262d;padding:1px 5px;border-radius:2px">not in use</span>
+                                                    </template>
+                                                    <span x-show="group.wrongScore > 0" style="color:#d29922;background:#3d2e0a;padding:1px 5px;border-radius:2px"
+                                                          x-text="group.wrongScore + ' wrong'"></span>
+                                                    <span x-show="group.missing > 0" style="color:#f85149;background:#3d1f1f;padding:1px 5px;border-radius:2px"
+                                                          x-text="group.missing + ' missing'"></span>
+                                                  </span>
+                                                  <!-- Chevron -->
+                                                  <span style="color:#484f58;font-size:10px;transition:transform 0.15s"
+                                                        :style="groupExpanded['compare/' + group.name] ? 'transform:rotate(90deg)' : ''">&#9654;</span>
+                                                </div>
+                                                <!-- Group expanded content -->
+                                                <div x-show="groupExpanded['compare/' + group.name]" style="padding:4px 0">
+                                                  <div x-show="group.trashDescription" class="group-desc-html" style="font-size:11px;color:#8b949e;padding:6px 12px 4px;line-height:1.5;font-style:italic" x-html="group.trashDescription"></div>
+                                                  <div x-show="group.exclusive && group.cfs.filter(c => c.exists && c.currentScore !== 0).length > 1"
+                                                       style="font-size:10px;color:#d29922;background:#3d2e0a;padding:3px 12px;border-radius:3px;margin:2px 12px 4px">
+                                                    &#9888; Multiple CFs scored — TRaSH recommends only one with a non-zero score
+                                                  </div>
+                                                  <template x-for="cf in group.cfs" :key="cf.trashId">
+                                                    <div class="compare-cf-row" style="padding:4px 12px">
+                                                      <!-- Status: ✅ in use + correct, ⚠️ in use + wrong, ❌ required missing, ○ not in use -->
+                                                      <template x-if="cf.exists && cf.inUse && cf.scoreMatch">
+                                                        <span style="width:18px;display:inline-block;text-align:center;color:#3fb950;font-size:12px;flex-shrink:0">&#10003;</span>
+                                                      </template>
+                                                      <template x-if="cf.exists && cf.inUse && !cf.scoreMatch">
+                                                        <label class="compare-cf-check">
+                                                          <input type="checkbox"
+                                                                 :checked="(instCompareSelected[iid] || {})[cf.trashId]"
+                                                                 @change="toggleCompareSelect(iid, cf.trashId, $event.target.checked)">
+                                                        </label>
+                                                      </template>
+                                                      <template x-if="cf.exists && !cf.inUse">
+                                                        <span style="width:18px;display:inline-block;text-align:center;color:#484f58;font-size:12px;flex-shrink:0">&#9675;</span>
+                                                      </template>
+                                                      <template x-if="!cf.exists && group.defaultEnabled && cf.required">
+                                                        <label class="compare-cf-check">
+                                                          <input type="checkbox"
+                                                                 :checked="(instCompareSelected[iid] || {})[cf.trashId]"
+                                                                 @change="toggleCompareSelect(iid, cf.trashId, $event.target.checked)">
+                                                        </label>
+                                                      </template>
+                                                      <template x-if="!cf.exists && !(group.defaultEnabled && cf.required)">
+                                                        <span style="width:18px;display:inline-block;text-align:center;color:#484f58;font-size:10px;flex-shrink:0">—</span>
+                                                      </template>
+                                                      <!-- CF name -->
+                                                      <div class="compare-cf-name"
+                                                           :style="!cf.exists && (instCompareSelected[iid] || {})[cf.trashId] ? 'color:#3fb950' : !cf.exists ? 'opacity:0.5' : ''">
+                                                        <span x-text="cf.name"></span>
+                                                        <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">&#9432;</span>
+                                                        <template x-if="cf.required">
+                                                          <span style="font-size:9px;margin-left:3px" title="Required by TRaSH">&#128274;</span>
+                                                        </template>
+                                                        <template x-if="cf.default">
+                                                          <span class="compare-opt-rec">rec</span>
+                                                        </template>
+                                                        <template x-if="!cf.exists && (instCompareSelected[iid] || {})[cf.trashId]">
+                                                          <span class="compare-action-label add">will be added</span>
+                                                        </template>
+                                                        <template x-if="cf.exists && !cf.scoreMatch && (instCompareSelected[iid] || {})[cf.trashId]">
+                                                          <span class="compare-action-label fix">will be updated</span>
+                                                        </template>
+                                                      </div>
+                                                      <!-- Scores -->
+                                                      <div class="compare-cf-scores">
+                                                        <template x-if="cf.exists && cf.scoreMatch">
+                                                          <span class="positive" x-text="(cf.desiredScore > 0 ? '+' : '') + cf.desiredScore"></span>
+                                                        </template>
+                                                        <template x-if="cf.exists && !cf.scoreMatch">
+                                                          <span>
+                                                            <span class="old" x-text="(cf.currentScore > 0 ? '+' : '') + cf.currentScore"></span>
+                                                            <span class="arrow">&rarr;</span>
+                                                            <span :class="cf.desiredScore > 0 ? 'positive' : cf.desiredScore < 0 ? 'negative' : 'zero'"
+                                                                  x-text="(cf.desiredScore > 0 ? '+' : '') + cf.desiredScore"></span>
+                                                          </span>
+                                                        </template>
+                                                        <template x-if="!cf.exists">
+                                                          <span style="color:#484f58" x-text="(cf.desiredScore > 0 ? '+' : '') + cf.desiredScore"></span>
+                                                        </template>
+                                                      </div>
+                                                      <!-- Actions: only show Sync for actual errors -->
+                                                      <div class="compare-cf-actions">
+                                                        <template x-if="(cf.inUse && !cf.scoreMatch) || (!cf.exists && group.defaultEnabled && cf.required)">
+                                                          <button class="btn btn-sm btn-blue" style="padding:1px 6px;font-size:9px;white-space:nowrap"
+                                                                  @click.stop="syncSingleCF(inst, cf.trashId, cf.desiredScore, cr.arrProfileId)">Sync</button>
+                                                        </template>
+                                                      </div>
+                                                    </div>
+                                                  </template>
+                                                </div>
+                                              </div>
+                                            </template>
+                                          </div>
+                                        </template>
+
+                                        <!-- Extra CFs (in Arr but not in TRaSH profile) -->
+                                        <template x-if="cr.summary.extra > 0">
+                                          <div style="margin-bottom:12px">
+                                            <div class="compare-section-header">
+                                              <span class="compare-section-title" style="color:#58a6ff">Extra in Arr</span>
+                                              <span style="font-size:10px;color:#484f58" x-text="(cr.extraCFs || []).length + ' CFs'"></span>
+                                              <span class="compare-section-toggle" @click="toggleAllCompareSection(iid, 'extra')">select all</span>
+                                            </div>
+                                            <div style="font-size:10px;color:#484f58;margin-bottom:6px;padding:0 2px">
+                                              Scored in Arr but not in the TRaSH profile. Select to remove.
+                                            </div>
+                                            <template x-for="ecf in (cr.extraCFs || [])" :key="ecf.format">
+                                              <div class="compare-cf-row">
+                                                <label class="compare-cf-check">
+                                                  <input type="checkbox"
+                                                         :checked="(instRemoveSelected[iid] || {})[ecf.format]"
+                                                         @change="toggleRemoveSelect(iid, ecf.format, $event.target.checked)">
+                                                </label>
+                                                <div class="compare-cf-name">
+                                                  <span x-text="ecf.name"
+                                                        :style="(instRemoveSelected[iid] || {})[ecf.format] ? 'color:#f47067;text-decoration:line-through' : 'color:#8b949e'"></span>
+                                                  <template x-if="(instRemoveSelected[iid] || {})[ecf.format]">
+                                                    <span class="compare-action-label remove">will be removed</span>
+                                                  </template>
+                                                </div>
+                                                <div class="compare-cf-scores">
+                                                  <span style="color:#8b949e" x-text="'score: ' + ecf.score"></span>
+                                                </div>
+                                                <div class="compare-cf-actions">
+                                                  <template x-if="(instRemoveSelected[iid] || {})[ecf.format]">
+                                                    <button class="btn btn-sm" style="padding:1px 5px;font-size:9px;white-space:nowrap;background:#3d1f1f;color:#f47067;border-color:#f4706744"
+                                                            @click.stop="removeSingleCF(inst, ecf.format, cr.arrProfileId)">Remove</button>
+                                                  </template>
+                                                </div>
+                                              </div>
+                                            </template>
+                                          </div>
+                                        </template>
+
+                                        <!-- Action buttons -->
+                                        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                                          <button class="btn btn-sm btn-primary"
+                                                  x-show="getCompareSelectedCount(iid) > 0"
+                                                  @click="syncFromCompare(inst, cr)">
+                                            <span x-text="'Sync ' + getCompareSelectedCount(iid) + ' selected'"></span>
+                                          </button>
+                                          <button class="btn btn-sm"
+                                                  style="background:#3d1f1f;color:#f47067;border-color:#f4706744"
+                                                  x-show="getRemoveSelectedCount(iid) > 0"
+                                                  @click="removeFromProfile(inst, cr)">
+                                            <span x-text="'Remove ' + getRemoveSelectedCount(iid) + ' from profile'"></span>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </template>
+                                  </div>
+                                </template>
+                              </div>
+                            </template>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="!instProfiles[getCompareInstance(tab.type)?.id]">
+                      <div style="font-size:12px;color:#484f58;padding:4px 0">Click "Load Profiles" to fetch profiles from this instance</div>
+                    </template>
+                  </div>
+          </template>
+        </div>
+        <!-- end Compare tab -->
+
       </div>
 
       <!-- ===== Custom Formats sub-tab ===== -->
@@ -685,11 +1109,10 @@
               <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #21262d">
                 <span style="font-size:11px;color:#484f58">Instance:</span>
                 <select class="input" style="width:200px;font-size:12px;padding:4px 8px"
-                        :value="qsInstanceId[tab.type] || ''"
                         @change="qsInstanceId = { ...qsInstanceId, [tab.type]: $event.target.value }; if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); loadInstanceQS(tab.type, $event.target.value); }">
-                  <option value="">TRaSH only</option>
+                  <option value="" :selected="!qsInstanceId[tab.type]">TRaSH only</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
-                    <option :value="inst.id" x-text="inst.name"></option>
+                    <option :value="inst.id" x-text="inst.name" :selected="qsInstanceId[tab.type] === inst.id"></option>
                   </template>
                 </select>
                 <template x-if="qsInstanceId[tab.type] && instanceStatus[qsInstanceId[tab.type]] === 'connected'">
@@ -882,11 +1305,10 @@
               <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #21262d">
                 <span style="font-size:11px;color:#484f58">Instance:</span>
                 <select class="input" style="width:200px;font-size:12px;padding:4px 8px"
-                  x-model="namingSelectedInstance[tab.type]"
-                  @change="if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); } loadInstanceNaming(tab.type)">
-                  <option value="">Select instance...</option>
+                  @change="namingSelectedInstance = { ...namingSelectedInstance, [tab.type]: $event.target.value }; if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); } loadInstanceNaming(tab.type)">
+                  <option value="" :selected="!namingSelectedInstance[tab.type]">Select instance...</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
-                    <option :value="inst.id" x-text="inst.name"></option>
+                    <option :value="inst.id" x-text="inst.name" :selected="namingSelectedInstance[tab.type] === inst.id"></option>
                   </template>
                 </select>
                 <template x-if="namingSelectedInstance[tab.type] && instanceStatus[namingSelectedInstance[tab.type]] === 'connected'">
@@ -1004,7 +1426,7 @@
       <!-- ===== Maintenance sub-tab ===== -->
       <div class="page" x-show="getSubTab(tab.type) === 'maintenance'">
         <div style="padding:12px 20px;font-size:12px;color:#8b949e;border-bottom:1px solid #21262d;line-height:1.5">
-          Compare profiles against TRaSH recommendations, backup/restore instance data, and clean up custom formats and scores.
+          Backup/restore instance data and clean up custom formats and scores.
         </div>
 
         <template x-if="instancesOfType(tab.type).length === 0">
@@ -1021,382 +1443,26 @@
                 <span style="font-size:13px;color:#8b949e">Instance:</span>
                 <select class="input" style="width:250px"
                         x-model="maintenanceInstanceId"
-                        @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { testInstance(maintenanceInstance); loadInstanceProfiles(maintenanceInstance); loadSyncHistory(maintenanceInstanceId); }">
+                        @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { testInstance(maintenanceInstance); }">
                   <option value="">Select instance...</option>
                   <template x-for="inst in instancesOfType(tab.type)" :key="inst.id">
                     <option :value="inst.id" x-text="inst.name"></option>
                   </template>
                 </select>
-                <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type">
-                  <span style="font-size:12px;display:flex;align-items:center;gap:6px"
-                        :style="instanceStatus[maintenanceInstance.id] === 'failed' ? 'color:#f85149' : instanceStatus[maintenanceInstance.id] === 'connected' ? 'color:#3fb950' : 'color:#d29922'">
-                    <img style="width:16px;height:16px;border-radius:3px" :src="instanceIconUrl(maintenanceInstance)" :alt="maintenanceInstance.type">
-                    <span x-text="maintenanceInstance.name"></span>
-                    <span x-show="instanceStatus[maintenanceInstance.id] === 'failed'" style="font-size:10px">— Connection failed</span>
-                  </span>
+                <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type && instanceStatus[maintenanceInstance.id] === 'connected'">
+                  <span style="font-size:11px;color:#3fb950">Connected</span>
+                </template>
+                <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type && instanceStatus[maintenanceInstance.id] === 'failed'">
+                  <span style="font-size:11px;color:#f85149">Connection failed</span>
+                </template>
+                <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type && !instanceStatus[maintenanceInstance.id]">
+                  <span style="font-size:11px;color:#d29922">Not tested</span>
                 </template>
               </div>
             </div>
 
             <template x-if="maintenanceInstance && maintenanceInstance.type === tab.type">
               <div>
-                <!-- ===== Compare Section ===== -->
-                <div class="card" style="margin-bottom:16px">
-                  <div style="padding:16px 20px;border-bottom:1px solid #30363d">
-                    <div style="font-size:14px;font-weight:600;color:#e1e4e8">Compare Profiles</div>
-                    <div style="font-size:12px;color:#8b949e;margin-top:4px">Compare instance profiles against TRaSH recommendations and sync individual CFs or full profiles directly via API.</div>
-                  </div>
-
-                  <!-- Instance Profiles (from Arr API) -->
-                  <div class="inst-profiles-section" style="padding:16px 20px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                      <div style="font-size:13px;font-weight:600;color:#e1e4e8">Profiles</div>
-                      <button class="btn btn-sm" @click="loadInstanceProfiles(maintenanceInstance)"
-                              :disabled="instProfilesLoading[maintenanceInstance.id]">
-                        <template x-if="instProfilesLoading[maintenanceInstance.id]"><span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span></template>
-                        <template x-if="!instProfilesLoading[maintenanceInstance.id]"><span x-text="instProfiles[maintenanceInstance.id] ? 'Refresh' : 'Load Profiles'"></span></template>
-                      </button>
-                    </div>
-                    <template x-if="instProfiles[maintenanceInstance.id]">
-                      <div style="border:1px solid #21262d;border-radius:6px;overflow:hidden">
-                        <template x-for="ap in instProfiles[maintenanceInstance.id]" :key="ap.id">
-                          <div>
-                            <div class="inst-profile-row" :class="{ active: instCompareProfile[maintenanceInstance.id] === ap.id }"
-                                 @click="selectInstProfile(maintenanceInstance, ap)">
-                              <div>
-                                <span style="font-size:13px;color:#e1e4e8" x-text="ap.name"></span>
-                                <span style="font-size:11px;color:#484f58;margin-left:8px"
-                                      x-text="ap.formatItems.filter(fi => fi.score !== 0).length + ' scored CFs'"></span>
-                              </div>
-                              <span class="detail-section-chevron" style="font-size:10px"
-                                    :class="{ open: instCompareProfile[maintenanceInstance.id] === ap.id }">&#9654;</span>
-                            </div>
-                            <!-- Compare panel -->
-                            <template x-if="instCompareProfile[maintenanceInstance.id] === ap.id">
-                              <div class="compare-panel">
-                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                                  <label style="font-size:12px;color:#8b949e;white-space:nowrap">Compare against TRaSH profile:</label>
-                                  <select class="input" style="width:280px;font-size:12px"
-                                          :value="instCompareTrashId[maintenanceInstance.id] || ''"
-                                          @change="runProfileCompare(maintenanceInstance, ap.id, $event.target.value)">
-                                    <option value="">— Select —</option>
-                                    <template x-for="gn in getTrashProfileGroups(maintenanceInstance.type)" :key="gn">
-                                      <optgroup :label="gn">
-                                        <template x-for="tp in getTrashProfilesByGroup(maintenanceInstance.type, gn)" :key="tp.trashId">
-                                          <option :value="tp.trashId" x-text="tp.name"></option>
-                                        </template>
-                                      </optgroup>
-                                    </template>
-                                  </select>
-                                  <template x-if="instCompareLoading[maintenanceInstance.id]">
-                                    <span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
-                                  </template>
-                                </div>
-                                <!-- Compare results -->
-                                <template x-if="instCompareResult[maintenanceInstance.id]">
-                                  <div>
-                                    <template x-if="instCompareResult[maintenanceInstance.id].error">
-                                      <div style="color:#f85149;font-size:12px" x-text="instCompareResult[maintenanceInstance.id].error"></div>
-                                    </template>
-                                    <template x-if="!instCompareResult[maintenanceInstance.id].error">
-                                      <div>
-                                        <div style="font-size:12px;color:#8b949e;margin-bottom:8px">
-                                          <strong style="color:#e1e4e8" x-text="ap.name"></strong>
-                                          vs
-                                          <strong style="color:#e1e4e8" x-text="instCompareResult[maintenanceInstance.id].trashProfileName"></strong>
-                                        </div>
-                                        <div class="compare-summary">
-                                          <span class="compare-stat match" x-text="instCompareResult[maintenanceInstance.id].summary.matching + ' matching'"></span>
-                                          <span class="compare-stat wrong" x-show="instCompareResult[maintenanceInstance.id].summary.wrongScore > 0"
-                                                x-text="instCompareResult[maintenanceInstance.id].summary.wrongScore + ' wrong score'"></span>
-                                          <span class="compare-stat missing" x-show="instCompareResult[maintenanceInstance.id].summary.missing > 0"
-                                                x-text="instCompareResult[maintenanceInstance.id].summary.missing + ' missing'"></span>
-                                          <span class="compare-stat extra" x-show="instCompareResult[maintenanceInstance.id].summary.extra > 0"
-                                                x-text="instCompareResult[maintenanceInstance.id].summary.extra + ' extra in Arr'"></span>
-                                        </div>
-
-                                        <!-- Core CFs: Missing -->
-                                        <template x-if="instCompareResult[maintenanceInstance.id].summary.missing > 0">
-                                          <div>
-                                            <div class="compare-section-header">
-                                              <span class="compare-section-title" style="color:#f85149">Missing CFs</span>
-                                              <span class="compare-section-toggle" @click="toggleAllCompareSection(maintenanceInstance.id, 'missing')">toggle all</span>
-                                            </div>
-                                            <template x-for="[tid, st] in Object.entries(instCompareResult[maintenanceInstance.id].cfStates).filter(([,s]) => !s.exists)" :key="tid">
-                                              <div class="compare-cf-row">
-                                                <label class="compare-cf-check">
-                                                  <input type="checkbox"
-                                                         :checked="(instCompareSelected[maintenanceInstance.id] || {})[tid]"
-                                                         @change="toggleCompareSelect(maintenanceInstance.id, tid, $event.target.checked)">
-                                                </label>
-                                                <div class="compare-cf-name">
-                                                  <span x-text="st.trashName || tid.substring(0, 8) + '...'"
-                                                        :style="(instCompareSelected[maintenanceInstance.id] || {})[tid] ? 'color:#3fb950' : ''"></span>
-                                                  <span class="cf-info" x-show="st.description" @mouseenter="showCFTooltip($event, st.description)" @mouseleave="hideCFTooltip()">&#9432;</span>
-                                                  <template x-if="(instCompareSelected[maintenanceInstance.id] || {})[tid]">
-                                                    <span class="compare-action-label add">will be added</span>
-                                                  </template>
-                                                </div>
-                                                <div class="compare-cf-scores">
-                                                  <span style="color:#8b949e">needs</span>
-                                                  <span :class="st.desiredScore > 0 ? 'positive' : st.desiredScore < 0 ? 'negative' : 'zero'"
-                                                        x-text="(st.desiredScore > 0 ? '+' : '') + st.desiredScore"></span>
-                                                </div>
-                                                <div class="compare-cf-actions">
-                                                  <button class="btn btn-sm btn-blue" style="padding:1px 6px;font-size:9px;white-space:nowrap"
-                                                          @click.stop="syncSingleCF(maintenanceInstance, tid, st.desiredScore, instCompareResult[maintenanceInstance.id].arrProfileId)">Sync</button>
-                                                </div>
-                                              </div>
-                                            </template>
-                                          </div>
-                                        </template>
-
-                                        <!-- Core CFs: Wrong Score -->
-                                        <template x-if="instCompareResult[maintenanceInstance.id].summary.wrongScore > 0">
-                                          <div>
-                                            <div class="compare-section-header">
-                                              <span class="compare-section-title" style="color:#d29922">Wrong Score</span>
-                                              <span class="compare-section-toggle" @click="toggleAllCompareSection(maintenanceInstance.id, 'wrong')">toggle all</span>
-                                            </div>
-                                            <template x-for="[tid, st] in Object.entries(instCompareResult[maintenanceInstance.id].cfStates).filter(([,s]) => s.exists && !s.scoreMatch)" :key="tid">
-                                              <div class="compare-cf-row">
-                                                <label class="compare-cf-check">
-                                                  <input type="checkbox"
-                                                         :checked="(instCompareSelected[maintenanceInstance.id] || {})[tid]"
-                                                         @change="toggleCompareSelect(maintenanceInstance.id, tid, $event.target.checked)">
-                                                </label>
-                                                <div class="compare-cf-name">
-                                                  <span x-text="st.trashName || st.arrName"></span>
-                                                  <span class="cf-info" x-show="st.description" @mouseenter="showCFTooltip($event, st.description)" @mouseleave="hideCFTooltip()">&#9432;</span>
-                                                  <template x-if="(instCompareSelected[maintenanceInstance.id] || {})[tid]">
-                                                    <span class="compare-action-label fix">will be updated</span>
-                                                  </template>
-                                                </div>
-                                                <div class="compare-cf-scores">
-                                                  <span class="old" x-text="(st.currentScore > 0 ? '+' : '') + st.currentScore"></span>
-                                                  <span class="arrow">&rarr;</span>
-                                                  <span :class="st.desiredScore > 0 ? 'positive' : st.desiredScore < 0 ? 'negative' : 'zero'"
-                                                        x-text="(st.desiredScore > 0 ? '+' : '') + st.desiredScore"></span>
-                                                </div>
-                                                <div class="compare-cf-actions">
-                                                  <button class="btn btn-sm btn-blue" style="padding:1px 6px;font-size:9px;white-space:nowrap"
-                                                          @click.stop="syncSingleCF(maintenanceInstance, tid, st.desiredScore, instCompareResult[maintenanceInstance.id].arrProfileId)">Sync</button>
-                                                </div>
-                                              </div>
-                                            </template>
-                                          </div>
-                                        </template>
-
-                                        <!-- Optional CF Groups (categorized) -->
-                                        <template x-if="(instCompareResult[maintenanceInstance.id].optionalCategories || []).length > 0">
-                                          <div>
-                                            <div class="compare-section-header" style="margin-top:8px">
-                                              <span class="compare-section-title">Optional CF Groups</span>
-                                            </div>
-                                            <div style="font-size:11px;color:#484f58;margin-bottom:8px;padding:0 2px">
-                                              Not required by TRaSH for this profile. Add these to customize.
-                                            </div>
-                                            <template x-for="(cat, ci) in instCompareResult[maintenanceInstance.id].optionalCategories" :key="ci">
-                                              <div class="compare-cat">
-                                                <div class="compare-cat-title" style="display:flex;align-items:center;gap:6px">
-                                                  <span x-text="cat.category"></span>
-                                                  <span class="compare-section-toggle"
-                                                        x-show="cat.groups.some(g => g.cfs.some(cf => !cf.exists || !cf.scoreMatch))"
-                                                        @click="toggleCompareCategoryGroups(maintenanceInstance.id, ci)">toggle all</span>
-                                                </div>
-                                                <template x-for="(og, ogi) in cat.groups" :key="ogi">
-                                                  <div class="compare-opt-group" :class="og.present === og.total && og.wrongScore === 0 ? '' : 'has-actions'">
-                                                    <div class="compare-opt-header" @click="$el.parentElement.classList.toggle('expanded')">
-                                                      <span class="compare-opt-icon"
-                                                            :style="og.present === og.total && og.wrongScore === 0 ? 'color:#3fb950' : og.present > 0 ? 'color:#d29922' : 'color:#484f58'"
-                                                            x-text="og.present === og.total && og.wrongScore === 0 ? '&#10003;' : og.present > 0 ? '&#9680;' : '&#9675;'"></span>
-                                                      <span class="compare-opt-name" x-text="og.shortName || og.name"></span>
-                                                      <span x-show="og.exclusive" style="font-size:9px;color:#d29922;background:#3d2e0a;padding:1px 4px;border-radius:2px">pick one</span>
-                                                      <span class="compare-opt-count" x-text="og.present + '/' + og.total"></span>
-                                                      <span class="compare-opt-chevron">&#9658;</span>
-                                                    </div>
-                                                    <div class="compare-opt-cfs">
-                                                      <div x-show="og.description" class="group-description" style="font-size:10px;color:#8b949e;padding:4px 8px 2px;line-height:1.4" x-text="og.description"></div>
-                                                      <div x-show="og.exclusive && og.cfs.filter(c => c.exists && c.currentScore !== 0).length > 1" style="font-size:10px;color:#d29922;background:#3d2e0a;padding:3px 8px;border-radius:3px;margin:2px 8px 4px">&#9888; Both scored — TRaSH recommends only one with a non-zero score</div>
-                                                      <template x-for="(oc, oci) in og.cfs" :key="oci">
-                                                        <div class="compare-cf-row">
-                                                          <template x-if="!oc.exists">
-                                                            <label class="compare-cf-check">
-                                                              <input type="checkbox"
-                                                                     :checked="(instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]"
-                                                                     @change="toggleCompareSelect(maintenanceInstance.id, oc.trashId, $event.target.checked)">
-                                                            </label>
-                                                          </template>
-                                                          <template x-if="oc.exists && !oc.scoreMatch">
-                                                            <label class="compare-cf-check">
-                                                              <input type="checkbox"
-                                                                     :checked="(instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]"
-                                                                     @change="toggleCompareSelect(maintenanceInstance.id, oc.trashId, $event.target.checked)"
-                                                                     :disabled="isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId)">
-                                                            </label>
-                                                          </template>
-                                                          <template x-if="oc.exists && oc.scoreMatch">
-                                                            <span style="width:18px;display:inline-block;text-align:center;color:#3fb950;font-size:12px;flex-shrink:0">&#10003;</span>
-                                                          </template>
-                                                          <div class="compare-cf-name"
-                                                               :style="isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId) ? 'color:#f47067;text-decoration:line-through' : (!oc.exists && (instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]) ? 'color:#3fb950' : !oc.exists ? 'opacity:0.5' : ''">
-                                                            <span x-text="oc.name"></span>
-                                                            <span class="cf-info" x-show="oc.description" @mouseenter="showCFTooltip($event, oc.description)" @mouseleave="hideCFTooltip()">&#9432;</span>
-                                                            <template x-if="oc.default">
-                                                              <span class="compare-opt-rec">rec</span>
-                                                            </template>
-                                                            <template x-if="!oc.exists && (instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]">
-                                                              <span class="compare-action-label add">will be added</span>
-                                                            </template>
-                                                            <template x-if="isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId)">
-                                                              <span class="compare-action-label remove">will be removed</span>
-                                                            </template>
-                                                            <template x-if="oc.exists && !oc.scoreMatch && !isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId) && (instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]">
-                                                              <span class="compare-action-label fix">will be updated</span>
-                                                            </template>
-                                                            <template x-if="oc.exists && !oc.scoreMatch && !isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId) && !(instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]">
-                                                              <span class="compare-action-label" style="background:#21262d;color:#8b949e">skipped</span>
-                                                            </template>
-                                                          </div>
-                                                          <div class="compare-cf-scores">
-                                                            <template x-if="oc.exists && !oc.scoreMatch">
-                                                              <span>
-                                                                <span class="old" x-text="(oc.currentScore > 0 ? '+' : '') + oc.currentScore"></span>
-                                                                <span class="arrow">&rarr;</span>
-                                                                <span :class="oc.desiredScore > 0 ? 'positive' : oc.desiredScore < 0 ? 'negative' : 'zero'"
-                                                                      x-text="(oc.desiredScore > 0 ? '+' : '') + oc.desiredScore"></span>
-                                                              </span>
-                                                            </template>
-                                                            <template x-if="oc.exists && oc.scoreMatch">
-                                                              <span class="positive" x-text="(oc.desiredScore > 0 ? '+' : '') + oc.desiredScore"></span>
-                                                            </template>
-                                                            <template x-if="!oc.exists">
-                                                              <span style="color:#484f58" x-text="(oc.desiredScore > 0 ? '+' : '') + oc.desiredScore"></span>
-                                                            </template>
-                                                          </div>
-                                                          <div class="compare-cf-actions">
-                                                            <!-- Sync: only when checked (missing+checked OR wrong score+checked) -->
-                                                            <template x-if="(instCompareSelected[maintenanceInstance.id] || {})[oc.trashId] && !isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId)">
-                                                              <button class="btn btn-sm btn-blue" style="padding:1px 6px;font-size:9px;white-space:nowrap"
-                                                                      @click.stop="syncSingleCF(maintenanceInstance, oc.trashId, oc.desiredScore, instCompareResult[maintenanceInstance.id].arrProfileId)">Sync</button>
-                                                            </template>
-                                                            <!-- Remove x -->
-                                                            <template x-if="oc.exists && !isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId) && !(instCompareSelected[maintenanceInstance.id] || {})[oc.trashId]">
-                                                              <span style="font-size:11px;color:#484f58;cursor:pointer;padding:0 3px" title="Remove from profile"
-                                                                    @click.stop="toggleOptGroupRemove(maintenanceInstance.id, oc, true)">&times;</span>
-                                                            </template>
-                                                            <!-- Remove Now + Undo -->
-                                                            <template x-if="isOptGroupMarkedForRemoval(maintenanceInstance.id, oc.trashId)">
-                                                              <span style="display:flex;gap:4px;align-items:center">
-                                                                <button class="btn btn-sm" style="padding:1px 5px;font-size:9px;white-space:nowrap;background:#3d1f1f;color:#f47067;border-color:#f4706744"
-                                                                        @click.stop="removeSingleCF(maintenanceInstance, oc.arrId, instCompareResult[maintenanceInstance.id].arrProfileId)">Remove</button>
-                                                                <span style="font-size:10px;color:#58a6ff;cursor:pointer"
-                                                                      @click.stop="toggleOptGroupRemove(maintenanceInstance.id, oc, false)">undo</span>
-                                                              </span>
-                                                            </template>
-                                                          </div>
-                                                        </div>
-                                                      </template>
-                                                    </div>
-                                                  </div>
-                                                </template>
-                                              </div>
-                                            </template>
-                                          </div>
-                                        </template>
-
-                                        <!-- Extra CFs (in Arr but not in comparison profile) -->
-                                        <template x-if="instCompareResult[maintenanceInstance.id].summary.extra > 0">
-                                          <div>
-                                            <div class="compare-section-header">
-                                              <span class="compare-section-title" style="color:#f47067">Extra in Arr Profile</span>
-                                              <span class="compare-section-toggle" @click="toggleAllCompareSection(maintenanceInstance.id, 'extra')">select all for removal</span>
-                                            </div>
-                                            <div style="font-size:11px;color:#484f58;margin-bottom:6px;padding:0 2px">
-                                              Scored CFs in your Arr profile not found in the comparison profile. Check to mark for removal.
-                                            </div>
-                                            <template x-for="ecf in instCompareResult[maintenanceInstance.id].extraCFs" :key="ecf.format">
-                                              <div class="compare-cf-row">
-                                                <label class="compare-cf-check">
-                                                  <input type="checkbox"
-                                                         :checked="(instRemoveSelected[maintenanceInstance.id] || {})[ecf.format]"
-                                                         @change="toggleRemoveSelect(maintenanceInstance.id, ecf.format, $event.target.checked)">
-                                                </label>
-                                                <div class="compare-cf-name">
-                                                  <span x-text="ecf.name"
-                                                        :style="(instRemoveSelected[maintenanceInstance.id] || {})[ecf.format] ? 'color:#f47067;text-decoration:line-through' : 'color:#8b949e'"></span>
-                                                  <template x-if="(instRemoveSelected[maintenanceInstance.id] || {})[ecf.format]">
-                                                    <span class="compare-action-label remove">will be removed</span>
-                                                  </template>
-                                                </div>
-                                                <div class="compare-cf-scores">
-                                                  <span style="color:#8b949e" x-text="'score: ' + ecf.score"></span>
-                                                </div>
-                                                <div class="compare-cf-actions">
-                                                  <template x-if="(instRemoveSelected[maintenanceInstance.id] || {})[ecf.format]">
-                                                    <button class="btn btn-sm" style="padding:1px 5px;font-size:9px;white-space:nowrap;background:#3d1f1f;color:#f47067;border-color:#f4706744"
-                                                            @click.stop="removeSingleCF(maintenanceInstance, ecf.format, instCompareResult[maintenanceInstance.id].arrProfileId)">Remove</button>
-                                                  </template>
-                                                </div>
-                                              </div>
-                                            </template>
-                                          </div>
-                                        </template>
-
-                                        <!-- Action buttons -->
-                                        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                                          <button class="btn btn-sm btn-primary"
-                                                  x-show="getCompareSelectedCount(maintenanceInstance.id) > 0"
-                                                  @click="syncFromCompare(maintenanceInstance, instCompareResult[maintenanceInstance.id])">
-                                            <span x-text="'Sync ' + getCompareSelectedCount(maintenanceInstance.id) + ' selected'"></span>
-                                          </button>
-                                          <button class="btn btn-sm"
-                                                  style="background:#3d1f1f;color:#f47067;border-color:#f4706744"
-                                                  x-show="getRemoveSelectedCount(maintenanceInstance.id) > 0"
-                                                  @click="removeFromProfile(maintenanceInstance, instCompareResult[maintenanceInstance.id])">
-                                            <span x-text="'Remove ' + getRemoveSelectedCount(maintenanceInstance.id) + ' from profile'"></span>
-                                          </button>
-                                          <span x-show="instCompareResult[maintenanceInstance.id]?.summary?.missing === 0 && instCompareResult[maintenanceInstance.id]?.summary?.wrongScore === 0 && instCompareResult[maintenanceInstance.id]?.summary?.extra === 0"
-                                                style="color:#3fb950;font-size:12px">Profile fully in sync</span>
-                                        </div>
-                                      </div>
-                                    </template>
-                                  </div>
-                                </template>
-                              </div>
-                            </template>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-                    <template x-if="!instProfiles[maintenanceInstance.id]">
-                      <div style="font-size:12px;color:#484f58;padding:4px 0">Click "Load Profiles" to fetch profiles from this instance</div>
-                    </template>
-                  </div>
-
-                  <!-- Synced Profiles -->
-                  <template x-if="syncHistory[maintenanceInstance.id] && syncHistory[maintenanceInstance.id].length > 0">
-                    <div class="synced-section">
-                      <div class="synced-header">Synced Profiles</div>
-                      <template x-for="sh in syncHistory[maintenanceInstance.id]" :key="sh.profileTrashId">
-                        <div class="synced-row">
-                          <span class="synced-profile-name" x-text="sh.profileName"></span>
-                          <span class="synced-arrow">&rarr;</span>
-                          <span class="synced-arr-name" x-text="sh.arrProfileName"></span>
-                          <div class="synced-meta">
-                            <span x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
-                            <span x-text="timeAgo(sh.lastSync)"></span>
-                            <div class="synced-actions">
-                              <button class="btn btn-sm" @click.stop="resyncProfile(maintenanceInstance, sh)">Re-sync</button>
-                              <button class="btn btn-sm btn-danger" @click.stop="removeSyncHistory(maintenanceInstance.id, sh.profileTrashId)">Remove</button>
-                            </div>
-                          </div>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-                </div>
-
                 <!-- ===== Backup & Restore Section ===== -->
                 <div class="card" style="padding:16px;margin-bottom:16px">
                   <div style="font-size:14px;font-weight:600;color:#e1e4e8;margin-bottom:4px">Backup &amp; Restore</div>
@@ -4232,6 +4298,9 @@ function clonarr() {
     instanceStatus: {},
     pulling: false,
     subTabs: {},  // per app-type sub-tab: { radarr: 'profiles', sonarr: 'profiles' }
+    profileTabs: {},  // per app-type profile tab: { radarr: 'trash-sync', sonarr: 'trash-sync' }
+    compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
+    syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
 
     // Instance modal
     showInstanceModal: false,
@@ -4515,6 +4584,45 @@ function clonarr() {
       this.loadAutoSyncRules();
       this.loadSandboxResults('radarr');
       this.loadSandboxResults('sonarr');
+      // Load sync history for all instances
+      for (const inst of this.instances) {
+        this.loadSyncHistory(inst.id);
+      }
+      // Auto-select instance if only one per type (no need to choose)
+      // Build auto-select maps, then assign all at once for Alpine reactivity
+      const autoQs = {};
+      const autoNaming = {};
+      const autoCompare = {};
+      const autoLoads = [];
+      for (const type of ['radarr', 'sonarr']) {
+        const typeInsts = this.instances.filter(i => i.type === type);
+        if (typeInsts.length === 1) {
+          const inst = typeInsts[0];
+          autoCompare[type] = inst.id;
+          autoQs[type] = inst.id;
+          autoNaming[type] = inst.id;
+          autoLoads.push({ type, inst });
+        }
+      }
+      // Assign entire objects to trigger Alpine reactivity
+      if (Object.keys(autoCompare).length) this.compareInstanceIds = { ...this.compareInstanceIds, ...autoCompare };
+      if (Object.keys(autoQs).length) this.qsInstanceId = { ...this.qsInstanceId, ...autoQs };
+      if (Object.keys(autoNaming).length) this.namingSelectedInstance = { ...this.namingSelectedInstance, ...autoNaming };
+      // Load data for auto-selected instances
+      for (const { type, inst } of autoLoads) {
+        this.loadInstanceProfiles(inst);
+        this.loadInstanceQS(type, inst.id);
+        this.loadInstanceNaming(type);
+      }
+      // Maintenance: auto-select based on current tab type
+      const currentType = this.currentTab;
+      const maintInsts = this.instances.filter(i => i.type === currentType);
+      if (maintInsts.length === 1) {
+        this.maintenanceInstanceId = maintInsts[0].id;
+        this.cleanupInstanceId = maintInsts[0].id;
+        this.loadCleanupKeep();
+        this.loadCleanupCFNames();
+      }
       // Test all instances on load
       this.testAllInstances();
       // Tick every 30s: update timeAgo() and refresh TRaSH status
@@ -7891,6 +7999,14 @@ function clonarr() {
       this.profileDetail = null;
       this.syncPlan = null;
       this.syncResult = null;
+      // Auto-select maintenance instance for this tab type if only one
+      const typeInsts = this.instances.filter(i => i.type === tab);
+      if (typeInsts.length === 1 && this.maintenanceInstanceId !== typeInsts[0].id) {
+        this.maintenanceInstanceId = typeInsts[0].id;
+        this.cleanupInstanceId = typeInsts[0].id;
+        this.loadCleanupKeep();
+        this.loadCleanupCFNames();
+      }
     },
 
     getSubTab(appType) {
@@ -7899,6 +8015,25 @@ function clonarr() {
 
     setSubTab(appType, subTab) {
       this.subTabs = { ...this.subTabs, [appType]: subTab };
+    },
+
+    getProfileTab(appType) {
+      return this.profileTabs[appType] || 'trash-sync';
+    },
+
+    setProfileTab(appType, tab) {
+      this.profileTabs = { ...this.profileTabs, [appType]: tab };
+    },
+
+    getCompareInstanceId(appType) {
+      return this.compareInstanceIds[appType] || '';
+    },
+    setCompareInstanceId(appType, id) {
+      this.compareInstanceIds = { ...this.compareInstanceIds, [appType]: id };
+    },
+    getCompareInstance(appType) {
+      const id = this.compareInstanceIds[appType];
+      return id ? (this.instances.find(i => i.id === id) || null) : null;
     },
 
     // --- Instance CRUD ---
@@ -8450,17 +8585,20 @@ function clonarr() {
         }
         const result = await r.json();
         this.instCompareResult = {...this.instCompareResult, [inst.id]: result};
-        // Auto-select all missing + wrong-score CFs for selective sync
+        // Auto-select genuine errors only:
+        // - formatItems: missing or wrong score (these are required)
+        // - Groups: required CFs missing in default groups, or actively used CFs with wrong score
         if (!result.error) {
           const sel = {};
-          for (const [tid, st] of Object.entries(result.cfStates || {})) {
-            if (!st.exists || !st.scoreMatch) sel[tid] = true;
+          for (const fi of (result.formatItems || [])) {
+            if (!fi.exists || !fi.scoreMatch) sel[fi.trashId] = true;
           }
-          // Also auto-select existing optional CFs with wrong score
-          for (const cat of (result.optionalCategories || [])) {
-            for (const og of cat.groups) {
-              for (const oc of og.cfs) {
-                if (oc.exists && !oc.scoreMatch) sel[oc.trashId] = true;
+          for (const group of (result.groups || [])) {
+            for (const cf of group.cfs) {
+              if (!cf.exists && group.defaultEnabled && cf.required) {
+                sel[cf.trashId] = true; // required CF missing
+              } else if (cf.exists && !cf.scoreMatch) {
+                sel[cf.trashId] = true; // user has it, wrong score
               }
             }
           }
@@ -8505,32 +8643,29 @@ function clonarr() {
         const allChecked = ids.every(id => sel[id]);
         for (const id of ids) { sel[id] = !allChecked; }
         this.instRemoveSelected = {...this.instRemoveSelected, [instId]: sel};
-      } else {
+      } else if (section === 'formatItems') {
         const sel = {...(this.instCompareSelected[instId] || {})};
-        const entries = Object.entries(result.cfStates || {}).filter(([, s]) =>
-          section === 'missing' ? !s.exists : (s.exists && !s.scoreMatch)
-        );
-        const allChecked = entries.every(([tid]) => sel[tid]);
-        for (const [tid] of entries) { sel[tid] = !allChecked; }
+        const ids = (result.formatItems || []).filter(fi => !fi.exists || !fi.scoreMatch).map(fi => fi.trashId);
+        const allChecked = ids.every(id => sel[id]);
+        for (const id of ids) { sel[id] = !allChecked; }
+        this.instCompareSelected = {...this.instCompareSelected, [instId]: sel};
+      } else {
+        // 'all' or other — select all genuine errors across formatItems + groups
+        const sel = {...(this.instCompareSelected[instId] || {})};
+        const ids = [];
+        for (const fi of (result.formatItems || [])) {
+          if (!fi.exists || !fi.scoreMatch) ids.push(fi.trashId);
+        }
+        for (const group of (result.groups || [])) {
+          for (const cf of group.cfs) {
+            if (!cf.exists && group.defaultEnabled && cf.required) ids.push(cf.trashId);
+            else if (cf.exists && cf.inUse && !cf.scoreMatch) ids.push(cf.trashId);
+          }
+        }
+        const allChecked = ids.every(id => sel[id]);
+        for (const id of ids) { sel[id] = !allChecked; }
         this.instCompareSelected = {...this.instCompareSelected, [instId]: sel};
       }
-    },
-
-    toggleCompareCategoryGroups(instId, catIndex) {
-      const result = this.instCompareResult[instId];
-      if (!result) return;
-      const cat = (result.optionalCategories || [])[catIndex];
-      if (!cat) return;
-      const sel = {...(this.instCompareSelected[instId] || {})};
-      const ids = [];
-      for (const og of cat.groups) {
-        for (const oc of og.cfs) {
-          if (!oc.exists || !oc.scoreMatch) ids.push(oc.trashId);
-        }
-      }
-      const allChecked = ids.every(id => sel[id]);
-      for (const id of ids) { sel[id] = !allChecked; }
-      this.instCompareSelected = {...this.instCompareSelected, [instId]: sel};
     },
 
     isOptGroupMarkedForRemoval(instId, trashId) {
@@ -8601,9 +8736,11 @@ function clonarr() {
           const arrId = sel['_arrId_' + trashId];
           if (arrId) {
             cfIds.push(arrId);
-            // Find name from optional categories
-            for (const cat of (comparison.optionalCategories || [])) {
-              for (const g of cat.groups) {
+            // Find name from groups or cfStates
+            const state = (comparison.cfStates || {})[trashId];
+            if (state?.trashName) { names.push(state.trashName); }
+            else {
+              for (const g of (comparison.groups || [])) {
                 const cf = g.cfs.find(c => c.trashId === trashId);
                 if (cf) { names.push(cf.name); break; }
               }
@@ -8612,20 +8749,24 @@ function clonarr() {
         }
       }
       if (!cfIds.length) return;
-      if (!confirm(`Remove ${cfIds.length} CF score(s) from profile?\n\n${names.join(', ')}\n\nScores will be set to 0.`)) return;
-      try {
-        const r = await fetch(`/api/instances/${inst.id}/profile-cfs/remove`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ arrProfileId: comparison.arrProfileId, cfIds })
-        });
-        if (!r.ok) { const e = await r.json(); alert(e.error || 'Failed'); return; }
-        const result = await r.json();
-        alert(`Removed ${result.removed} CF score(s) from profile.`);
-        this.instRemoveSelected = {...this.instRemoveSelected, [inst.id]: {}};
-        // Re-run compare to refresh
-        this.runProfileCompare(inst, comparison.arrProfileId, comparison.trashProfileId);
-      } catch (e) { alert('Error: ' + e.message); }
+      this.confirmModal = {
+        show: true,
+        title: 'Remove CF Scores',
+        message: `Remove ${cfIds.length} CF score(s) from profile?\n\n${names.join(', ')}\n\nScores will be set to 0.`,
+        onConfirm: async () => {
+          try {
+            const r = await fetch(`/api/instances/${inst.id}/profile-cfs/remove`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ arrProfileId: comparison.arrProfileId, cfIds })
+            });
+            if (!r.ok) { const e = await r.json(); alert(e.error || 'Failed'); return; }
+            const result = await r.json();
+            this.instRemoveSelected = {...this.instRemoveSelected, [inst.id]: {}};
+            this.runProfileCompare(inst, comparison.arrProfileId, comparison.trashProfileId);
+          } catch (e) { alert('Error: ' + e.message); }
+        }
+      };
     },
 
     async syncSingleCF(inst, trashId, score, arrProfileId) {
@@ -8667,6 +8808,23 @@ function clonarr() {
       // Find the TRaSH profile and open sync modal with pre-filled data
       const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === comparison.trashProfileId);
       if (!profile) { alert('TRaSH profile not found'); return; }
+      // Build selectedOptionalCFs from compare data:
+      // Include CFs user actively has (inUse) + CFs user checked for sync (instCompareSelected)
+      const sel = {};
+      const checked = this.instCompareSelected[inst.id] || {};
+      for (const group of (comparison.groups || [])) {
+        let groupActive = false;
+        for (const cf of group.cfs) {
+          if (cf.inUse || checked[cf.trashId]) {
+            sel[cf.trashId] = true;
+            groupActive = true;
+          }
+        }
+        if (groupActive) {
+          sel['__grp_' + group.name] = true;
+        }
+      }
+      this.selectedOptionalCFs = sel;
       this.syncForm = {
         instanceId: inst.id,
         instanceName: inst.name,
@@ -8675,6 +8833,7 @@ function clonarr() {
         profileName: comparison.trashProfileName,
         arrProfileId: String(comparison.arrProfileId),
         newProfileName: comparison.trashProfileName,
+        importedProfileId: '',
         behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
       };
       this.syncMode = 'update';
@@ -8950,6 +9109,28 @@ function clonarr() {
         this.syncPlan = null;
         // Reload sync history for the instance
         this.loadSyncHistory(this.syncForm.instanceId);
+        // Auto-update existing auto-sync rule with current selectedCFs
+        const existingRule = this.autoSyncRules.find(r =>
+          r.instanceId === this.syncForm.instanceId &&
+          ((this.syncForm.profileTrashId && r.trashProfileId === this.syncForm.profileTrashId) ||
+           (this.syncForm.importedProfileId && r.importedProfileId === this.syncForm.importedProfileId))
+        );
+        if (existingRule) {
+          const updated = {
+            ...existingRule,
+            selectedCFs: this.getSelectedCFIds(),
+            arrProfileId: parseInt(this.syncForm.arrProfileId) || existingRule.arrProfileId,
+            behavior: this.syncForm.behavior || existingRule.behavior
+          };
+          try {
+            await fetch(`/api/auto-sync/rules/${existingRule.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated)
+            });
+            await this.loadAutoSyncRules();
+          } catch (e) { console.error('updateAutoSyncRule:', e); }
+        }
       } catch (e) {
         console.error('apply:', e);
       } finally {
