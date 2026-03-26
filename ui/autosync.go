@@ -93,7 +93,9 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		log.Printf("Auto-sync: rule %s — %s", rule.ID, errMsg)
 		app.debugLog.Logf(LogError, "Auto-sync rule %s: plan failed: %s", rule.ID, errMsg)
 		app.updateAutoSyncRuleError(rule.ID, errMsg)
-		app.notifyAutoSync(rule, inst, nil, fmt.Errorf("%s", errMsg))
+		profileName := rule.TrashProfileID
+		if p := findProfile(ad, rule.TrashProfileID); p != nil { profileName = p.Name }
+		app.notifyAutoSync(rule, inst, profileName, nil, fmt.Errorf("%s", errMsg))
 		return
 	}
 
@@ -112,7 +114,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		log.Printf("Auto-sync: rule %s — %s", rule.ID, errMsg)
 		app.debugLog.Logf(LogError, "Auto-sync rule %s: apply failed: %s", rule.ID, errMsg)
 		app.updateAutoSyncRuleError(rule.ID, errMsg)
-		app.notifyAutoSync(rule, inst, nil, fmt.Errorf("%s", errMsg))
+		app.notifyAutoSync(rule, inst, plan.ProfileName, nil, fmt.Errorf("%s", errMsg))
 		return
 	}
 
@@ -148,7 +150,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		log.Printf("Auto-sync: failed to save sync history: %v", err)
 	}
 
-	app.notifyAutoSync(rule, inst, result, nil)
+	app.notifyAutoSync(rule, inst, plan.ProfileName, result, nil)
 }
 
 // updateAutoSyncRuleCommit updates the last sync commit and clears error for a rule.
@@ -179,7 +181,7 @@ func (app *App) updateAutoSyncRuleError(ruleID, errMsg string) {
 }
 
 // notifyAutoSync sends Discord notification for auto-sync result.
-func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, result *SyncResult, syncErr error) {
+func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName string, result *SyncResult, syncErr error) {
 	cfg := app.config.Get()
 	if cfg.AutoSync.DiscordWebhook == "" {
 		return
@@ -198,20 +200,42 @@ func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, result *SyncRes
 		color = 0xf85149 // red
 		title = "Auto-Sync Failed"
 		description = fmt.Sprintf("**Instance:** %s\n**Profile:** %s\n**Error:** %s",
-			inst.Name, rule.TrashProfileID, syncErr.Error())
+			inst.Name, profileName, syncErr.Error())
 	} else {
 		color = 0x3fb950 // green
 		title = "Auto-Sync Applied"
-		description = fmt.Sprintf("**Instance:** %s\n**Profile:** %s\n**CFs:** %d created, %d updated\n**Scores:** %d updated",
-			inst.Name, rule.TrashProfileID,
-			result.CFsCreated, result.CFsUpdated, result.ScoresUpdated)
+		description = fmt.Sprintf("**Instance:** %s\n**Profile:** %s", inst.Name, profileName)
+		if result.CFsCreated > 0 || result.CFsUpdated > 0 {
+			description += fmt.Sprintf("\n**CFs:** %d created, %d updated", result.CFsCreated, result.CFsUpdated)
+			for _, d := range result.CFDetails {
+				if len(description) > 1800 { description += "\n  - ..."; break }
+				description += "\n  - " + d
+			}
+		}
+		if result.ScoresUpdated > 0 {
+			description += fmt.Sprintf("\n**Scores:** %d updated", result.ScoresUpdated)
+			for _, d := range result.ScoreDetails {
+				if len(description) > 1800 { description += "\n  - ..."; break }
+				description += "\n  - " + d
+			}
+		}
+		if result.QualityUpdated {
+			description += "\n**Quality:** Profile quality items updated"
+			for _, d := range result.QualityDetails {
+				if len(description) > 1800 { description += "\n  - ..."; break }
+				description += "\n  - " + d
+			}
+		}
+		if result.CFsCreated == 0 && result.CFsUpdated == 0 && result.ScoresUpdated == 0 && !result.QualityUpdated {
+			description += "\n**No changes** — profile already in sync"
+		}
 	}
 
 	embed := map[string]any{
 		"title":       title,
 		"description": description,
 		"color":       color,
-		"footer":      map[string]string{"text": "Clonarr by ProphetSe7en"},
+		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
 	}
 	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
 	if err != nil {
@@ -266,7 +290,7 @@ func (app *App) notifyRepoUpdate(prevCommit, newCommit string) {
 		"title":       "TRaSH Guides Updated",
 		"description": description,
 		"color":       0x58a6ff, // blue
-		"footer":      map[string]string{"text": "Clonarr by ProphetSe7en"},
+		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
 	}
 	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
 	if err != nil {

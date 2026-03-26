@@ -71,6 +71,22 @@ func main() {
 		pullUpdateCh: make(chan string, 1),
 	}
 
+	// Startup: reset auto-sync commit hashes so all rules re-evaluate on next pull.
+	// This ensures quality item changes and other updates are picked up after version upgrades.
+	// Also clean up broken rules with arrProfileId=0 (create mode bug from older versions).
+	config.Update(func(cfg *Config) {
+		cleaned := make([]AutoSyncRule, 0, len(cfg.AutoSync.Rules))
+		for i := range cfg.AutoSync.Rules {
+			cfg.AutoSync.Rules[i].LastSyncCommit = ""
+			if cfg.AutoSync.Rules[i].ArrProfileID == 0 {
+				log.Printf("Removing broken auto-sync rule %s (arrProfileId=0)", cfg.AutoSync.Rules[i].ID)
+				continue
+			}
+			cleaned = append(cleaned, cfg.AutoSync.Rules[i])
+		}
+		cfg.AutoSync.Rules = cleaned
+	})
+
 	// Context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
