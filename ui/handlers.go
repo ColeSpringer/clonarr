@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,6 +59,7 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		TrashRepo    *TrashRepo      `json:"trashRepo,omitempty"`
 		PullInterval *string         `json:"pullInterval,omitempty"`
 		DevMode      *bool           `json:"devMode,omitempty"`
+		DebugLogging *bool           `json:"debugLogging"`
 		Prowlarr     *ProwlarrConfig `json:"prowlarr,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -80,6 +83,10 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.DevMode != nil {
 			cfg.DevMode = *req.DevMode
+		}
+		if req.DebugLogging != nil {
+			cfg.DebugLogging = *req.DebugLogging
+			app.debugLog.SetEnabled(*req.DebugLogging)
 		}
 		if req.Prowlarr != nil {
 			// Preserve existing API key if masked
@@ -1485,7 +1492,7 @@ type OptionalCFState struct {
 
 // buildProfileComparison compares a specific Arr profile against a TRaSH profile.
 // Uses TRaSH CF groups consistently: ungrouped formatItems in FormatItems, grouped CFs in Groups.
-func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, arrProfileID int) *ProfileComparison {
+func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, arrProfileID int, syncedCFs []string) *ProfileComparison {
 	comp := &ProfileComparison{
 		ArrProfileID:   arrProfileID,
 		TrashProfileID: trashProfileID,
@@ -1543,10 +1550,17 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 	}
 	comp.ArrProfileName = arrProfile.Name
 
-	// Build score map from this specific profile only
+	// Build score map from this specific profile
 	arrScores := make(map[int]int)
 	for _, fi := range arrProfile.FormatItems {
 		arrScores[fi.Format] = fi.Score
+	}
+
+	// Build set of CFs that were synced via Clonarr (from sync history)
+	// This tells us which score-0 CFs were deliberately synced vs just existing in Arr
+	syncedCFSet := make(map[string]bool)
+	for _, tid := range syncedCFs {
+		syncedCFSet[tid] = true
 	}
 
 	// Get TRaSH group data via ProfileDetailData
@@ -1634,9 +1648,11 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 					ccf.ArrID = arrCF.ID
 					ccf.CurrentScore = arrScores[arrCF.ID]
 					trackedArrIDs[arrCF.ID] = true
-					// CF is "in use" if it has non-zero score, OR if it's required in a default group
-				// (required CFs with score 0 are still actively configured — TRaSH wants score 0)
-				ccf.InUse = ccf.CurrentScore != 0 || (group.DefaultEnabled && cf.Required)
+					// CF is "in use" if:
+					// - it has non-zero score (user actively scored it), OR
+					// - it's required in a default group (expected to be there), OR
+					// - it was synced via Clonarr (in sync history, even with score 0)
+					ccf.InUse = ccf.CurrentScore != 0 || (group.DefaultEnabled && cf.Required) || syncedCFSet[cf.TrashID]
 
 					if ccf.InUse {
 						// CF is actively scored by user — verify score matches TRaSH
@@ -1789,7 +1805,25 @@ func (app *App) handleCompareProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comp := buildProfileComparison(inst, ad, trashProfileID, arrProfileID)
+	// Get synced CFs from sync history (to distinguish deliberately synced score-0 CFs from Arr defaults)
+	var lastSyncedCFs []string
+	history := app.config.GetSyncHistory(inst.ID)
+	for _, sh := range history {
+		if sh.ProfileTrashID == trashProfileID {
+			lastSyncedCFs = sh.SyncedCFs
+			break
+		}
+	}
+	comp := buildProfileComparison(inst, ad, trashProfileID, arrProfileID, lastSyncedCFs)
+
+	if comp.Error == "" {
+		app.debugLog.Logf(LogCompare, "%q vs %q on %s | %d matching, %d wrong, %d missing, %d extra",
+			comp.ArrProfileName, comp.TrashProfileName, inst.Name,
+			comp.Summary.Matching, comp.Summary.WrongScore, comp.Summary.Missing, comp.Summary.Extra)
+	} else {
+		app.debugLog.Logf(LogError, "Compare failed on %s: %s", inst.Name, comp.Error)
+	}
+
 	writeJSON(w, comp)
 }
 
@@ -1971,6 +2005,11 @@ func (app *App) handleSyncSingleCF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"action": action, "name": trashCF.Name, "score": req.Score})
+
+	tidShort := req.TrashID
+	if len(tidShort) > 8 { tidShort = tidShort[:8] }
+	app.debugLog.Logf(LogSync, "Single CF sync: %q (%s) score=%d on %s | action=%s",
+		trashCF.Name, tidShort, req.Score, inst.Name, action)
 }
 
 func (app *App) handleTrashProfileDetail(w http.ResponseWriter, r *http.Request) {
@@ -2302,6 +2341,14 @@ func (app *App) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	behavior := ResolveSyncBehavior(req.Behavior)
+	app.debugLog.Logf(LogSync, "Dry-run: %q → %s | %d selected CFs | overrides: %s | behavior: %s/%s/%s",
+		plan.ProfileName, inst.Name, len(req.SelectedCFs),
+		overrideSummary(req.Overrides), behavior.AddMode, behavior.RemoveMode, behavior.ResetMode)
+	app.debugLog.Logf(LogSync, "Dry-run result: %d create, %d update, %d unchanged | %d scores to set, %d to zero",
+		plan.Summary.CFsToCreate, plan.Summary.CFsToUpdate, plan.Summary.CFsUnchanged,
+		plan.Summary.ScoresToSet, plan.Summary.ScoresToZero)
+
 	writeJSON(w, plan)
 }
 
@@ -2353,6 +2400,14 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Apply exec error for %s: %v", inst.Name, err)
 		writeError(w, 500, "Failed to execute sync")
 		return
+	}
+
+	app.debugLog.Logf(LogSync, "Apply: %q → %s | %d created, %d updated, %d scores | %d errors",
+		plan.ProfileName, inst.Name, result.CFsCreated, result.CFsUpdated, result.ScoresUpdated, len(result.Errors))
+	if len(result.Errors) > 0 {
+		for _, e := range result.Errors {
+			app.debugLog.Logf(LogError, "Apply error: %s", e)
+		}
 	}
 
 	// Record sync history
@@ -3840,4 +3895,42 @@ func (app *App) handleScoringProfileScores(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, result)
+}
+
+// handleDebugLog receives frontend log messages.
+func (app *App) handleDebugLog(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Category string `json:"category"`
+		Message  string `json:"message"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(400)
+		return
+	}
+	if req.Category == "" {
+		req.Category = "UI"
+	}
+	app.debugLog.Log(req.Category, req.Message)
+	w.WriteHeader(204)
+}
+
+// handleDebugDownload serves the debug log file for download.
+func (app *App) handleDebugDownload(w http.ResponseWriter, r *http.Request) {
+	path := app.debugLog.FilePath()
+	f, err := os.Open(path)
+	if err != nil {
+		writeError(w, 404, "No debug log file found")
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		writeError(w, 500, "Failed to read log file")
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\"clonarr-debug.log\"")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+	io.Copy(w, f)
 }

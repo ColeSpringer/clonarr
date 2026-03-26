@@ -26,6 +26,7 @@ type App struct {
 	trash         *trashStore
 	profiles      *profileStore
 	customCFs     *customCFStore
+	debugLog      *debugLogger
 	pullUpdateCh  chan string // send new interval string to reschedule pull
 }
 
@@ -58,11 +59,15 @@ func main() {
 	// Migrate any imported profiles from old config to per-file storage
 	migrateImportedProfiles(config, profiles)
 
+	debugLog := newDebugLogger(configDir)
+	debugLog.SetEnabled(config.Get().DebugLogging)
+
 	app := &App{
 		config:       config,
 		trash:        trash,
 		profiles:     profiles,
 		customCFs:    customCFs,
+		debugLog:     debugLog,
 		pullUpdateCh: make(chan string, 1),
 	}
 
@@ -211,6 +216,10 @@ func main() {
 	mux.HandleFunc("POST /api/auto-sync/rules", app.handleCreateAutoSyncRule)
 	mux.HandleFunc("PUT /api/auto-sync/rules/{id}", app.handleUpdateAutoSyncRule)
 	mux.HandleFunc("DELETE /api/auto-sync/rules/{id}", app.handleDeleteAutoSyncRule)
+
+	// Debug logging
+	mux.HandleFunc("POST /api/debug/log", app.handleDebugLog)
+	mux.HandleFunc("GET /api/debug/log/download", app.handleDebugDownload)
 
 	// Cleanup
 	mux.HandleFunc("POST /api/instances/{id}/cleanup/scan", app.handleCleanupScan)

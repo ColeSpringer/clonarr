@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.5.0-beta
+
+### Features
+- **Debug logging** — Enable in Settings to write detailed operations to `/config/debug.log`. Logs sync, compare, auto-sync, and UI actions. Download button for easy sharing when reporting issues.
+- **Compare: sync history awareness** — Compare uses Clonarr sync history to accurately identify which score-0 CFs were deliberately synced vs unused defaults. Works best with profiles synced via Clonarr.
+- **Auto-sync per-profile toggle** — Enable/disable auto-sync individually for each profile directly from Sync Rules & History. Global toggle removed from Settings.
+- **Auto-sync error visibility** — Failed auto-sync rules show error badge with tooltip in Sync Rules
+
+### Improvements
+- **Settings: auto-sync clarification** — Description explains that auto-sync triggers on TRaSH pull changes, not on a fixed schedule
+- **Settings: active rules moved** — Auto-sync rules managed under Profiles → TRaSH Sync instead of Settings
+- **Compare: info note** — Visible warning about score-0 limitations for profiles not synced via Clonarr
+
+### Bug fixes
+- **Compare: score-0 CFs** — CFs synced with score 0 via Clonarr now correctly shown as "in use"
+- **Sync: case-insensitive BuildArrProfile** — Score assignment no longer fails for mixed-case CF names
+
 ## v1.4.0-beta
 
 ### Features

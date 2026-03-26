@@ -16,6 +16,7 @@ type Config struct {
 	TrashRepo            TrashRepo                        `json:"trashRepo"`
 	PullInterval         string                           `json:"pullInterval"` // Go duration (e.g. "24h", "1h", "0" to disable)
 	DevMode              bool                             `json:"devMode"`      // Enable TRaSH developer tools (TRaSH JSON export)
+	DebugLogging         bool                             `json:"debugLogging"` // Write detailed operations to /config/debug.log
 	QualitySizeOverrides map[string]map[string]QSOverride `json:"qualitySizeOverrides,omitempty"` // instanceID → quality name → override
 	QualitySizeAutoSync  map[string]QSAutoSync             `json:"qualitySizeAutoSync,omitempty"`  // instanceID → auto-sync settings
 	SyncHistory          []SyncHistoryEntry               `json:"syncHistory,omitempty"`

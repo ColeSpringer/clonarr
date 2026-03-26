@@ -36,7 +36,7 @@ Built as an alternative to config-driven tools like Recyclarr, with a visual int
 
 ### Custom Formats
 - Browse all TRaSH Custom Formats organized by category (Audio, HDR, Streaming, Unwanted, etc.)
-- Compare TRaSH CFs against your instance — see what's missing, outdated, or unchanged
+- Compare profiles against TRaSH — see what's matching, wrong scores, missing, or extra. Sync individual fixes or all at once. Works best with profiles synced via Clonarr.
 - Create and update CFs with spec-level comparison
 - **CF Creator** — build custom CFs with regex specs, test patterns, and TRaSH-compatible scoring
 

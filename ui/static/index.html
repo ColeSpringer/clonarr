@@ -517,11 +517,22 @@
                       <template x-for="sh in syncHistory[inst.id]" :key="sh.profileTrashId">
                         <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
                           <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
-                          <template x-if="autoSyncRules.some(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId && r.enabled)">
-                            <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#0d2f1a;color:#3fb950;border:1px solid #238636">auto-sync</span>
+                          <template x-if="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)">
+                            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;flex-shrink:0" title="Toggle auto-sync for this profile">
+                              <input type="checkbox" style="accent-color:#3fb950"
+                                     :checked="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)?.enabled"
+                                     @change.stop="(() => { const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId); if (rule) toggleAutoSyncRule(rule); })()">
+                              <span style="font-size:9px;padding:1px 4px;border-radius:8px"
+                                    :style="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)?.enabled ? 'background:#0d2f1a;color:#3fb950;border:1px solid #238636' : 'background:#21262d;color:#484f58;border:1px solid #30363d'"
+                                    x-text="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)?.enabled ? 'auto-sync' : 'auto-sync off'"></span>
+                            </label>
                           </template>
                           <span style="color:#484f58">&rarr;</span>
                           <span style="color:#e1e4e8" x-text="sh.arrProfileName"></span>
+                          <template x-if="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)?.lastSyncError">
+                            <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#3d1f1f;color:#f85149;flex-shrink:0"
+                                  :title="autoSyncRules.find(r => r.instanceId === inst.id && r.trashProfileId === sh.profileTrashId)?.lastSyncError">error</span>
+                          </template>
                           <span style="color:#8b949e;margin-left:auto" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
                           <span style="color:#8b949e" x-text="timeAgo(sh.lastSync)"></span>
                           <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)">Re-sync</button>
@@ -626,7 +637,10 @@
         <!-- ===== Compare tab ===== -->
         <div class="page" x-show="getProfileTab(tab.type) === 'compare'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">Compare Profiles</div>
-          <div style="font-size:12px;color:#8b949e;margin-bottom:16px;line-height:1.5">Compare your <span x-text="tab.label"></span> profiles against TRaSH Guides profiles. See what's matching, what has wrong scores, and what's missing — then sync individual fixes or all at once.</div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:12px;line-height:1.5">Compare your <span x-text="tab.label"></span> profiles against TRaSH Guides profiles. See what's matching, what has wrong scores, and what's missing — then sync individual fixes or all at once.</div>
+          <div style="font-size:12px;color:#e1e4e8;margin-bottom:16px;line-height:1.6;padding:10px 14px;background:#1a1500;border:1px solid #9e6a03;border-radius:6px;border-left:3px solid #d29922">
+            <strong style="color:#d29922">Note:</strong> Compare works best with profiles synced via Clonarr. For profiles created with other tools, custom formats with a score of 0 cannot be reliably distinguished from unused formats — these may not appear as "in use" in the comparison.
+          </div>
 
           <!-- Instance selector for Compare -->
           <div class="card">
@@ -3060,6 +3074,29 @@
       </div>
     </div>
 
+    <!-- Debug Logging -->
+    <div class="settings-section">
+      <div class="settings-title">Debug Logging</div>
+      <div class="settings-body">
+        <div class="setting-row">
+          <div class="setting-label">Enable Debug Log</div>
+          <div class="setting-value" style="display:flex;align-items:center;gap:10px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" x-model="config.debugLogging" @change="saveConfig(['debugLogging'])" style="accent-color:#58a6ff">
+              <span style="font-size:12px;color:#8b949e">Write detailed operations to /config/debug.log (max 1MB, auto-rotates)</span>
+            </label>
+          </div>
+        </div>
+        <div class="setting-row" x-show="config.debugLogging">
+          <div class="setting-label">Download Log</div>
+          <div class="setting-value">
+            <a class="btn btn-sm" href="/api/debug/log/download" download="clonarr-debug.log" style="text-decoration:none">Download debug.log</a>
+            <span style="font-size:11px;color:#484f58;margin-left:8px">Share this file when reporting bugs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Prowlarr Connection -->
     <div class="settings-section">
       <div class="settings-title">Prowlarr (Scoring Sandbox)</div>
@@ -3124,17 +3161,9 @@
     <div class="settings-section">
       <div class="settings-title">Auto-Sync</div>
       <div class="settings-body">
-        <div style="font-size:12px;color:#8b949e;margin-bottom:12px">
-          Automatically sync profiles to instances when TRaSH Guides data changes. Enable auto-sync per profile from the Sync modal.
-        </div>
-        <div class="setting-row">
-          <div class="setting-label">Enabled</div>
-          <div class="setting-value">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" x-model="autoSyncSettings.enabled" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
-              <span style="font-size:12px;color:#8b949e" x-text="autoSyncSettings.enabled ? 'Auto-sync is active' : 'Auto-sync is paused'"></span>
-            </label>
-          </div>
+        <div style="font-size:12px;color:#8b949e;margin-bottom:12px;line-height:1.5">
+          Auto-sync runs after each TRaSH pull when new changes are detected — not on a fixed schedule.
+          The pull interval controls how often Clonarr checks for TRaSH updates. Enable auto-sync per profile from the Sync modal, and manage rules under Profiles → TRaSH Sync.
         </div>
         <div class="setting-row">
           <div class="setting-label">Discord Webhook</div>
@@ -3160,37 +3189,9 @@
           </div>
         </div>
 
-        <!-- Active rules -->
-        <div style="margin-top:16px;border-top:1px solid #30363d;padding-top:12px">
-          <div style="font-size:13px;font-weight:500;color:#e1e4e8;margin-bottom:8px">Active Rules</div>
-          <template x-if="autoSyncRules.length === 0">
-            <div style="color:#8b949e;font-size:12px;padding:4px 0">No auto-sync rules configured. Open a profile and use Sync to enable auto-sync.</div>
-          </template>
-          <template x-for="rule in autoSyncRules" :key="rule.id">
-            <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #21262d;font-size:13px">
-              <label style="display:flex;align-items:center;cursor:pointer" :title="rule.enabled ? 'Enabled' : 'Disabled'">
-                <input type="checkbox" :checked="rule.enabled" @change="toggleAutoSyncRule(rule)" style="accent-color:#58a6ff">
-              </label>
-              <img style="width:16px;height:16px" :src="rule.instanceType === 'radarr' ? 'https://raw.githubusercontent.com/Radarr/Radarr/develop/Logo/256.png' : 'https://raw.githubusercontent.com/Sonarr/Sonarr/develop/Logo/256.png'" :alt="rule.instanceType">
-              <div style="flex:1;min-width:0">
-                <span style="color:#e1e4e8" x-text="rule.instanceName || rule.instanceId"></span>
-                <span style="color:#484f58;margin:0 4px">&rarr;</span>
-                <span style="color:#58a6ff" x-text="rule.trashProfileId || rule.importedProfileId"></span>
-              </div>
-              <div style="width:140px;text-align:right">
-                <template x-if="rule.lastSyncError">
-                  <span style="color:#f47067;font-size:11px" :title="rule.lastSyncError">Error</span>
-                </template>
-                <template x-if="!rule.lastSyncError && rule.lastSyncTime">
-                  <span style="color:#3fb950;font-size:11px" x-text="'Synced ' + timeAgo(rule.lastSyncTime)"></span>
-                </template>
-                <template x-if="!rule.lastSyncError && !rule.lastSyncTime">
-                  <span style="color:#8b949e;font-size:11px">Never synced</span>
-                </template>
-              </div>
-              <button class="btn btn-sm btn-danger" @click="deleteAutoSyncRule(rule)" title="Remove rule">Delete</button>
-            </div>
-          </template>
+        <!-- Rules reference -->
+        <div style="margin-top:12px;font-size:11px;color:#484f58">
+          <span x-text="autoSyncRules.length"></span> active rule(s) — manage under Profiles → TRaSH Sync → Sync Rules & History
         </div>
       </div>
     </div>
@@ -4650,6 +4651,7 @@ function clonarr() {
         if (!fields || fields.includes('trashRepo')) body.trashRepo = this.config.trashRepo;
         if (fields && fields.includes('pullInterval')) body.pullInterval = this.config.pullInterval;
         if (fields && fields.includes('devMode')) body.devMode = this.config.devMode;
+        if (fields && fields.includes('debugLogging')) body.debugLogging = this.config.debugLogging;
         if (fields && fields.includes('prowlarr')) body.prowlarr = this.config.prowlarr;
         await fetch('/api/config', {
           method: 'PUT',
@@ -5889,6 +5891,7 @@ function clonarr() {
     async pbApplyTemplate() {
       const tid = this.pb.templateId;
       if (!tid) return;
+      this.debugLog('UI', `Builder: applying template "${tid}"`);
       this.pbTemplateLoading = true;
       try {
         if (tid.startsWith('trash:')) {
@@ -7994,6 +7997,7 @@ function clonarr() {
     },
 
     switchTab(tab) {
+      this.debugLog('UI', `Tab: ${tab}`);
       this.currentTab = tab;
       localStorage.setItem('clonarr_tab', tab);
       this.profileDetail = null;
@@ -8339,6 +8343,7 @@ function clonarr() {
     // --- Profile Detail ---
 
     async openProfileDetail(inst, profile) {
+      this.debugLog('UI', `Profile opened: "${profile.name}" on ${inst.name}`);
       this.syncPlan = null;
       this.syncResult = null;
       this.selectedOptionalCFs = {};
@@ -8571,6 +8576,7 @@ function clonarr() {
     },
 
     async runProfileCompare(inst, arrProfileId, trashProfileId) {
+      this.debugLog('UI', `Compare: arr profile ${arrProfileId} vs TRaSH "${trashProfileId}" on ${inst.name}`);
       this.instCompareTrashId = {...this.instCompareTrashId, [inst.id]: trashProfileId};
       if (!trashProfileId) {
         this.instCompareResult = {...this.instCompareResult, [inst.id]: null};
@@ -8805,6 +8811,7 @@ function clonarr() {
     },
 
     syncFromCompare(inst, comparison) {
+      this.debugLog('UI', `Sync from Compare: "${comparison.trashProfileName}" on ${inst.name}`);
       // Find the TRaSH profile and open sync modal with pre-filled data
       const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === comparison.trashProfileId);
       if (!profile) { alert('TRaSH profile not found'); return; }
@@ -9064,6 +9071,7 @@ function clonarr() {
 
     async startDryRun() {
       this.syncing = true;
+      this.debugLog('UI', `Dry-run: "${this.syncForm.profileName}" → ${this.syncForm.instanceName} | ${this.getSelectedCFIds().length} selected CFs`);
       try {
         const body = this.buildSyncBody();
         const r = await fetch('/api/sync/dry-run', {
@@ -9092,6 +9100,7 @@ function clonarr() {
 
     async startApply() {
       this.syncing = true;
+      this.debugLog('UI', `Apply: "${this.syncForm.profileName}" → ${this.syncForm.instanceName}`);
       try {
         const r = await fetch('/api/sync/apply', {
           method: 'POST',
@@ -9260,6 +9269,7 @@ function clonarr() {
     },
 
     async toggleAutoSyncForProfile(enabled) {
+      this.debugLog('UI', `Auto-sync: ${enabled ? 'enabled' : 'disabled'} for "${this.syncForm.profileName}" → ${this.syncForm.instanceName}`);
       if (enabled) {
         // Create rule
         const rule = {
@@ -9313,6 +9323,16 @@ function clonarr() {
         await fetch(`/api/auto-sync/rules/${rule.id}`, { method: 'DELETE' });
         await this.loadAutoSyncRules();
       } catch (e) { console.error('deleteAutoSyncRule:', e); }
+    },
+
+    // Debug logging helper — fire-and-forget POST to backend
+    debugLog(category, message) {
+      if (!this.config?.debugLogging) return;
+      fetch('/api/debug/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, message })
+      }).catch(() => {});
     },
 
     timeAgo(isoString) {

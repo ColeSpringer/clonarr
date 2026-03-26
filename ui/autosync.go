@@ -14,7 +14,7 @@ import (
 // builds a dry-run plan, and applies if there are actual changes.
 func (app *App) autoSyncAfterPull() {
 	cfg := app.config.Get()
-	if !cfg.AutoSync.Enabled || len(cfg.AutoSync.Rules) == 0 {
+	if len(cfg.AutoSync.Rules) == 0 {
 		return
 	}
 
@@ -52,6 +52,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	defer mu.Unlock()
 
 	log.Printf("Auto-sync: evaluating rule %s (instance=%s, profile=%s)", rule.ID, inst.Name, rule.TrashProfileID)
+	app.debugLog.Logf(LogAutoSync, "Rule %s: evaluating %q → %s", rule.ID, rule.TrashProfileID, inst.Name)
 
 	ad := app.trash.GetAppData(inst.Type)
 	if ad == nil {
@@ -90,6 +91,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	if err != nil {
 		errMsg := fmt.Sprintf("plan failed: %v", err)
 		log.Printf("Auto-sync: rule %s — %s", rule.ID, errMsg)
+		app.debugLog.Logf(LogError, "Auto-sync rule %s: plan failed: %s", rule.ID, errMsg)
 		app.updateAutoSyncRuleError(rule.ID, errMsg)
 		app.notifyAutoSync(rule, inst, nil, fmt.Errorf("%s", errMsg))
 		return
@@ -98,6 +100,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	if !plan.HasChanges() {
 		// No actual changes — update commit hash, clear error
 		log.Printf("Auto-sync: rule %s — no changes for %s", rule.ID, inst.Name)
+		app.debugLog.Logf(LogAutoSync, "Rule %s: no changes for %s", rule.ID, inst.Name)
 		app.updateAutoSyncRuleCommit(rule.ID, currentCommit)
 		return
 	}
@@ -107,12 +110,15 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	if err != nil {
 		errMsg := fmt.Sprintf("apply failed: %v", err)
 		log.Printf("Auto-sync: rule %s — %s", rule.ID, errMsg)
+		app.debugLog.Logf(LogError, "Auto-sync rule %s: apply failed: %s", rule.ID, errMsg)
 		app.updateAutoSyncRuleError(rule.ID, errMsg)
 		app.notifyAutoSync(rule, inst, nil, fmt.Errorf("%s", errMsg))
 		return
 	}
 
 	log.Printf("Auto-sync: rule %s applied — %d CFs created, %d updated, %d scores on %s",
+		rule.ID, result.CFsCreated, result.CFsUpdated, result.ScoresUpdated, inst.Name)
+	app.debugLog.Logf(LogAutoSync, "Rule %s: applied — %d created, %d updated, %d scores on %s",
 		rule.ID, result.CFsCreated, result.CFsUpdated, result.ScoresUpdated, inst.Name)
 
 	app.updateAutoSyncRuleCommit(rule.ID, currentCommit)
