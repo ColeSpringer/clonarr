@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.1-beta
+
+### Bug fixes
+- **Prowlarr test connection** — Fixed "authentication failed (HTTP 401)" when testing Prowlarr after page refresh. Masked API key fallback now checked independently of URL field.
+
 ## v1.7.0-beta
 
 ### Features

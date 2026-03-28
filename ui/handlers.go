@@ -3603,14 +3603,12 @@ func (app *App) handleTestProwlarr(w http.ResponseWriter, r *http.Request) {
 	}
 	// Accept ad-hoc URL/key in body, fall back to saved config
 	json.NewDecoder(r.Body).Decode(&req) // ignore error — fields optional
-	if req.URL == "" || req.APIKey == "" {
-		cfg := app.config.Get()
-		if req.URL == "" {
-			req.URL = cfg.Prowlarr.URL
-		}
-		if req.APIKey == "" || isMasked(req.APIKey) {
-			req.APIKey = cfg.Prowlarr.APIKey
-		}
+	cfg := app.config.Get()
+	if req.URL == "" {
+		req.URL = cfg.Prowlarr.URL
+	}
+	if req.APIKey == "" || isMasked(req.APIKey) {
+		req.APIKey = cfg.Prowlarr.APIKey
 	}
 	if req.URL == "" || req.APIKey == "" {
 		writeJSON(w, map[string]any{"connected": false, "error": "Prowlarr URL and API key are required"})
