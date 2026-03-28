@@ -118,6 +118,12 @@ type ImportedProfile struct {
 	ImportedAt            string            `json:"importedAt"`
 }
 
+// FileItem interface methods for ImportedProfile.
+func (p *ImportedProfile) GetID() string      { return p.ID }
+func (p *ImportedProfile) GetName() string    { return p.Name }
+func (p *ImportedProfile) SetName(n string)   { p.Name = n }
+func (p *ImportedProfile) GetAppType() string { return p.AppType }
+
 // sanitizeName strips HTML tags from names to prevent XSS when rendered with x-html.
 func sanitizeName(s string) string {
 	if !strings.ContainsAny(s, "<>&") {

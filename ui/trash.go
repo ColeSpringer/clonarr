@@ -1002,6 +1002,10 @@ func SnapshotAppData(snap *TrashData, app string) *AppData {
 		cp.QualitySizes = make([]*TrashQualitySize, len(src.QualitySizes))
 		copy(cp.QualitySizes, src.QualitySizes)
 	}
+	if src.Naming != nil {
+		n := *src.Naming
+		cp.Naming = &n
+	}
 	return &cp
 }
 

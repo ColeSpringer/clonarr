@@ -242,6 +242,8 @@
   /* Loading */
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.6s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes toastProgress { from { width: 100%; } to { width: 0%; } }
 
   /* Empty state */
   .empty-state { text-align: center; padding: 48px 20px; color: #8b949e; }
@@ -513,7 +515,10 @@
                 <template x-for="inst in instancesOfType(tab.type)" :key="'sr-'+inst.id">
                   <template x-if="syncHistory[inst.id] && syncHistory[inst.id].length > 0">
                     <div>
-                      <div style="padding:8px 16px;font-size:11px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:#0d1117;border-bottom:1px solid #21262d" x-text="inst.name"></div>
+                      <div style="padding:8px 16px;font-size:11px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:#0d1117;border-bottom:1px solid #21262d;display:flex;align-items:center">
+                        <span x-text="inst.name"></span>
+                        <button class="btn btn-sm" style="margin-left:auto;font-size:10px;padding:2px 8px;border-color:#238636;color:#3fb950" @click.stop="syncAllForInstance(inst)" title="Re-sync all profiles on this instance">Sync All</button>
+                      </div>
                       <template x-for="sh in syncHistory[inst.id]" :key="sh.arrProfileId">
                         <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
                           <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
@@ -536,8 +541,9 @@
                           </template>
                           <span style="color:#8b949e;margin-left:auto" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
                           <span style="color:#8b949e" x-text="timeAgo(sh.lastSync)"></span>
-                          <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)">Re-sync</button>
-                          <button class="btn btn-sm" style="color:#f85149;border-color:#f85149" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)">Remove</button>
+                          <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)" title="Open profile with saved settings">Edit</button>
+                          <button class="btn btn-sm" style="border-color:#238636;color:#3fb950" @click.stop="quickSync(inst, sh)" title="Re-sync with saved settings">Sync</button>
+                          <button class="btn btn-sm" style="color:#f85149;border-color:#f85149" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" title="Remove sync history and auto-sync rule">Remove</button>
                         </div>
                       </template>
                     </div>
@@ -1021,8 +1027,9 @@
             </div>
             <template x-for="cat in getCFBrowseGroups(tab.type)" :key="cat.category">
               <div class="card" style="margin-bottom:12px">
-                <div class="detail-section-header" @click="toggleDetailSection('cfb_' + cat.category)" style="cursor:pointer">
-                  <div class="detail-section-label" x-text="cat.category"></div>
+                <div class="detail-section-header" @click="toggleDetailSection('cfb_' + cat.category)" style="cursor:pointer"
+                     :style="cat.isCustom ? 'border-left:3px solid #d29922;background:#1a1500' : ''">
+                  <div class="detail-section-label" :style="cat.isCustom ? 'color:#d29922' : ''" x-text="cat.category"></div>
                   <div class="detail-section-count" x-text="cat.totalCFs + ' CFs'"></div>
                   <span class="detail-section-chevron" :class="{ open: detailSections['cfb_' + cat.category] }">&#9654;</span>
                 </div>
@@ -2423,7 +2430,7 @@
 
   <!-- ==================== PROFILE DETAIL ==================== -->
   <div class="page" x-show="profileDetail && currentTab !== 'settings' && currentTab !== 'about'" x-cloak>
-    <a class="back-link" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdOverrideActive = false; pdOverrides = { language: {enabled:true,value:'Original'}, upgradeAllowed: {enabled:true,value:true}, minFormatScore: {enabled:true,value:0}, minUpgradeFormatScore: {enabled:true,value:1}, cutoffFormatScore: {enabled:true,value:10000}, cutoffQuality: '' }">&larr; Back to Profiles</a>
+    <a class="back-link" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdOverrideActive = false; cfScoreOverrides = {}; cfScoreOverrideActive = false; pdOverrides = { language: {enabled:true,value:'Original'}, upgradeAllowed: {enabled:true,value:true}, minFormatScore: {enabled:true,value:0}, minUpgradeFormatScore: {enabled:true,value:1}, cutoffFormatScore: {enabled:true,value:10000}, cutoffQuality: '' }">&larr; Back to Profiles</a>
 
     <div style="margin-top:16px" x-show="profileDetail">
       <!-- Sync result banner -->
@@ -2643,8 +2650,12 @@
             </template>
             <template x-if="pdOverrideActive">
               <div style="display:flex;gap:6px">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#d29922" title="Enable per-CF score editing on optional CFs">
+                  <input type="checkbox" x-model="cfScoreOverrideActive" style="accent-color:#d29922">
+                  CF scores
+                </label>
                 <button class="btn" style="font-size:11px;padding:3px 10px;border-color:#d29922;color:#d29922"
-                        @click="const p = profileDetail.detail.profile; pdOverrides.language = {enabled:true,value:p.language||'Original'}; pdOverrides.upgradeAllowed = {enabled:true,value:p.upgradeAllowed??true}; pdOverrides.minFormatScore = {enabled:true,value:p.minFormatScore??0}; pdOverrides.minUpgradeFormatScore = {enabled:true,value:p.minUpgradeFormatScore??1}; pdOverrides.cutoffFormatScore = {enabled:true,value:p.cutoffFormatScore||p.cutoffScore||10000}; pdOverrides.cutoffQuality = p.cutoff||''">Reset to TRaSH</button>
+                        @click="const p = profileDetail.detail.profile; pdOverrides.language = {enabled:true,value:p.language||'Original'}; pdOverrides.upgradeAllowed = {enabled:true,value:p.upgradeAllowed??true}; pdOverrides.minFormatScore = {enabled:true,value:p.minFormatScore??0}; pdOverrides.minUpgradeFormatScore = {enabled:true,value:p.minUpgradeFormatScore??1}; pdOverrides.cutoffFormatScore = {enabled:true,value:p.cutoffFormatScore||p.cutoffScore||10000}; pdOverrides.cutoffQuality = p.cutoff||''; cfScoreOverrides = {}; cfScoreOverrideActive = false">Reset to TRaSH</button>
                 <button class="btn" style="font-size:11px;padding:3px 10px" @click="pdFinishOverrides()">Done</button>
               </div>
             </template>
@@ -2859,9 +2870,20 @@
                         <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
                         <span class="cf-default-badge" x-show="cf.default">recommended</span>
                       </div>
-                      <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                        <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
-                      </div>
+                      <!-- Score: editable for optional CFs when score override active -->
+                      <template x-if="cfScoreOverrideActive && !cf.required && selectedOptionalCFs[cf.trashId]">
+                        <div style="flex-shrink:0">
+                          <input type="number" class="pb-score-input" :class="cfScoreOverrides[cf.trashId] !== undefined ? 'overridden' : ''"
+                                 :value="cfScoreOverrides[cf.trashId] ?? cf.score ?? 0"
+                                 @change="const v = parseInt($event.target.value) || 0; if (v === (cf.score ?? 0)) { const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [cf.trashId]: v}; }"
+                                 style="width:65px">
+                        </div>
+                      </template>
+                      <template x-if="!(cfScoreOverrideActive && !cf.required && selectedOptionalCFs[cf.trashId])">
+                        <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                          <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
+                        </div>
+                      </template>
                     </div>
                   </template>
                 </div>
@@ -3242,7 +3264,8 @@
       </div>
       <div class="form-group">
         <label>API Key</label>
-        <input class="input" x-model="instanceForm.apiKey" placeholder="Radarr/Sonarr API key" type="password">
+        <input class="input" x-model="instanceForm.apiKey" :placeholder="editingInstance ? 'Leave empty to keep current key' : 'Radarr/Sonarr API key'" :type="editingInstance && !instanceForm.apiKey ? 'text' : 'password'">
+        <div x-show="editingInstance && !instanceForm.apiKey" style="font-size:11px;color:#8b949e;margin-top:4px">API key is saved — leave empty to keep it, or enter a new one to replace it.</div>
       </div>
       <!-- Test result -->
       <div x-show="modalTestResult !== null">
@@ -3439,34 +3462,36 @@
           <div x-show="syncPreview?.error" style="color:#f47067" x-text="syncPreview?.error"></div>
         </div>
       </div>
-      <!-- Sync behavior rules (update mode only) -->
-      <div x-show="syncMode === 'update'" style="margin-bottom:12px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+      <!-- Sync behavior rules -->
+      <div style="margin-bottom:12px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px">
         <div style="font-size:12px;font-weight:600;color:#e1e4e8;margin-bottom:8px">Custom Formats</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <label style="font-size:11px;color:#8b949e;min-width:52px">Add</label>
-            <select class="input" x-model="syncForm.behavior.addMode" style="font-size:12px;flex:1" @change="fetchSyncPreview()">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Add</label>
+            <select class="input" x-model="syncForm.behavior.addMode" style="font-size:12px;width:100%" @change="fetchSyncPreview()">
               <option value="add_missing">Automatically add any missing formats</option>
               <option value="add_new">Automatically add new formats</option>
               <option value="do_not_add">Do not add any formats</option>
             </select>
+            <div style="font-size:10px;color:#6e7681;margin-top:3px" x-text="syncForm.behavior.addMode === 'add_missing' ? 'Creates all CFs from the TRaSH profile that don\'t exist in Arr yet.' : syncForm.behavior.addMode === 'add_new' ? 'Only creates CFs that were added to the TRaSH profile since your last sync.' : 'No CFs will be created. Only scores on existing CFs will be updated.'"></div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <label style="font-size:11px;color:#8b949e;min-width:52px">Scores</label>
-            <select class="input" x-model="syncForm.behavior.removeMode" style="font-size:12px;flex:1" @change="fetchSyncPreview()">
+          <div>
+            <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Scores</label>
+            <select class="input" x-model="syncForm.behavior.removeMode" style="font-size:12px;width:100%" @change="fetchSyncPreview()">
               <option value="remove_custom">Enforce TRaSH scores</option>
               <option value="allow_custom">Allow custom scores</option>
             </select>
+            <div style="font-size:10px;color:#6e7681;margin-top:3px" x-text="syncForm.behavior.removeMode === 'remove_custom' ? 'All CF scores will be set to TRaSH recommended values, overwriting any manual changes.' : 'CFs with manually changed scores in Arr will be skipped — only default or unset scores are updated.'"></div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <label style="font-size:11px;color:#8b949e;min-width:52px">Reset</label>
-            <select class="input" x-model="syncForm.behavior.resetMode" style="font-size:12px;flex:1" @change="fetchSyncPreview()">
+          <div x-show="syncMode === 'update'">
+            <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Reset</label>
+            <select class="input" x-model="syncForm.behavior.resetMode" style="font-size:12px;width:100%" @change="fetchSyncPreview()">
               <option value="reset_to_zero">Reset unsynced scores to 0</option>
               <option value="do_not_adjust">Do not adjust existing scores</option>
             </select>
+            <div style="font-size:10px;color:#6e7681;margin-top:3px" x-text="syncForm.behavior.resetMode === 'reset_to_zero' ? 'CFs not included in this sync will have their scores reset to 0.' : 'Scores on CFs not included in this sync will be left unchanged.'"></div>
           </div>
         </div>
-        <div style="font-size:10px;color:#484f58;margin-top:6px">Add: when to create missing CFs &bull; Scores: whether to overwrite manual changes &bull; Reset: what happens to scores of removed CFs</div>
       </div>
 
       <!-- Auto-sync toggle -->
@@ -3888,12 +3913,12 @@
   </div>
 
   <!-- Toast notifications -->
-  <div style="position:fixed;top:16px;right:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:400px">
+  <div style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:450px;width:100%">
     <template x-for="toast in toasts" :key="toast.id">
-      <div style="padding:10px 14px;border-radius:6px;font-size:12px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,0.4);cursor:pointer;animation:fadeIn 0.2s"
-           :style="toast.type === 'warning' ? 'background:#2d1b00;border:1px solid #d29922;color:#e3b341' : toast.type === 'error' ? 'background:#3d1f1f;border:1px solid #f85149;color:#f85149' : 'background:#0d2818;border:1px solid #238636;color:#3fb950'"
-           @click="toasts = toasts.filter(t => t.id !== toast.id)"
-           x-text="toast.message">
+      <div :style="'position:relative;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,0.4);cursor:pointer;animation:fadeIn 0.2s;overflow:hidden;' + (toast.type === 'warning' ? 'background:#2d1b00;border:1px solid #d29922;color:#e3b341' : toast.type === 'error' ? 'background:#3d1f1f;border:1px solid #f85149;color:#f85149' : 'background:#0d2818;border:1px solid #238636;color:#3fb950')"
+           @click="toasts = toasts.filter(t => t.id !== toast.id)">
+        <span style="white-space:pre-line" x-text="toast.message"></span>
+        <div :style="'position:absolute;bottom:0;left:0;height:3px;border-radius:0 0 8px 8px;opacity:0.6;background:currentColor;animation:toastProgress ' + (toast.duration || 8000) + 'ms linear forwards'"></div>
       </div>
     </template>
   </div>
@@ -4330,6 +4355,8 @@ function clonarr() {
     selectedOptionalCFs: {},
     // Profile detail overrides (toggle OFF = use custom value instead of TRaSH)
     pdOverrideActive: false, // whether override editing mode is open
+    cfScoreOverrides: {}, // per-CF score overrides { trashId: score }
+    cfScoreOverrideActive: false, // whether CF score editing is enabled
     pdOverrides: {
       language: { enabled: true, value: 'Original' },
       upgradeAllowed: { enabled: true, value: true },
@@ -7002,11 +7029,14 @@ function clonarr() {
         if (!customByCat[cat]) customByCat[cat] = [];
         customByCat[cat].push({ trashId: ccf.id, name: ccf.name, description: '', score: undefined, isCustom: true });
       }
-      for (const [cat, cfs] of Object.entries(customByCat)) {
-        if (!catMap[cat]) catMap[cat] = { category: cat, groups: [], totalCFs: 0 };
-        cfs.sort((a, b) => a.name.localeCompare(b.name));
-        catMap[cat].groups.push({ name: cat + ' (Custom)', shortName: 'Custom', cfs });
-        catMap[cat].totalCFs += cfs.length;
+      // Always group custom CFs into a dedicated "Custom" category with amber styling
+      const allCustomCFs = [];
+      for (const cfs of Object.values(customByCat)) {
+        allCustomCFs.push(...cfs);
+      }
+      if (allCustomCFs.length > 0) {
+        allCustomCFs.sort((a, b) => a.name.localeCompare(b.name));
+        catMap['Custom'] = { category: 'Custom', groups: [{ name: 'Custom Formats', shortName: 'Custom Formats', cfs: allCustomCFs }], totalCFs: allCustomCFs.length, isCustom: true };
       }
 
       // Sort categories
@@ -7015,7 +7045,7 @@ function clonarr() {
                        'Release Groups': 8, 'Unwanted': 9, 'Movie Versions': 10, 'Anime': 11,
                        'French Audio Version': 12, 'French HQ Source Groups': 13,
                        'German Source Groups': 14, 'German Miscellaneous': 15,
-                       'Language Profiles': 16, 'SQP': 17, 'Custom': 18, 'Other': 99 };
+                       'Language Profiles': 16, 'SQP': 17, 'Other': 18, 'Custom': 99 };
       return Object.values(catMap).sort((a, b) => (order[a.category] ?? 50) - (order[b.category] ?? 50));
     },
 
@@ -7975,15 +8005,13 @@ function clonarr() {
     groupedProfiles(type) {
       const profiles = this.trashProfiles[type] || [];
       const groups = {};
+      const order = { 'Standard': 0, 'Anime': 1, 'French': 2, 'German': 3, 'SQP': 99 };
       for (const p of profiles) {
         const g = p.groupName || 'Other';
         if (!groups[g]) groups[g] = { name: g, profiles: [] };
         groups[g].profiles.push(p);
       }
-      const order = { 'SQP': 0, 'Standard': 1, 'Anime': 2 };
-      return Object.values(groups).sort((a, b) => {
-        return (order[a.name] ?? 99) - (order[b.name] ?? 99);
-      });
+      return Object.values(groups).sort((a, b) => (order[a.name] ?? 50) - (order[b.name] ?? 50));
     },
 
     toggleInstance(id) {
@@ -8095,11 +8123,18 @@ function clonarr() {
       }
       this.showInstanceModal = false;
       await this.loadInstances();
+      this.testAllInstances();
+      // Reload sync data in case orphaned data was migrated
+      await this.loadAutoSyncRules();
+      for (const inst of this.instances) {
+        await this.loadInstanceProfiles(inst);
+        await this.loadSyncHistory(inst.id);
+      }
     },
 
     async deleteInstance(inst) {
       const confirmed = await new Promise(resolve => {
-        this.confirmModal = { show: true, title: 'Delete Instance', message: `Delete ${inst.name}? All sync history and auto-sync rules for this instance will also be removed.`, confirmLabel: 'Delete', onConfirm: () => resolve(true), onCancel: () => resolve(false) };
+        this.confirmModal = { show: true, title: 'Delete Instance', message: `Delete ${inst.name}? Sync history and rules will be preserved and restored if you re-add the instance.`, confirmLabel: 'Delete', onConfirm: () => resolve(true), onCancel: () => resolve(false) };
       });
       if (!confirmed) return;
       const r = await fetch(`/api/instances/${inst.id}`, { method: 'DELETE' });
@@ -8108,6 +8143,9 @@ function clonarr() {
         alert(err.error || 'Failed to delete instance');
         return;
       }
+      // Clear cached status for deleted instance
+      const { [inst.id]: _, ...restStatus } = this.instanceStatus;
+      this.instanceStatus = restStatus;
       await this.loadInstances();
     },
 
@@ -8340,7 +8378,7 @@ function clonarr() {
 
     showToast(message, type = 'info', duration = 8000) {
       const id = Date.now() + Math.random();
-      this.toasts = [...this.toasts, { id, message, type }];
+      this.toasts = [...this.toasts, { id, message, type, duration }];
       setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, duration);
     },
 
@@ -8350,7 +8388,7 @@ function clonarr() {
         if (!r.ok) return;
         const events = await r.json();
         for (const ev of events) {
-          this.showToast(`"${ev.profileName}" removed — profile was deleted from ${ev.instanceName}`, 'warning', 10000);
+          this.showToast(`"${ev.profileName}" — deleted in ${ev.instanceName}, sync rule removed`, 'warning', 6000);
         }
       } catch (e) { /* ignore */ }
     },
@@ -8415,6 +8453,8 @@ function clonarr() {
         if (detail.profile) {
           const p = detail.profile;
           this.pdOverrideActive = false;
+          this.cfScoreOverrides = {};
+          this.cfScoreOverrideActive = false;
           this.pdOverrides = {
             language: { enabled: true, value: p.language || 'Original' },
             upgradeAllowed: { enabled: true, value: p.upgradeAllowed ?? true },
@@ -8682,14 +8722,14 @@ function clonarr() {
 
     getTrashProfileGroups(appType) {
       const profiles = this.trashProfiles[appType] || [];
+      const order = { 'Standard': 0, 'Anime': 1, 'French': 2, 'German': 3, 'SQP': 99 };
       const seen = new Set();
       const groups = [];
       for (const p of profiles) {
         const gn = p.groupName || 'Other';
         if (!seen.has(gn)) { seen.add(gn); groups.push(gn); }
       }
-      const order = { 'SQP': 0, 'Standard': 1, 'Anime': 2 };
-      return groups.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
+      return groups.sort((a, b) => (order[a] ?? 50) - (order[b] ?? 50));
     },
 
     getTrashProfilesByGroup(appType, groupName) {
@@ -9114,6 +9154,8 @@ function clonarr() {
       const defaultCutoff = this.profileDetail?.detail?.profile?.cutoff || '';
       if (ov.cutoffQuality && ov.cutoffQuality !== defaultCutoff) { overrides.cutoffQuality = ov.cutoffQuality; hasOverrides = true; }
       if (hasOverrides) body.overrides = overrides;
+      // Per-CF score overrides
+      if (Object.keys(this.cfScoreOverrides).length > 0) body.scoreOverrides = this.cfScoreOverrides;
       // Sync behavior rules
       if (this.syncForm.behavior) body.behavior = this.syncForm.behavior;
       return body;
@@ -9206,7 +9248,8 @@ function clonarr() {
             selectedCFs: this.getSelectedCFIds(),
             arrProfileId: arrId,
             behavior: this.syncForm.behavior || existingRule.behavior,
-            overrides: syncBody.overrides || null
+            overrides: syncBody.overrides || null,
+            scoreOverrides: syncBody.scoreOverrides || null
           };
           try {
             await fetch(`/api/auto-sync/rules/${existingRule.id}`, {
@@ -9227,6 +9270,55 @@ function clonarr() {
     async applySync() {
       if (!this.profileDetail || !this.syncForm.instanceId) return;
       await this.startApply();
+    },
+
+    // --- Quick Sync ---
+
+    async quickSync(inst, sh, silent = false) {
+      const body = {
+        instanceId: inst.id,
+        profileTrashId: sh.profileTrashId,
+        arrProfileId: sh.arrProfileId,
+        selectedCFs: Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]),
+        scoreOverrides: sh.scoreOverrides || null,
+        overrides: sh.overrides || null,
+        behavior: sh.behavior || null
+      };
+      try {
+        const r = await fetch('/api/sync/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await r.json();
+        if (result.errors?.length) {
+          if (!silent) this.showToast(`"${sh.profileName}" sync failed: ${result.errors[0]}`, 'error', 8000);
+          return { ok: false, name: sh.profileName, error: result.errors[0] };
+        }
+        const parts = [];
+        if (result.cfsCreated) parts.push(`${result.cfsCreated} CFs created`);
+        if (result.cfsUpdated) parts.push(`${result.cfsUpdated} CFs updated`);
+        if (result.scoresUpdated) parts.push(`${result.scoresUpdated} scores`);
+        const summary = parts.length ? parts.join(', ') : 'no changes';
+        if (!silent) this.showToast(`"${sh.profileName}" synced — ${summary}`, 'info', 6000);
+        await this.loadSyncHistory(inst.id);
+        return { ok: true, name: sh.profileName, summary };
+      } catch (e) {
+        if (!silent) this.showToast(`Sync error: ${e.message}`, 'error', 8000);
+        return { ok: false, name: sh.profileName, error: e.message };
+      }
+    },
+
+    async syncAllForInstance(inst) {
+      const entries = this.syncHistory[inst.id] || [];
+      if (!entries.length) return;
+      const results = [];
+      for (const sh of entries) {
+        results.push(await this.quickSync(inst, sh, true));
+      }
+      const lines = results.map(r => r.ok ? `${r.name} — ${r.summary}` : `${r.name} — FAILED: ${r.error}`);
+      const errors = results.filter(r => !r.ok).length;
+      this.showToast(`Sync All (${inst.name}):\n${lines.join('\n')}`, errors > 0 ? 'warning' : 'info', 8000);
     },
 
     // --- Sync History ---
@@ -9282,6 +9374,11 @@ function clonarr() {
         if (ov.cutoffFormatScore !== undefined) { this.pdOverrides.cutoffFormatScore.enabled = false; this.pdOverrides.cutoffFormatScore.value = ov.cutoffFormatScore; }
         if (ov.upgradeAllowed !== undefined) { this.pdOverrides.upgradeAllowed.enabled = false; this.pdOverrides.upgradeAllowed.value = ov.upgradeAllowed; }
         if (ov.cutoffQuality !== undefined) { this.pdOverrides.cutoffQuality = ov.cutoffQuality; }
+      }
+      // Restore per-CF score overrides
+      if (sh.scoreOverrides && Object.keys(sh.scoreOverrides).length > 0) {
+        this.cfScoreOverrides = { ...sh.scoreOverrides };
+        this.cfScoreOverrideActive = true;
       }
       // Restore behavior from sync history
       if (sh.behavior) {
@@ -9384,6 +9481,7 @@ function clonarr() {
           selectedCFs: this.getSelectedCFIds(),
           behavior: this.syncForm.behavior,
           overrides: syncBody.overrides || null,
+          scoreOverrides: syncBody.scoreOverrides || null,
           arrProfileId: parseInt(this.syncForm.arrProfileId) || existing.arrProfileId
         };
         try {
@@ -9407,7 +9505,8 @@ function clonarr() {
           arrProfileId: parseInt(this.syncForm.arrProfileId) || 0,
           selectedCFs: this.getSelectedCFIds(),
           behavior: this.syncForm.behavior,
-          overrides: syncBody.overrides || null
+          overrides: syncBody.overrides || null,
+          scoreOverrides: syncBody.scoreOverrides || null
         };
         try {
           const r = await fetch('/api/auto-sync/rules', {

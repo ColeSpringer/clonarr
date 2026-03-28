@@ -32,6 +32,29 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// decodeJSON reads and decodes JSON from the request body into T, enforcing a size limit.
+// Returns the decoded value and true on success, or writes an error response and returns false.
+func decodeJSON[T any](w http.ResponseWriter, r *http.Request, maxBytes int64) (T, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	var v T
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		writeError(w, 400, "Invalid JSON")
+		return v, false
+	}
+	return v, true
+}
+
+// requireInstance looks up an instance by the "id" path parameter.
+// Returns the instance and true on success, or writes an error response and returns false.
+func (app *App) requireInstance(w http.ResponseWriter, r *http.Request) (Instance, bool) {
+	id := r.PathValue("id")
+	inst, ok := app.config.GetInstance(id)
+	if !ok {
+		writeError(w, 404, "Instance not found")
+	}
+	return inst, ok
+}
+
 // --- Config ---
 
 func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
@@ -329,10 +352,8 @@ func (app *App) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 // --- Instance Data (profiles, CFs from Arr) ---
 
 func (app *App) handleInstanceProfiles(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
@@ -347,10 +368,8 @@ func (app *App) handleInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 
 // handleQualityDefinitions returns quality names from an Arr instance for the quality builder.
 func (app *App) handleQualityDefinitions(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 	client := NewArrClient(inst.URL, inst.APIKey)
@@ -544,10 +563,8 @@ func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *App) handleInstanceLanguages(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
@@ -565,21 +582,17 @@ func (app *App) handleInstanceLanguages(w http.ResponseWriter, r *http.Request) 
 // Mode 1 (profiles): profileIds selects profiles; CFs with score≠0 auto-included; extraCfIds adds score=0 CFs.
 // Mode 2 (CFs only): cfIds selects specific CFs without profiles.
 func (app *App) handleInstanceBackup(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
-	var req struct {
+	req, ok := decodeJSON[struct {
 		ProfileIDs []int `json:"profileIds"`
 		ExtraCFIDs []int `json:"extraCfIds"`
 		CFIDs      []int `json:"cfIds"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, 400, "Invalid request body")
+	}](w, r, 1<<20)
+	if !ok {
 		return
 	}
 	if len(req.ProfileIDs) == 0 && len(req.CFIDs) == 0 {
@@ -662,22 +675,18 @@ func (app *App) handleInstanceBackup(w http.ResponseWriter, r *http.Request) {
 // POST body: the backup JSON with profiles + customFormats arrays.
 // dryRun query param: if "true", returns a preview without applying.
 func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MiB
 	dryRun := r.URL.Query().Get("dryRun") == "true"
 
-	var backup struct {
+	backup, ok := decodeJSON[struct {
 		Profiles      []ArrQualityProfile `json:"profiles"`
 		CustomFormats []ArrCF             `json:"customFormats"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&backup); err != nil {
-		writeError(w, 400, "Invalid backup JSON: "+err.Error())
+	}](w, r, 10<<20)
+	if !ok {
 		return
 	}
 
@@ -813,10 +822,8 @@ func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) handleInstanceCFs(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
@@ -830,10 +837,8 @@ func (app *App) handleInstanceCFs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) handleInstanceQualitySizes(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
@@ -847,10 +852,8 @@ func (app *App) handleInstanceQualitySizes(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *App) handleGetInstanceNaming(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
@@ -864,15 +867,12 @@ func (app *App) handleGetInstanceNaming(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *App) handleApplyNaming(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	inst, ok := app.config.GetInstance(id)
+	inst, ok := app.requireInstance(w, r)
 	if !ok {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var req struct {
+	req, ok := decodeJSON[struct {
 		Preset  string `json:"preset"`           // convenience: e.g. "plex-tmdb" — resolves from TRaSH data
 		Folder  string `json:"folder"`
 		File    string `json:"file"`
@@ -881,9 +881,8 @@ func (app *App) handleApplyNaming(w http.ResponseWriter, r *http.Request) {
 		Daily   string `json:"daily,omitempty"`
 		Anime   string `json:"anime,omitempty"`
 		Special string `json:"special,omitempty"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, 400, "Invalid request body")
+	}](w, r, 1<<20)
+	if !ok {
 		return
 	}
 
@@ -996,13 +995,11 @@ func (app *App) handleSyncQualitySizes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB limit
-	var req struct {
+	req, ok2 := decodeJSON[struct {
 		Definitions []ArrQualityDefinition `json:"definitions"`
 		Type        string                 `json:"type"` // convenience: "movie", "anime", etc — builds definitions from TRaSH data
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, 400, "Invalid request body")
+	}](w, r, 1<<20)
+	if !ok2 {
 		return
 	}
 
@@ -2183,7 +2180,7 @@ func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := app.profiles.Add(profiles); err != nil {
+	if _, err := app.profiles.Add(profiles); err != nil {
 		writeError(w, 500, "failed to save: "+err.Error())
 		return
 	}
@@ -2268,7 +2265,7 @@ func (app *App) handleCreateCustomProfile(w http.ResponseWriter, r *http.Request
 	p.Source = "custom"
 	p.ImportedAt = time.Now().UTC().Format(time.RFC3339)
 
-	if err := app.profiles.Add([]ImportedProfile{p}); err != nil {
+	if _, err := app.profiles.Add([]ImportedProfile{p}); err != nil {
 		writeError(w, 500, "Failed to save: "+err.Error())
 		return
 	}
@@ -2437,6 +2434,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 		ArrProfileName: plan.ArrProfileName,
 		SyncedCFs:      allCFIDs,
 		SelectedCFs:    selectedCFMap,
+		ScoreOverrides: req.ScoreOverrides,
 		Overrides:      req.Overrides,
 		Behavior:       req.Behavior,
 		CFsCreated:     result.CFsCreated,
@@ -2490,6 +2488,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 			ImportedProfileID: req.ImportedProfileID,
 			ArrProfileID:      arrID,
 			SelectedCFs:       req.SelectedCFs,
+			ScoreOverrides:    req.ScoreOverrides,
 			Behavior:          req.Behavior,
 			Overrides:         req.Overrides,
 		})
@@ -2558,7 +2557,7 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 					}
 					cleanedRules = append(cleanedRules, r)
 				}
-				if len(events) > 0 {
+				if len(events) > 0 || len(cleanedRules) < len(cfg.AutoSync.Rules) {
 					cfg.SyncHistory = cleanedHistory
 					cfg.AutoSync.Rules = cleanedRules
 				}

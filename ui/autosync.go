@@ -86,6 +86,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		ProfileTrashID: rule.TrashProfileID,
 		ArrProfileID:   rule.ArrProfileID,
 		SelectedCFs:    rule.SelectedCFs,
+		ScoreOverrides: rule.ScoreOverrides,
 		Behavior:       rule.Behavior,
 		Overrides:      rule.Overrides,
 	}
@@ -117,6 +118,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		if isConnectionError(err) {
 			friendlyMsg := inst.Name + " is not reachable — will retry on next sync"
 			log.Printf("Auto-sync: rule %s — %s is not reachable", rule.ID, inst.Name)
+			app.debugLog.Logf(LogAutoSync, "Rule %s: %s is not reachable: %v", rule.ID, inst.Name, err)
 			app.updateAutoSyncRuleError(rule.ID, friendlyMsg)
 			profileName := rule.TrashProfileID
 			if p := findProfile(ad, rule.TrashProfileID); p != nil { profileName = p.Name }
@@ -158,6 +160,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		if isConnectionError(err) {
 			friendlyMsg := inst.Name + " is not reachable — will retry on next sync"
 			log.Printf("Auto-sync: rule %s apply — %s is not reachable", rule.ID, inst.Name)
+			app.debugLog.Logf(LogAutoSync, "Rule %s: %s is not reachable during apply: %v", rule.ID, inst.Name, err)
 			app.updateAutoSyncRuleError(rule.ID, friendlyMsg)
 			app.notifyAutoSync(rule, inst, plan.ProfileName, nil, fmt.Errorf("%s", friendlyMsg))
 			return
@@ -195,6 +198,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 		ArrProfileName: plan.ArrProfileName,
 		SyncedCFs:      allCFIDs,
 		SelectedCFs:    selectedCFMap,
+		ScoreOverrides: rule.ScoreOverrides,
 		Overrides:      rule.Overrides,
 		Behavior:       rule.Behavior,
 		CFsCreated:     result.CFsCreated,
@@ -300,7 +304,7 @@ func (app *App) notifyCleanup(events []CleanupEvent) {
 
 	description := ""
 	for _, ev := range events {
-		description += fmt.Sprintf("**%s** removed from %s — profile was deleted in Arr\n", ev.ProfileName, ev.InstanceName)
+		description += fmt.Sprintf("**%s** — deleted in %s, sync rule removed\n", ev.ProfileName, ev.InstanceName)
 	}
 
 	embed := map[string]any{

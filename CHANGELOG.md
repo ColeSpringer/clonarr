@@ -1,28 +1,42 @@
 # Changelog
 
-## v1.6.1-beta
+## v1.7.0-beta
 
 ### Features
-- **Auto-sync rule on every sync** — Syncing a profile now always creates an auto-sync rule (disabled by default). Toggle on/off directly from Sync Rules & History.
-- **Multiple profiles from same TRaSH source** — Same TRaSH profile (e.g. WEB-1080p) can now be synced to multiple Arr profiles on the same instance with different overrides and CF selections.
-- **Toast notifications** — Non-intrusive UI notifications for cleanup events (deleted profiles).
-- **Discord cleanup notifications** — Amber Discord embed when synced profiles are auto-removed because the Arr profile was deleted.
-- **Friendly connection errors** — "Sonarr is not reachable — will retry on next sync" instead of raw TCP error traces in Discord and UI.
+- **Per-CF score overrides** — Override individual CF scores in sync mode. Enable "CF scores" in Customize overrides to edit scores on optional CFs. Overrides persist through auto-sync and resync.
+- **Edit/Sync/Sync All buttons** — Sync Rules now has Edit (open profile), Sync (one-click resync), and Sync All (resync all profiles on instance) with toast result summary.
+- **Custom CF amber grouping** — Custom CFs displayed in a dedicated amber-styled "Custom" category in CF browser.
+- **Sync behavior in create mode** — Add and Scores dropdowns now visible when creating new profiles. Dynamic descriptions explain each option.
+- **Profile group sorting** — Standard → Anime → French → German → SQP. New TRaSH groups appear before SQP.
+- **Toast notifications** — Centered top, progress bar, auto-dismiss. Used for sync results, cleanup events, and errors.
+- **Auto-sync rule on every sync** — Syncing a profile always creates an auto-sync rule (disabled by default). Toggle on/off directly from Sync Rules.
+- **Multiple profiles from same TRaSH source** — Same TRaSH profile synced to multiple Arr profiles with different overrides and CF selections.
+- **Discord cleanup notifications** — Amber embed when synced profiles are auto-removed because the Arr profile was deleted.
+- **Friendly connection errors** — User-friendly messages instead of raw TCP errors in Discord and Settings.
+- **Instance data survives delete+recreate** — Sync history and rules preserved when instance is removed and re-added.
+
+### Refactoring
+- **Generic FileStore[T]** — Replaced duplicated CRUD in profileStore (239→14 lines) and customCFStore (248→76 lines).
+- **Handler helpers** — `decodeJSON` and `requireInstance` reduce boilerplate across 10+ handlers.
+- **22 unit tests** — Coverage for sync behavior, field conversion, score resolution, and FileStore operations.
 
 ### Bug fixes
-- **Cutoff error on resync** — Cutoff was resolved against old quality items before rebuild, causing "Cutoff must be an allowed quality" errors on resync.
-- **Min Score / overrides not syncing** — Overrides (Min Score, Cutoff Score, Min Upgrade, Language) were not applied in create mode, not saved in auto-sync rules, and not sent when only profile settings changed.
-- **Resync didn't restore settings** — Optional CFs, overrides, behavior, and target profile were not restored from sync history. Groups with only required CFs (e.g. Season Packs) were skipped.
-- **Deleted auto-sync rule still running** — Race condition where a deleted rule could still execute during a pull.
-- **Same TRaSH profile overwrote sync history** — Syncing a second profile from the same TRaSH source replaced the first profile's sync history and auto-sync rule.
-- **Stale sync history after profile deletion** — Deleting a profile in Arr left orphaned sync history and auto-sync rules. Now auto-cleaned on pull and page load.
-- **Auto-sync rule stale after profile recreate** — Rule now updated with new Arr profile ID when profile is deleted and recreated.
-- **Keep List search broken after first entry** — Adding one CF (e.g. IMAX) prevented finding similar CFs (IMAX Enhanced) in subsequent searches.
-- **File Naming sync had no feedback** — Sync button now shows "Syncing..." → "✓ Synced".
-- **Remove sync entry used browser popup** — All confirmation dialogs now use consistent in-app modal.
-- **Resync selected wrong Arr profile** — When multiple profiles share the same TRaSH source, resync now correctly selects the target profile.
-- **Auto-sync toggle didn't update without refresh** — Toggle in Sync Rules now updates immediately.
-- **Connection errors spammed Discord** — Unreachable instances no longer send repeated Discord notifications. Friendly message shown once on startup or new TRaSH changes.
+- **Cutoff error on resync** — Cutoff resolved against stale quality items. Now resolved after rebuild.
+- **Min Score / overrides not syncing** — Overrides not applied in create mode, not saved in auto-sync rules, not sent when only profile settings changed.
+- **Resync didn't restore settings** — Optional CFs, overrides, behavior, target profile, and score overrides now fully restored.
+- **SnapshotAppData missing Naming deep-copy** — Shared pointer could cause data corruption on concurrent access.
+- **Custom CF field format** — TRaSH `{"value":X}` now converted to Arr array format on write, preventing HTTP 400 errors.
+- **Deleted auto-sync rule still running** — Race condition fix with fresh config re-check before execution.
+- **Same TRaSH profile overwrote sync history** — Rekeyed from trashProfileId to arrProfileId throughout.
+- **Stale sync history after profile deletion** — Auto-cleaned on pull, page load, with Discord notification.
+- **Create mode contaminated existing profile** — syncForm.arrProfileId now reset when switching to create mode.
+- **Keep List search, File Naming feedback, confirm modals** — Various UI fixes from user reports.
+- **Connection errors spammed Discord** — Friendly message, only on startup or new TRaSH changes.
+- **API key field appeared empty on edit** — Now shows "Leave empty to keep current key".
+
+## v1.6.1-beta
+
+(Superseded by v1.7.0-beta — not released separately)
 
 ## v1.6.0-beta
 

@@ -62,12 +62,13 @@ type SyncSummary struct {
 
 // SyncRequest is the input for a dry-run or apply operation.
 type SyncRequest struct {
-	InstanceID        string   `json:"instanceId"`
-	ProfileTrashID    string   `json:"profileTrashId"`
-	ImportedProfileID string   `json:"importedProfileId,omitempty"` // alternative: sync from imported/custom profile
-	ArrProfileID      int      `json:"arrProfileId"`                // target Arr profile to set scores on (0 = create new)
-	ProfileName       string   `json:"profileName"`                 // custom name for new profile (optional)
-	SelectedCFs       []string `json:"selectedCFs"`                 // optional: additional CF trash_ids from groups
+	InstanceID        string         `json:"instanceId"`
+	ProfileTrashID    string         `json:"profileTrashId"`
+	ImportedProfileID string         `json:"importedProfileId,omitempty"` // alternative: sync from imported/custom profile
+	ArrProfileID      int            `json:"arrProfileId"`                // target Arr profile to set scores on (0 = create new)
+	ProfileName       string         `json:"profileName"`                 // custom name for new profile (optional)
+	SelectedCFs       []string       `json:"selectedCFs"`                 // optional: additional CF trash_ids from groups
+	ScoreOverrides    map[string]int `json:"scoreOverrides,omitempty"`    // per-CF score overrides (trash_id → score)
 	// Profile setting overrides (nil = use TRaSH default)
 	Overrides *SyncOverrides `json:"overrides,omitempty"`
 	// Sync behavior rules (nil = defaults: add_missing, remove_custom, reset_to_zero)
@@ -160,6 +161,16 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 
 	if scoreCtx == "" {
 		scoreCtx = "default"
+	}
+
+	// Merge per-CF score overrides from request
+	if len(req.ScoreOverrides) > 0 {
+		if cfScoreOverrides == nil {
+			cfScoreOverrides = make(map[string]int)
+		}
+		for k, v := range req.ScoreOverrides {
+			cfScoreOverrides[k] = v
+		}
 	}
 
 	// Resolve sync behavior rules
@@ -530,6 +541,16 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 
 	if scoreCtx == "" {
 		scoreCtx = "default"
+	}
+
+	// Merge per-CF score overrides from request
+	if len(req.ScoreOverrides) > 0 {
+		if cfScoreOverrides == nil {
+			cfScoreOverrides = make(map[string]int)
+		}
+		for k, v := range req.ScoreOverrides {
+			cfScoreOverrides[k] = v
+		}
 	}
 
 	client := NewArrClient(instance.URL, instance.APIKey)
@@ -1319,10 +1340,21 @@ func findProfile(ad *AppData, trashID string) *TrashQualityProfile {
 
 // customCFToArr converts a CustomCF (specs already in Arr format) to an ArrCF for create/update.
 func customCFToArr(cf *CustomCF) *ArrCF {
+	// Convert specification fields to Arr format (TRaSH {"value":X} → Arr [{"name":"value","value":X}])
+	specs := make([]ArrSpecification, len(cf.Specifications))
+	for i, spec := range cf.Specifications {
+		specs[i] = ArrSpecification{
+			Name:           spec.Name,
+			Implementation: spec.Implementation,
+			Negate:         spec.Negate,
+			Required:       spec.Required,
+			Fields:         convertFieldsToArr(spec.Fields),
+		}
+	}
 	return &ArrCF{
 		Name:                            cf.Name,
 		IncludeCustomFormatWhenRenaming: cf.IncludeInRename,
-		Specifications:                  cf.Specifications,
+		Specifications:                  specs,
 	}
 }
 

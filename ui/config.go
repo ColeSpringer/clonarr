@@ -52,6 +52,7 @@ type AutoSyncRule struct {
 	ImportedProfileID string         `json:"importedProfileId,omitempty"`
 	ArrProfileID      int            `json:"arrProfileId"`                // target Arr profile to update
 	SelectedCFs       []string       `json:"selectedCFs,omitempty"`       // user's optional CF selections
+	ScoreOverrides    map[string]int `json:"scoreOverrides,omitempty"`    // per-CF score overrides (trash_id → score)
 	Behavior          *SyncBehavior  `json:"behavior,omitempty"`          // sync behavior rules (nil = defaults)
 	Overrides         *SyncOverrides `json:"overrides,omitempty"`         // user overrides (min score, language, cutoff, etc.)
 	LastSyncCommit    string         `json:"lastSyncCommit,omitempty"`
@@ -115,6 +116,7 @@ type SyncHistoryEntry struct {
 	ArrProfileName string            `json:"arrProfileName"`
 	SyncedCFs      []string          `json:"syncedCFs"`
 	SelectedCFs    map[string]bool   `json:"selectedCFs,omitempty"`
+	ScoreOverrides map[string]int    `json:"scoreOverrides,omitempty"`
 	Overrides      *SyncOverrides    `json:"overrides,omitempty"`
 	Behavior       *SyncBehavior     `json:"behavior,omitempty"`
 	CFsCreated     int               `json:"cfsCreated"`
@@ -223,6 +225,12 @@ func (cs *configStore) Get() Config {
 				cfg.SyncHistory[i].SelectedCFs[k] = v
 			}
 		}
+		if len(sh.ScoreOverrides) > 0 {
+			cfg.SyncHistory[i].ScoreOverrides = make(map[string]int, len(sh.ScoreOverrides))
+			for k, v := range sh.ScoreOverrides {
+				cfg.SyncHistory[i].ScoreOverrides[k] = v
+			}
+		}
 		if sh.Overrides != nil {
 			o := *sh.Overrides
 			cfg.SyncHistory[i].Overrides = &o
@@ -268,6 +276,12 @@ func (cs *configStore) Get() Config {
 				cfg.AutoSync.Rules[i].SelectedCFs = make([]string, len(r.SelectedCFs))
 				copy(cfg.AutoSync.Rules[i].SelectedCFs, r.SelectedCFs)
 			}
+			if len(r.ScoreOverrides) > 0 {
+				cfg.AutoSync.Rules[i].ScoreOverrides = make(map[string]int, len(r.ScoreOverrides))
+				for k, v := range r.ScoreOverrides {
+					cfg.AutoSync.Rules[i].ScoreOverrides[k] = v
+				}
+			}
 			if r.Behavior != nil {
 				b := *r.Behavior
 				cfg.AutoSync.Rules[i].Behavior = &b
@@ -311,10 +325,73 @@ func (cs *configStore) GetInstance(id string) (Instance, bool) {
 }
 
 // AddInstance adds a new instance with a generated ID.
+// If orphaned sync history/rules exist from a deleted instance with the same URL and type,
+// they are migrated to the new instance ID (preserves data across instance re-creation).
 func (cs *configStore) AddInstance(inst Instance) (Instance, error) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	inst.ID = generateID()
+	// Find orphaned data from a deleted instance.
+	// Only migrate if exactly ONE orphan group exists (avoids cross-type contamination).
+	activeIDs := make(map[string]bool)
+	for _, i := range cs.config.Instances {
+		activeIDs[i.ID] = true
+	}
+	orphanIDs := make(map[string]bool)
+	for _, h := range cs.config.SyncHistory {
+		if !activeIDs[h.InstanceID] {
+			orphanIDs[h.InstanceID] = true
+		}
+	}
+	for _, r := range cs.config.AutoSync.Rules {
+		if !activeIDs[r.InstanceID] {
+			orphanIDs[r.InstanceID] = true
+		}
+	}
+	var orphanID string
+	if len(orphanIDs) == 1 {
+		for id := range orphanIDs {
+			orphanID = id
+		}
+	} else if len(orphanIDs) > 1 {
+		log.Printf("Multiple orphaned instances found (%d), skipping migration for safety", len(orphanIDs))
+	}
+	// Migrate orphaned data to new instance
+	if orphanID != "" {
+		for i := range cs.config.SyncHistory {
+			if cs.config.SyncHistory[i].InstanceID == orphanID {
+				cs.config.SyncHistory[i].InstanceID = inst.ID
+			}
+		}
+		for i := range cs.config.AutoSync.Rules {
+			if cs.config.AutoSync.Rules[i].InstanceID == orphanID {
+				cs.config.AutoSync.Rules[i].InstanceID = inst.ID
+			}
+		}
+		// Migrate QS overrides and auto-sync settings
+		if qs, ok := cs.config.QualitySizeOverrides[orphanID]; ok {
+			if cs.config.QualitySizeOverrides == nil {
+				cs.config.QualitySizeOverrides = make(map[string]map[string]QSOverride)
+			}
+			cs.config.QualitySizeOverrides[inst.ID] = qs
+			delete(cs.config.QualitySizeOverrides, orphanID)
+		}
+		if qsa, ok := cs.config.QualitySizeAutoSync[orphanID]; ok {
+			if cs.config.QualitySizeAutoSync == nil {
+				cs.config.QualitySizeAutoSync = make(map[string]QSAutoSync)
+			}
+			cs.config.QualitySizeAutoSync[inst.ID] = qsa
+			delete(cs.config.QualitySizeAutoSync, orphanID)
+		}
+		if ck, ok := cs.config.CleanupKeep[orphanID]; ok {
+			if cs.config.CleanupKeep == nil {
+				cs.config.CleanupKeep = make(map[string][]string)
+			}
+			cs.config.CleanupKeep[inst.ID] = ck
+			delete(cs.config.CleanupKeep, orphanID)
+		}
+		log.Printf("Migrated orphaned data from deleted instance %s to new instance %s (%s)", orphanID, inst.ID, inst.Name)
+	}
 	cs.config.Instances = append(cs.config.Instances, inst)
 	return inst, cs.saveLocked()
 }
@@ -348,26 +425,9 @@ func (cs *configStore) DeleteInstance(id string) error {
 	if !found {
 		return fmt.Errorf("instance %s not found", id)
 	}
-	// Clean up sync history for deleted instance
-	filtered := make([]SyncHistoryEntry, 0, len(cs.config.SyncHistory))
-	for _, sh := range cs.config.SyncHistory {
-		if sh.InstanceID != id {
-			filtered = append(filtered, sh)
-		}
-	}
-	cs.config.SyncHistory = filtered
-	// Clean up QS overrides, auto-sync, and cleanup keep list for deleted instance
-	delete(cs.config.QualitySizeOverrides, id)
-	delete(cs.config.QualitySizeAutoSync, id)
-	delete(cs.config.CleanupKeep, id)
-	// Clean up auto-sync rules for deleted instance
-	filteredRules := make([]AutoSyncRule, 0, len(cs.config.AutoSync.Rules))
-	for _, r := range cs.config.AutoSync.Rules {
-		if r.InstanceID != id {
-			filteredRules = append(filteredRules, r)
-		}
-	}
-	cs.config.AutoSync.Rules = filteredRules
+	// Keep sync history, auto-sync rules, and QS data as orphaned data.
+	// They will be migrated to a new instance if one is added with the same URL/type,
+	// or cleaned up by stale cleanup if the Arr profiles no longer exist.
 	return cs.saveLocked()
 }
 
@@ -438,7 +498,7 @@ func migrateImportedProfiles(cs *configStore, ps *profileStore) {
 	}
 
 	// Migrate to per-file storage
-	if err := ps.Add(profiles); err != nil {
+	if _, err := ps.Add(profiles); err != nil {
 		log.Printf("Warning: failed to migrate imported profiles: %v", err)
 		return
 	}
