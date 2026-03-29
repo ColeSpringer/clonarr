@@ -2427,9 +2427,11 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 		selectedCFMap[id] = true
 	}
 	entry := SyncHistoryEntry{
-		InstanceID:     inst.ID,
-		ProfileTrashID: req.ProfileTrashID,
-		ProfileName:    plan.ProfileName,
+		InstanceID:        inst.ID,
+		InstanceType:      inst.Type,
+		ProfileTrashID:    req.ProfileTrashID,
+		ImportedProfileID: req.ImportedProfileID,
+		ProfileName:       plan.ProfileName,
 		ArrProfileID:   req.ArrProfileID,
 		ArrProfileName: plan.ArrProfileName,
 		SyncedCFs:      allCFIDs,

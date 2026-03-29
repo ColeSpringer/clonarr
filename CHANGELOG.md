@@ -2,8 +2,32 @@
 
 ## v1.7.1-beta
 
+### Features
+- **Per-CF score overrides on ALL CFs** — Score overrides now work on required CFs and core formatItems, not just optional. Enables overriding scores on CFs like Anime Dual Audio while keeping everything else synced with TRaSH.
+- **Create New button** — Duplicate a synced profile as a new Arr profile with different settings. Available on both TRaSH and builder profiles.
+- **Builder badge in Sync Rules** — Blue "Builder" tag identifies profiles from Profile Builder.
+- **Info banner for builder edits** — Warning when editing builder profiles from Sync Rules that changes affect the profile itself.
+- **Sync behavior in create mode** — Add/Scores dropdowns with dynamic descriptions.
+- **Edit/Sync/Sync All** — Sync Rules buttons for quick actions with toast result summaries.
+- **Custom CF amber grouping** — Custom CFs in dedicated amber-styled category.
+- **Toast notifications** — Centered, progress bar, multiline for Sync All breakdown.
+- **Profile group sorting** — Standard → Anime → French → German → SQP.
+
 ### Bug fixes
-- **Prowlarr test connection** — Fixed "authentication failed (HTTP 401)" when testing Prowlarr after page refresh. Masked API key fallback now checked independently of URL field.
+- **Builder profile resync zeroed scores** — Resync/quickSync from TRaSH Sync tab fell back to TRaSH base profile instead of imported profile. Now correctly sends importedProfileId.
+- **Edit from Sync Rules opened wrong view** — Builder profiles now open in builder editor with correct values.
+- **Dry-run/apply reset to TRaSH profile** — After dry-run on imported profiles, code opened TRaSH base profile detail, losing all builder settings.
+- **Instance data survives delete+recreate** — Orphan migration now checks instance type to prevent cross-type contamination.
+- **Multi-instance support** — Builder sync functions find correct instance from sync history instead of assuming first.
+- **API key field appeared empty** — Edit mode shows "Leave empty to keep current key".
+- **Stale _resyncReturnSubTab** — Cleared on manual tab switch to prevent stale navigation state.
+- **History matching for imported profiles** — Also checks importedProfileId for profiles without trashProfileId.
+- **Prowlarr test connection** — Fixed "authentication failed (HTTP 401)" when testing Prowlarr after page refresh.
+
+### Refactoring
+- **Generic FileStore[T]** — profileStore 239→14 lines, customCFStore 248→76 lines.
+- **Handler helpers** — decodeJSON/requireInstance reduce boilerplate across 10+ handlers.
+- **22 unit tests** — sync behavior, field conversion, score resolution, FileStore.
 
 ## v1.7.0-beta
 
