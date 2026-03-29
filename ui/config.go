@@ -109,9 +109,11 @@ type QSOverride struct {
 
 // SyncHistoryEntry records a completed sync operation.
 type SyncHistoryEntry struct {
-	InstanceID     string            `json:"instanceId"`
-	ProfileTrashID string            `json:"profileTrashId"`
-	ProfileName    string            `json:"profileName"`
+	InstanceID        string            `json:"instanceId"`
+	InstanceType      string            `json:"instanceType,omitempty"` // "radarr" or "sonarr" — for orphan migration
+	ProfileTrashID    string            `json:"profileTrashId"`
+	ImportedProfileID string            `json:"importedProfileId,omitempty"`
+	ProfileName       string            `json:"profileName"`
 	ArrProfileID   int               `json:"arrProfileId"`
 	ArrProfileName string            `json:"arrProfileName"`
 	SyncedCFs      []string          `json:"syncedCFs"`
@@ -337,24 +339,35 @@ func (cs *configStore) AddInstance(inst Instance) (Instance, error) {
 	for _, i := range cs.config.Instances {
 		activeIDs[i.ID] = true
 	}
-	orphanIDs := make(map[string]bool)
+	orphanIDs := make(map[string]string) // orphan instance ID → type (if known)
 	for _, h := range cs.config.SyncHistory {
 		if !activeIDs[h.InstanceID] {
-			orphanIDs[h.InstanceID] = true
+			if h.InstanceType != "" {
+				orphanIDs[h.InstanceID] = h.InstanceType
+			} else if _, exists := orphanIDs[h.InstanceID]; !exists {
+				orphanIDs[h.InstanceID] = ""
+			}
 		}
 	}
 	for _, r := range cs.config.AutoSync.Rules {
 		if !activeIDs[r.InstanceID] {
-			orphanIDs[r.InstanceID] = true
+			if _, exists := orphanIDs[r.InstanceID]; !exists {
+				orphanIDs[r.InstanceID] = ""
+			}
 		}
 	}
+	// Only migrate orphan that matches the new instance's type
 	var orphanID string
-	if len(orphanIDs) == 1 {
-		for id := range orphanIDs {
+	for id, orphanType := range orphanIDs {
+		if orphanType == "" || orphanType == inst.Type {
+			if orphanID != "" {
+				// Multiple matching orphans — skip migration for safety
+				orphanID = ""
+				log.Printf("Multiple orphaned instances match type %s, skipping migration", inst.Type)
+				break
+			}
 			orphanID = id
 		}
-	} else if len(orphanIDs) > 1 {
-		log.Printf("Multiple orphaned instances found (%d), skipping migration for safety", len(orphanIDs))
 	}
 	// Migrate orphaned data to new instance
 	if orphanID != "" {

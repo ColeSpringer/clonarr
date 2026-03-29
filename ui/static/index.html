@@ -522,6 +522,7 @@
                       <template x-for="sh in syncHistory[inst.id]" :key="sh.arrProfileId">
                         <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
                           <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
+                          <span x-show="sh.importedProfileId" style="font-size:9px;background:#1f3a5f;color:#58a6ff;padding:1px 5px;border-radius:3px;flex-shrink:0">Builder</span>
                           <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
                               <label class="toggle toggle-sm" @click.stop title="Toggle auto-sync for this profile">
                                 <input type="checkbox"
@@ -623,17 +624,17 @@
             <template x-for="p in (importedProfiles[tab.type] || [])" :key="p.id">
               <div class="profile-row">
                 <div class="profile-name">
-                  <a class="profile-name-link" @click.stop="openImportedProfileDetail(tab.type, p)" x-text="p.name"></a>
+                  <a class="profile-name-link" @click.stop="p.source === 'custom' ? editCustomProfile(tab.type, p) : openImportedProfileDetail(tab.type, p)" x-text="p.name"></a>
                   <span style="font-size:10px;background:#30363d;color:#8b949e;padding:1px 6px;border-radius:3px;margin-left:6px" x-text="Object.keys(p.formatItems || {}).length + ' CFs'"></span>
                   <span x-show="p.source === 'custom'" style="font-size:10px;background:#1f3a5f;color:#58a6ff;padding:1px 6px;border-radius:3px;margin-left:4px">Custom</span>
                   <span x-show="p.source !== 'custom'" style="font-size:10px;background:#30363d;color:#8b949e;padding:1px 6px;border-radius:3px;margin-left:4px">Import</span>
                 </div>
                 <div style="display:flex;gap:6px;align-items:center">
                   <span style="font-size:11px;color:#484f58" x-text="p.importedAt ? new Date(p.importedAt).toLocaleDateString() : ''"></span>
-                  <button x-show="p.source === 'custom'" class="btn btn-sm" @click.stop="editCustomProfile(tab.type, p)">Edit</button>
-                  <button class="btn btn-sm btn-primary" @click.stop="openImportedSyncModalFromList(tab.type, p)">Sync</button>
-                  <button class="btn btn-sm btn-blue" @click.stop="openExportModalFromList(tab.type, p)">Export</button>
-                  <button class="btn btn-sm btn-danger" @click.stop="deleteImportedProfile(p.id, tab.type)">Delete</button>
+                  <button x-show="p.source === 'custom'" class="btn btn-sm" @click.stop="editCustomProfile(tab.type, p)" title="Edit profile in builder">Edit</button>
+                  <button class="btn btn-sm btn-primary" @click.stop="openImportedSyncModalFromList(tab.type, p)" title="Sync to Arr instance">Sync</button>
+                  <button class="btn btn-sm btn-blue" @click.stop="openExportModalFromList(tab.type, p)" title="Export as JSON or YAML">Export</button>
+                  <button class="btn btn-sm btn-danger" @click.stop="deleteImportedProfile(p.id, tab.type)" title="Delete this profile">Delete</button>
                 </div>
               </div>
             </template>
@@ -1940,6 +1941,13 @@
     <div class="page">
       <a class="back-link" @click="cancelProfileBuilder()">&larr; Back to Profiles</a>
 
+      <!-- Info banner when editing from Sync Rules -->
+      <template x-if="_resyncReturnSubTab && pb.editId">
+        <div style="margin-top:8px;padding:8px 14px;background:#1a1500;border:1px solid #d29922;border-radius:6px;font-size:11px;color:#d29922;line-height:1.5">
+          <strong>Editing synced profile</strong> — Changes here modify the profile itself, which affects all sync rules using it. Use <strong>Save & Sync</strong> to apply changes to Arr, or <strong>Cancel</strong> to discard.
+        </div>
+      </template>
+
       <!-- Settings Card -->
       <div class="card" style="overflow:visible;margin-top:16px">
         <div class="profile-group-header" @click="pbSettingsOpen = !pbSettingsOpen">
@@ -2420,10 +2428,18 @@
           <span x-text="pbSelectedCount() + ' total CFs'"></span>
         </div>
         <button class="btn" @click="cancelProfileBuilder()">Cancel</button>
-        <button class="btn btn-primary" @click="saveCustomProfile()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving">
-          <template x-if="pbSaving"><span class="spinner"></span></template>
-          <template x-if="!pbSaving"><span x-text="pb.editId ? 'Update Profile' : 'Create Profile'"></span></template>
-        </button>
+        <template x-if="!_resyncReturnSubTab">
+          <button class="btn btn-primary" @click="saveCustomProfile()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save profile changes without syncing">
+            <template x-if="pbSaving"><span class="spinner"></span></template>
+            <template x-if="!pbSaving"><span x-text="pb.editId ? 'Update Profile' : 'Create Profile'"></span></template>
+          </button>
+        </template>
+        <template x-if="pb.editId">
+          <div style="display:flex;gap:6px">
+            <button class="btn" style="border-color:#238636;color:#3fb950" @click="saveAndSyncBuilder()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save changes and sync to existing Arr profile">Save & Sync</button>
+            <button class="btn" style="border-color:#58a6ff;color:#58a6ff" @click="saveAndSyncBuilderAsNew()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save and create as new Arr profile">Create New</button>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -2517,10 +2533,12 @@
           <div style="display:flex;gap:8px" x-show="profileDetail?.detail?.imported">
             <button x-show="profileDetail?.detail?.importedRaw?.source === 'custom'" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
             <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
-            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()">Sync</button>
+            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" title="Save settings and sync to existing Arr profile">Save & Sync</button>
+            <button class="btn btn-sm" style="border-color:#58a6ff;color:#58a6ff" @click="openImportedSyncModalAsNew()" title="Create a new Arr profile with these settings">Create New</button>
           </div>
           <div style="display:flex;gap:8px" x-show="!profileDetail?.detail?.imported">
-            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)">Sync</button>
+            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" title="Save settings and sync to existing Arr profile">Save & Sync</button>
+            <button class="btn btn-sm" style="border-color:#58a6ff;color:#58a6ff" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" title="Create a new Arr profile with these settings">Create New</button>
           </div>
         </div>
 
@@ -2650,7 +2668,7 @@
             </template>
             <template x-if="pdOverrideActive">
               <div style="display:flex;gap:6px">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#d29922" title="Enable per-CF score editing on optional CFs">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#d29922" title="Enable per-CF score editing on all CFs">
                   <input type="checkbox" x-model="cfScoreOverrideActive" style="accent-color:#d29922">
                   CF scores
                 </label>
@@ -2686,9 +2704,19 @@
                       <template x-for="cf in cat.cfs" :key="cf.trashId">
                         <div class="cf-row">
                           <div class="cf-name" x-text="cf.name"></div>
-                          <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
-                            <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
-                          </div>
+                          <template x-if="cfScoreOverrideActive">
+                            <div style="flex-shrink:0">
+                              <input type="number" class="pb-score-input" :class="cfScoreOverrides[cf.trashId] !== undefined ? 'overridden' : ''"
+                                     :value="cfScoreOverrides[cf.trashId] ?? cf.score ?? 0"
+                                     @change="const v = parseInt($event.target.value) || 0; if (v === (cf.score ?? 0)) { const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [cf.trashId]: v}; }"
+                                     style="width:65px">
+                            </div>
+                          </template>
+                          <template x-if="!cfScoreOverrideActive">
+                            <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
+                              <span x-text="(cf.score > 0 ? '+' : '') + cf.score"></span>
+                            </div>
+                          </template>
                         </div>
                       </template>
                     </div>
@@ -2798,10 +2826,23 @@
                 <div class="section-desc" x-show="detailSections.core">
                   Required for this profile. Always included when syncing.
                 </div>
-                <div x-show="detailSections.core"
-                     :style="'padding:14px 28px;column-count:' + (profileDetail.detail.formatItemNames.length > 20 ? 3 : profileDetail.detail.formatItemNames.length > 10 ? 2 : 1) + ';column-gap:32px'">
+                <div x-show="detailSections.core" style="padding:14px 20px">
                   <template x-for="fi in profileDetail.detail.formatItemNames" :key="fi.trashId">
-                    <div style="font-size:12px;color:#8b949e;padding:2px 0;break-inside:avoid" x-text="fi.name"></div>
+                    <div class="cf-row" style="padding:2px 0">
+                      <div class="cf-name" style="font-size:12px;color:#8b949e" x-text="fi.name"></div>
+                      <template x-if="cfScoreOverrideActive">
+                        <div style="flex-shrink:0">
+                          <input type="number" class="pb-score-input" :class="cfScoreOverrides[fi.trashId] !== undefined ? 'overridden' : ''"
+                                 :value="cfScoreOverrides[fi.trashId] ?? fi.score ?? 0"
+                                 @change="const v = parseInt($event.target.value) || 0; if (v === (fi.score ?? 0)) { const {[fi.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [fi.trashId]: v}; }"
+                                 style="width:65px">
+                        </div>
+                      </template>
+                      <template x-if="!cfScoreOverrideActive">
+                        <div class="cf-score" :class="(fi.score||0) > 0 ? 'positive' : (fi.score||0) < 0 ? 'negative' : 'zero'"
+                             x-text="fi.score != null ? ((fi.score > 0 ? '+' : '') + fi.score) : ''"></div>
+                      </template>
+                    </div>
                   </template>
                 </div>
               </div>
@@ -2870,8 +2911,8 @@
                         <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
                         <span class="cf-default-badge" x-show="cf.default">recommended</span>
                       </div>
-                      <!-- Score: editable for optional CFs when score override active -->
-                      <template x-if="cfScoreOverrideActive && !cf.required && selectedOptionalCFs[cf.trashId]">
+                      <!-- Score: editable for all CFs when score override active (required needs group active, optional needs CF active) -->
+                      <template x-if="cfScoreOverrideActive && (cf.required ? (selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled) : selectedOptionalCFs[cf.trashId])">
                         <div style="flex-shrink:0">
                           <input type="number" class="pb-score-input" :class="cfScoreOverrides[cf.trashId] !== undefined ? 'overridden' : ''"
                                  :value="cfScoreOverrides[cf.trashId] ?? cf.score ?? 0"
@@ -2879,7 +2920,7 @@
                                  style="width:65px">
                         </div>
                       </template>
-                      <template x-if="!(cfScoreOverrideActive && !cf.required && selectedOptionalCFs[cf.trashId])">
+                      <template x-if="!(cfScoreOverrideActive && (cf.required ? (selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled) : selectedOptionalCFs[cf.trashId]))">
                         <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'">
                           <span x-text="cf.hasScore ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></span>
                         </div>
@@ -5249,6 +5290,12 @@ function clonarr() {
 
     cancelProfileBuilder() {
       this.profileBuilder = false;
+      // Return to previous subtab if we came from resync Edit
+      if (this._resyncReturnSubTab) {
+        const type = this.currentTab;
+        this.setSubTab(type, this._resyncReturnSubTab);
+        this._resyncReturnSubTab = null;
+      }
     },
 
     async loadCFPicker(appType) {
@@ -6353,6 +6400,11 @@ function clonarr() {
         if (r.ok) {
           this._pbSaveDefaults();
           this.profileBuilder = false;
+          // Return to previous subtab if we came from resync Edit
+          if (this._resyncReturnSubTab) {
+            this.setSubTab(this.currentTab, this._resyncReturnSubTab);
+            this._resyncReturnSubTab = null;
+          }
           this.loadImportedProfiles(this.pb.appType);
         } else {
           const data = await r.json();
@@ -8065,6 +8117,8 @@ function clonarr() {
 
     setSubTab(appType, subTab) {
       this.subTabs = { ...this.subTabs, [appType]: subTab };
+      // Clear resync return state when manually switching tabs
+      if (!this._resyncNavigating) this._resyncReturnSubTab = null;
     },
 
     getProfileTab(appType) {
@@ -8391,6 +8445,17 @@ function clonarr() {
           this.showToast(`"${ev.profileName}" — deleted in ${ev.instanceName}, sync rule removed`, 'warning', 6000);
         }
       } catch (e) { /* ignore */ }
+    },
+
+    // Find the instance that has sync history for an imported profile
+    findSyncedInstance(appType, importedProfileId) {
+      for (const inst of this.instancesOfType(appType)) {
+        const history = (this.syncHistory[inst.id] || []).find(h => h.importedProfileId === importedProfileId);
+        if (history) return { inst, history };
+      }
+      // Fallback to first instance
+      const inst = this.instancesOfType(appType)[0];
+      return inst ? { inst, history: null } : null;
     },
 
     // --- TRaSH ---
@@ -9016,6 +9081,30 @@ function clonarr() {
       this.showSyncModal = true;
     },
 
+    async openSyncModalAsNew(inst, profile) {
+      this.resyncTargetArrProfileId = null;
+      this.syncForm = {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        appType: inst.type,
+        profileTrashId: profile.trashId,
+        importedProfileId: '',
+        profileName: profile.name,
+        arrProfileId: '0',
+        newProfileName: profile.name + ' (Copy)',
+        behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      try {
+        const r = await fetch(`/api/instances/${inst.id}/profiles`);
+        this.arrProfiles = r.ok ? await r.json() : [];
+      } catch (e) { this.arrProfiles = []; }
+      this.getLanguagesForInstance(inst.id);
+      this.syncMode = 'create';
+      this.autoSyncRuleForSync = null;
+      this.syncPreview = null;
+      this.showSyncModal = true;
+    },
+
     async openImportedSyncModalFromList(appType, profile) {
       const inst = this.instancesOfType(appType)[0];
       if (!inst) { alert('No ' + appType + ' instance configured'); return; }
@@ -9031,6 +9120,109 @@ function clonarr() {
         behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
       };
       await this._loadSyncInstanceData(inst.id, profile.trashProfileId || profile.id);
+      this.showSyncModal = true;
+    },
+
+    async openImportedSyncModalAsNew() {
+      const raw = this.profileDetail?.detail?.importedRaw;
+      if (!raw) return;
+      const appType = raw.appType || this.profileDetail?.profile?.appType;
+      const inst = this.instancesOfType(appType)[0];
+      if (!inst) { alert('No ' + appType + ' instance configured'); return; }
+      this.resyncTargetArrProfileId = null;
+      this.syncForm = {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        appType: appType,
+        profileTrashId: raw.trashProfileId || '',
+        importedProfileId: raw.id,
+        profileName: raw.name,
+        arrProfileId: '0',
+        newProfileName: raw.name + ' (Copy)',
+        behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      try {
+        const r = await fetch(`/api/instances/${inst.id}/profiles`);
+        this.arrProfiles = r.ok ? await r.json() : [];
+      } catch (e) { this.arrProfiles = []; }
+      this.getLanguagesForInstance(inst.id);
+      this.syncMode = 'create';
+      this.autoSyncRuleForSync = null;
+      this.syncPreview = null;
+      this.showSyncModal = true;
+    },
+
+    async saveAndSyncBuilderAsNew() {
+      const editId = this.pb.editId;
+      const appType = this.pb.appType;
+      await this.saveCustomProfile();
+      const allImported = this.importedProfiles[appType] || [];
+      const imported = allImported.find(p => p.id === editId);
+      if (!imported) return;
+      const found = this.findSyncedInstance(appType, imported.id);
+      if (!found) { alert('No ' + appType + ' instance configured'); return; }
+      const { inst } = found;
+      this.resyncTargetArrProfileId = null;
+      this.syncForm = {
+        instanceId: inst.id, instanceName: inst.name, appType: appType,
+        profileTrashId: imported.trashProfileId || '', importedProfileId: imported.id,
+        profileName: imported.name, arrProfileId: '0', newProfileName: imported.name + ' (Copy)',
+        behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      try {
+        const r = await fetch(`/api/instances/${inst.id}/profiles`);
+        this.arrProfiles = r.ok ? await r.json() : [];
+      } catch (e) { this.arrProfiles = []; }
+      this.getLanguagesForInstance(inst.id);
+      this.syncMode = 'create';
+      this.autoSyncRuleForSync = null;
+      this.syncPreview = null;
+      this.showSyncModal = true;
+    },
+
+    async saveAndSyncBuilder() {
+      const editId = this.pb.editId;
+      const appType = this.pb.appType;
+      await this.saveCustomProfile();
+      const allImported = this.importedProfiles[appType] || [];
+      const imported = allImported.find(p => p.id === editId);
+      if (!imported) return;
+      const found = this.findSyncedInstance(appType, imported.id);
+      if (!found) { alert('No ' + appType + ' instance configured'); return; }
+      const { inst, history } = found;
+      if (history) this.resyncTargetArrProfileId = history.arrProfileId;
+      this.syncForm = {
+        instanceId: inst.id, instanceName: inst.name, appType: appType,
+        profileTrashId: imported.trashProfileId || '', importedProfileId: imported.id,
+        profileName: imported.name, arrProfileId: '0', newProfileName: imported.name,
+        behavior: history?.behavior || { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      await this._loadSyncInstanceData(inst.id, imported.trashProfileId || imported.id);
+      this.showSyncModal = true;
+    },
+
+    async openBuilderSyncModal() {
+      if (!this.pb.editId || !this.pb.appType) return;
+      const appType = this.pb.appType;
+      const allImported = this.importedProfiles[appType] || [];
+      const imported = allImported.find(p => p.id === this.pb.editId);
+      if (!imported) { alert('Profile not found'); return; }
+      const found = this.findSyncedInstance(appType, imported.id);
+      if (!found) { alert('No ' + appType + ' instance configured'); return; }
+      const { inst, history } = found;
+      if (history) this.resyncTargetArrProfileId = history.arrProfileId;
+      this.syncForm = {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        appType: appType,
+        profileTrashId: imported.trashProfileId || '',
+        importedProfileId: imported.id,
+        profileName: imported.name,
+        arrProfileId: '0',
+        newProfileName: imported.name,
+        behavior: history?.behavior || { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' }
+      };
+      await this._loadSyncInstanceData(inst.id, imported.trashProfileId || imported.id);
       this.showSyncModal = true;
     },
 
@@ -9109,7 +9301,7 @@ function clonarr() {
         this.resyncTargetArrProfileId = null;
       } else {
         const history = (this.syncHistory[instId] || []).find(h =>
-          h.profileTrashId === profileTrashId && arrProfileIds.has(h.arrProfileId)
+          (h.profileTrashId === profileTrashId || h.importedProfileId === profileTrashId) && arrProfileIds.has(h.arrProfileId)
         );
         if (history && history.arrProfileId) {
           this.syncMode = 'update';
@@ -9200,7 +9392,7 @@ function clonarr() {
           return;
         }
         this.showSyncModal = false;
-        if (!this.profileDetail) {
+        if (!this.profileDetail && !this.syncForm.importedProfileId) {
           const inst = this.instances.find(i => i.id === this.syncForm.instanceId);
           const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === this.syncForm.profileTrashId);
           if (inst && profile) await this.openProfileDetail(inst, profile);
@@ -9224,10 +9416,22 @@ function clonarr() {
         });
         const result = await r.json();
         this.showSyncModal = false;
-        if (!this.profileDetail) {
+        if (!this.profileDetail && !this.syncForm.importedProfileId) {
           const inst = this.instances.find(i => i.id === this.syncForm.instanceId);
           const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === this.syncForm.profileTrashId);
           if (inst && profile) await this.openProfileDetail(inst, profile);
+        }
+        // Show toast for imported profiles (no profile detail view to show results)
+        if (this.syncForm.importedProfileId) {
+          const parts = [];
+          if (result.cfsCreated) parts.push(`${result.cfsCreated} CFs created`);
+          if (result.cfsUpdated) parts.push(`${result.cfsUpdated} CFs updated`);
+          if (result.scoresUpdated) parts.push(`${result.scoresUpdated} scores`);
+          if (result.errors?.length) {
+            this.showToast(`Sync failed: ${result.errors[0]}`, 'error', 8000);
+          } else {
+            this.showToast(`"${this.syncForm.profileName}" synced — ${parts.length ? parts.join(', ') : 'no changes'}`, 'info', 6000);
+          }
         }
         this.syncResult = result;
         this.syncPlan = null;
@@ -9278,6 +9482,7 @@ function clonarr() {
       const body = {
         instanceId: inst.id,
         profileTrashId: sh.profileTrashId,
+        importedProfileId: sh.importedProfileId || '',
         arrProfileId: sh.arrProfileId,
         selectedCFs: Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]),
         scoreOverrides: sh.scoreOverrides || null,
@@ -9336,7 +9541,23 @@ function clonarr() {
     async resyncProfile(inst, sh) {
       // Set target Arr profile for sync modal to pick up
       this.resyncTargetArrProfileId = sh.arrProfileId;
-      // Find the profile in trashProfiles
+      // Imported/builder profile: open in Profile Builder editor
+      if (sh.importedProfileId) {
+        const allImported = this.importedProfiles[inst.type] || [];
+        const imported = allImported.find(p => p.id === sh.importedProfileId);
+        if (!imported) {
+          alert('Imported profile no longer available');
+          return;
+        }
+        this.currentTab = inst.type;
+        this._resyncReturnSubTab = this.getSubTab(inst.type);
+        this._resyncNavigating = true;
+        this.setSubTab(inst.type, 'builder');
+        this._resyncNavigating = false;
+        this.editCustomProfile(inst.type, imported);
+        return;
+      }
+      // TRaSH profile: find and open profile detail
       const profile = (this.trashProfiles[inst.type] || []).find(p => p.trashId === sh.profileTrashId);
       if (!profile) {
         alert('Profile no longer available in TRaSH data');
