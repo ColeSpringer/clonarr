@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.7.2-beta
+
+### Features
+- **Add Extra CFs** — Add any TRaSH CF to a profile via Customize overrides. CFs organized in real TRaSH groups with collapsible headers, toggles, and search. Default scores from profile's score set.
+- **Quality overrides redesign** — Dynamic columns, toggle switches, amber override indicator.
+- **UI polish** — Column layout for Profile section, toggle switches for override panel, number input spinners removed globally.
+
+### Bug fixes
+- **quickSync fallback for importedProfileId** — Pre-v1.7.1 sync history entries now check auto-sync rule as fallback, preventing builder profiles from zeroing on upgrade.
+- **Extra CFs persisted** — Restored on resync, included in auto-sync rules and quickSync.
+- **Extra CF browser wrong type** — Reset on profile switch to prevent showing radarr CFs for sonarr.
+- **Resync loads grouped browser** — extraCFGroups populated after resync (was empty).
+- **Reset to TRaSH clears Extra CFs** — Toggle, search, and selections all cleared.
+
 ## v1.7.1-beta
 
 ### Features

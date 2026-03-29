@@ -242,6 +242,8 @@
   /* Loading */
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.6s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes toastProgress { from { width: 100%; } to { width: 0%; } }
 
@@ -2446,7 +2448,7 @@
 
   <!-- ==================== PROFILE DETAIL ==================== -->
   <div class="page" x-show="profileDetail && currentTab !== 'settings' && currentTab !== 'about'" x-cloak>
-    <a class="back-link" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdOverrideActive = false; cfScoreOverrides = {}; cfScoreOverrideActive = false; qualityOverrides = {}; qualityOverrideActive = false; pdOverrides = { language: {enabled:true,value:'Original'}, upgradeAllowed: {enabled:true,value:true}, minFormatScore: {enabled:true,value:0}, minUpgradeFormatScore: {enabled:true,value:1}, cutoffFormatScore: {enabled:true,value:10000}, cutoffQuality: '' }">&larr; Back to Profiles</a>
+    <a class="back-link" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdOverrideActive = false; cfScoreOverrides = {}; cfScoreOverrideActive = false; qualityOverrides = {}; qualityOverrideActive = false; extraCFs = {}; pdOverrides = { language: {enabled:true,value:'Original'}, upgradeAllowed: {enabled:true,value:true}, minFormatScore: {enabled:true,value:0}, minUpgradeFormatScore: {enabled:true,value:1}, cutoffFormatScore: {enabled:true,value:10000}, cutoffQuality: '' }">&larr; Back to Profiles</a>
 
     <div style="margin-top:16px" x-show="profileDetail">
       <!-- Sync result banner -->
@@ -2667,17 +2669,25 @@
               <button class="btn" style="font-size:11px;padding:3px 10px;border-color:#d29922;color:#d29922" title="Override language, scores, cutoff, and upgrade settings for this sync only" @click="pdOverrideActive = true">Customize overrides</button>
             </template>
             <template x-if="pdOverrideActive">
-              <div style="display:flex;gap:6px">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#d29922" title="Enable per-CF score editing on all CFs">
-                  <input type="checkbox" x-model="cfScoreOverrideActive" style="accent-color:#d29922">
-                  CF scores
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <label class="toggle toggle-sm" title="Override individual CF scores" style="flex-shrink:0">
+                  <input type="checkbox" x-model="cfScoreOverrideActive">
+                  <span class="slider"></span>
                 </label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#d29922" title="Enable/disable quality items (resolutions)">
-                  <input type="checkbox" x-model="qualityOverrideActive" style="accent-color:#d29922">
-                  Qualities
+                <span style="font-size:11px;color:#d29922;margin-right:6px">CF scores</span>
+                <label class="toggle toggle-sm" title="Override quality items (resolutions)" style="flex-shrink:0">
+                  <input type="checkbox" x-model="qualityOverrideActive">
+                  <span class="slider"></span>
                 </label>
+                <span style="font-size:11px;color:#d29922;margin-right:6px">Qualities</span>
+                <label class="toggle toggle-sm" title="Add extra CFs not in the profile" style="flex-shrink:0">
+                  <input type="checkbox" x-model="extraCFsActive" @change="if ($event.target.checked) loadExtraCFList()">
+                  <span class="slider"></span>
+                </label>
+                <span style="font-size:11px;color:#d29922;margin-right:6px">Extra CFs</span>
+                <div style="flex:1"></div>
                 <button class="btn" style="font-size:11px;padding:3px 10px;border-color:#d29922;color:#d29922"
-                        @click="const p = profileDetail.detail.profile; pdOverrides.language = {enabled:true,value:p.language||'Original'}; pdOverrides.upgradeAllowed = {enabled:true,value:p.upgradeAllowed??true}; pdOverrides.minFormatScore = {enabled:true,value:p.minFormatScore??0}; pdOverrides.minUpgradeFormatScore = {enabled:true,value:p.minUpgradeFormatScore??1}; pdOverrides.cutoffFormatScore = {enabled:true,value:p.cutoffFormatScore||p.cutoffScore||10000}; pdOverrides.cutoffQuality = p.cutoff||''; cfScoreOverrides = {}; cfScoreOverrideActive = false; qualityOverrides = {}; qualityOverrideActive = false">Reset to TRaSH</button>
+                        @click="const p = profileDetail.detail.profile; pdOverrides.language = {enabled:true,value:p.language||'Original'}; pdOverrides.upgradeAllowed = {enabled:true,value:p.upgradeAllowed??true}; pdOverrides.minFormatScore = {enabled:true,value:p.minFormatScore??0}; pdOverrides.minUpgradeFormatScore = {enabled:true,value:p.minUpgradeFormatScore??1}; pdOverrides.cutoffFormatScore = {enabled:true,value:p.cutoffFormatScore||p.cutoffScore||10000}; pdOverrides.cutoffQuality = p.cutoff||''; cfScoreOverrides = {}; cfScoreOverrideActive = false; qualityOverrides = {}; qualityOverrideActive = false; extraCFs = {}; extraCFsActive = false; extraCFSearch = ''">Reset to TRaSH</button>
                 <button class="btn" style="font-size:11px;padding:3px 10px" @click="pdFinishOverrides()">Done</button>
               </div>
             </template>
@@ -2687,27 +2697,76 @@
         <!-- Quality item overrides -->
         <template x-if="qualityOverrideActive && profileDetail?.detail?.profile?.items?.length > 0">
           <div style="margin-bottom:12px;padding:10px 14px;background:#161b22;border:1px solid #d29922;border-radius:6px">
-            <div style="font-size:12px;font-weight:600;color:#d29922;margin-bottom:8px">Quality Overrides</div>
-            <div style="font-size:10px;color:#6e7681;margin-bottom:8px">Toggle resolutions on/off. Changes override TRaSH defaults for this sync rule.</div>
-            <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="display:flex;align-items:center;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:#d29922">Quality Overrides</div>
+              <div style="font-size:10px;color:#6e7681;margin-left:8px">Toggle resolutions on/off</div>
+            </div>
+            <div :style="'column-count:' + (profileDetail.detail.profile.items.length > 12 ? 3 : profileDetail.detail.profile.items.length > 6 ? 2 : 1) + ';column-gap:16px'">
               <template x-for="item in profileDetail.detail.profile.items" :key="item.name">
-                <div style="display:flex;align-items:center;gap:8px;padding:3px 0">
-                  <input type="checkbox"
-                         :checked="qualityOverrides[item.name] !== undefined ? qualityOverrides[item.name] : item.allowed"
-                         @change="if ($event.target.checked === item.allowed) { const {[item.name]: _, ...rest} = qualityOverrides; qualityOverrides = rest; } else { qualityOverrides = {...qualityOverrides, [item.name]: $event.target.checked}; }"
-                         style="accent-color:#d29922;flex-shrink:0">
-                  <span style="font-size:12px;min-width:180px" :style="(qualityOverrides[item.name] !== undefined ? qualityOverrides[item.name] : item.allowed) ? 'color:#e1e4e8' : 'color:#484f58'" x-text="item.name"></span>
-                  <template x-if="item.items && item.items.length > 0">
-                    <div style="display:flex;gap:3px">
-                      <template x-for="sub in item.items" :key="sub">
-                        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#30363d;color:#8b949e" x-text="sub"></span>
-                      </template>
-                    </div>
-                  </template>
-                  <span x-show="qualityOverrides[item.name] !== undefined" style="font-size:9px;color:#d29922;margin-left:auto">override</span>
+                <div style="break-inside:avoid;display:flex;align-items:center;gap:6px;padding:4px 0">
+                  <label class="toggle toggle-sm" style="flex-shrink:0">
+                    <input type="checkbox"
+                           :checked="qualityOverrides[item.name] !== undefined ? qualityOverrides[item.name] : item.allowed"
+                           @change="if ($event.target.checked === item.allowed) { const {[item.name]: _, ...rest} = qualityOverrides; qualityOverrides = rest; } else { qualityOverrides = {...qualityOverrides, [item.name]: $event.target.checked}; }">
+                    <span class="slider"></span>
+                  </label>
+                  <span style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                        :style="(qualityOverrides[item.name] !== undefined ? qualityOverrides[item.name] : item.allowed) ? 'color:#e1e4e8' : 'color:#484f58'"
+                        x-text="item.name"></span>
+                  <span x-show="qualityOverrides[item.name] !== undefined" style="font-size:8px;color:#d29922;flex-shrink:0">●</span>
                 </div>
               </template>
             </div>
+          </div>
+        </template>
+
+        <!-- Extra CFs -->
+        <template x-if="extraCFsActive && extraCFAllCFs.length > 0">
+          <div style="margin-bottom:12px;padding:10px 14px;background:#161b22;border:1px solid #d29922;border-radius:6px">
+            <div style="display:flex;align-items:center;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:600;color:#d29922">Extra Custom Formats</div>
+              <div style="font-size:11px;color:#f85149;font-weight:600;margin-left:8px">⚠ Non-standard — use at your own risk</div>
+              <input type="text" class="input" x-model="extraCFSearch" placeholder="Search..." style="font-size:11px;margin-left:auto;width:160px;padding:2px 8px">
+            </div>
+            <!-- Selected extras -->
+            <template x-if="Object.keys(extraCFs).length > 0">
+              <div style="margin-bottom:8px;padding:6px 8px;background:#0d1117;border-radius:4px">
+                <div style="font-size:10px;color:#d29922;margin-bottom:4px;font-weight:600">Added (<span x-text="Object.keys(extraCFs).length"></span>)</div>
+                <template x-for="tid in Object.keys(extraCFs)" :key="'xs-'+tid">
+                  <div style="display:flex;align-items:center;gap:6px;padding:2px 0">
+                    <label class="toggle toggle-sm" style="flex-shrink:0">
+                      <input type="checkbox" checked @change="const {[tid]: _, ...rest} = extraCFs; extraCFs = rest">
+                      <span class="slider"></span>
+                    </label>
+                    <span style="font-size:11px;color:#d29922;flex:1" x-text="extraCFAllCFs.find(c => c.trashId === tid)?.name || tid.substring(0,12)"></span>
+                    <input type="number" class="pb-score-input overridden" :value="extraCFs[tid]" @change="extraCFs = {...extraCFs, [tid]: parseInt($event.target.value)||0}" style="width:65px">
+                  </div>
+                </template>
+              </div>
+            </template>
+            <!-- Available CFs by group -->
+            <template x-for="group in extraCFGroups.filter(g => g.cfs.some(cf => !_extraInProfile(cf.trashId) && !extraCFs[cf.trashId] && (!extraCFSearch || cf.name.toLowerCase().includes(extraCFSearch.toLowerCase()))))" :key="'xg-'+group.name">
+              <div style="margin-bottom:4px">
+                <div style="padding:4px 0;cursor:pointer;display:flex;align-items:center;gap:4px" @click="detailSections['extra_'+group.name] = !detailSections['extra_'+group.name]">
+                  <span class="detail-section-chevron" :class="{ open: detailSections['extra_'+group.name] }">&#9654;</span>
+                  <span style="font-size:11px;font-weight:500;color:#8b949e" x-text="group.name"></span>
+                  <span style="font-size:10px;color:#484f58" x-text="group.cfs.filter(cf => !_extraInProfile(cf.trashId) && !extraCFs[cf.trashId] && (!extraCFSearch || cf.name.toLowerCase().includes(extraCFSearch.toLowerCase()))).length"></span>
+                </div>
+                <div x-show="detailSections['extra_'+group.name]"
+                     :style="'column-count:' + (group.cfs.length > 20 ? 3 : group.cfs.length > 10 ? 2 : 1) + ';column-gap:24px;padding-left:8px'">
+                  <template x-for="cf in group.cfs.filter(c => !_extraInProfile(c.trashId) && !extraCFs[c.trashId] && (!extraCFSearch || c.name.toLowerCase().includes(extraCFSearch.toLowerCase())))" :key="'xa-'+cf.trashId">
+                    <div style="break-inside:avoid;display:flex;align-items:center;gap:6px;padding:2px 0;opacity:0.6">
+                      <label class="toggle toggle-sm" style="flex-shrink:0">
+                        <input type="checkbox" :checked="false" @change="const scoreSet = profileDetail?.detail?.profile?.trashScoreSet || 'default'; extraCFs = {...extraCFs, [cf.trashId]: cf.trashScores?.[scoreSet] ?? cf.trashScores?.default ?? 0}; $nextTick(() => $el.checked = false)">
+                        <span class="slider"></span>
+                      </label>
+                      <span style="font-size:11px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="cf.name"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <div x-show="extraCFAvailable().length === 0" style="font-size:11px;color:#484f58;padding:4px 0">No matching CFs</div>
           </div>
         </template>
 
@@ -2857,9 +2916,10 @@
                 <div class="section-desc" x-show="detailSections.core">
                   Required for this profile. Always included when syncing.
                 </div>
-                <div x-show="detailSections.core" style="padding:14px 20px">
+                <div x-show="detailSections.core" style="padding:14px 20px"
+                     :style="'column-count:' + (profileDetail.detail.formatItemNames.length > 20 ? 3 : profileDetail.detail.formatItemNames.length > 10 ? 2 : 1) + ';column-gap:24px'">
                   <template x-for="fi in profileDetail.detail.formatItemNames" :key="fi.trashId">
-                    <div class="cf-row" style="padding:2px 0">
+                    <div class="cf-row" style="padding:2px 0;break-inside:avoid">
                       <div class="cf-name" style="font-size:12px;color:#8b949e" x-text="fi.name"></div>
                       <template x-if="cfScoreOverrideActive">
                         <div style="flex-shrink:0">
@@ -4431,6 +4491,11 @@ function clonarr() {
     cfScoreOverrideActive: false, // whether CF score editing is enabled
     qualityOverrides: {}, // quality item overrides { name: allowed(bool) }
     qualityOverrideActive: false, // whether quality editing is enabled
+    extraCFs: {}, // { trashId: score } — extra CFs not in profile
+    extraCFsActive: false,
+    extraCFSearch: '',
+    extraCFAllCFs: [], // flat list of all TRaSH CFs (for filtering)
+    extraCFGroups: [], // { name, cfs[] } — TRaSH groups + ungrouped "Other"
     pdOverrides: {
       language: { enabled: true, value: 'Original' },
       upgradeAllowed: { enabled: true, value: true },
@@ -8463,6 +8528,59 @@ function clonarr() {
 
     // --- Notifications ---
 
+    getAllSelectedCFIds() {
+      const ids = this.getSelectedCFIds();
+      const extraIds = Object.keys(this.extraCFs);
+      return extraIds.length > 0 ? [...ids, ...extraIds] : ids;
+    },
+
+    async loadExtraCFList() {
+      const t = this.profileDetail?.instance?.type;
+      if (!t) return;
+      try {
+        const r = await fetch(`/api/trash/${t}/all-cfs`);
+        if (!r.ok) return;
+        const d = await r.json();
+        // Build grouped + ungrouped lists
+        const groups = []; // { name, cfs[] }
+        const ungrouped = [];
+        for (const c of (d.categories || [])) for (const g of c.groups) {
+          if (g.groupTrashId) {
+            groups.push({ name: g.name, cfs: g.cfs });
+          } else {
+            for (const cf of g.cfs) ungrouped.push(cf);
+          }
+        }
+        if (ungrouped.length > 0) groups.push({ name: 'Other', cfs: ungrouped });
+        this.extraCFGroups = groups;
+        // Flat list for filtering
+        const all = [];
+        for (const g of groups) for (const cf of g.cfs) all.push(cf);
+        this.extraCFAllCFs = all;
+      } catch (e) { console.error('loadExtraCFs:', e); }
+    },
+
+    _extraInProfile(trashId) {
+      if (!this._extraInProfileSet) {
+        this._extraInProfileSet = new Set();
+        for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) this._extraInProfileSet.add(fi.trashId);
+        for (const g of (this.profileDetail?.detail?.trashGroups || [])) for (const cf of g.cfs) this._extraInProfileSet.add(cf.trashId);
+      }
+      return this._extraInProfileSet.has(trashId);
+    },
+
+    extraCFAvailable() {
+      const q = (this.extraCFSearch || '').toLowerCase();
+      const inProfile = new Set();
+      for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) inProfile.add(fi.trashId);
+      for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+        for (const cf of g.cfs) inProfile.add(cf.trashId);
+      }
+      return this.extraCFAllCFs.filter(cf =>
+        !inProfile.has(cf.trashId) && !this.extraCFs[cf.trashId] && (!q || cf.name.toLowerCase().includes(q))
+      );
+    },
+
     showToast(message, type = 'info', duration = 8000) {
       const id = Date.now() + Math.random();
       this.toasts = [...this.toasts, { id, message, type, duration }];
@@ -8555,6 +8673,12 @@ function clonarr() {
           this.cfScoreOverrideActive = false;
           this.qualityOverrides = {};
           this.qualityOverrideActive = false;
+          this.extraCFs = {};
+          this.extraCFsActive = false;
+          this.extraCFSearch = '';
+          this.extraCFAllCFs = [];
+          this.extraCFGroups = [];
+          this._extraInProfileSet = null;
           this.pdOverrides = {
             language: { enabled: true, value: p.language || 'Original' },
             upgradeAllowed: { enabled: true, value: p.upgradeAllowed ?? true },
@@ -9359,7 +9483,7 @@ function clonarr() {
         instanceId: this.syncForm.instanceId,
         profileTrashId: this.syncForm.profileTrashId,
         arrProfileId: this.syncMode === 'create' ? 0 : parseInt(this.syncForm.arrProfileId),
-        selectedCFs: this.getSelectedCFIds()
+        selectedCFs: this.getAllSelectedCFIds()
       };
       if (this.syncForm.importedProfileId) {
         body.importedProfileId = this.syncForm.importedProfileId;
@@ -9381,8 +9505,10 @@ function clonarr() {
       const defaultCutoff = this.profileDetail?.detail?.profile?.cutoff || '';
       if (ov.cutoffQuality && ov.cutoffQuality !== defaultCutoff) { overrides.cutoffQuality = ov.cutoffQuality; hasOverrides = true; }
       if (hasOverrides) body.overrides = overrides;
-      // Per-CF score overrides
-      if (Object.keys(this.cfScoreOverrides).length > 0) body.scoreOverrides = this.cfScoreOverrides;
+      // Per-CF score overrides + extra CFs scores
+      const allScoreOverrides = { ...this.cfScoreOverrides };
+      for (const [tid, score] of Object.entries(this.extraCFs)) allScoreOverrides[tid] = score;
+      if (Object.keys(allScoreOverrides).length > 0) body.scoreOverrides = allScoreOverrides;
       if (Object.keys(this.qualityOverrides).length > 0) body.qualityOverrides = this.qualityOverrides;
       // Sync behavior rules
       if (this.syncForm.behavior) body.behavior = this.syncForm.behavior;
@@ -9485,7 +9611,7 @@ function clonarr() {
         if (existingRule) {
           const updated = {
             ...existingRule,
-            selectedCFs: this.getSelectedCFIds(),
+            selectedCFs: this.getAllSelectedCFIds(),
             arrProfileId: arrId,
             behavior: this.syncForm.behavior || existingRule.behavior,
             overrides: syncBody.overrides || null,
@@ -9516,10 +9642,16 @@ function clonarr() {
     // --- Quick Sync ---
 
     async quickSync(inst, sh, silent = false) {
+      // Fallback: check auto-sync rule for importedProfileId if missing from history (pre-1.7.1 migration)
+      let importedProfileId = sh.importedProfileId || '';
+      if (!importedProfileId) {
+        const rule = this.autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId);
+        if (rule?.importedProfileId) importedProfileId = rule.importedProfileId;
+      }
       const body = {
         instanceId: inst.id,
         profileTrashId: sh.profileTrashId,
-        importedProfileId: sh.importedProfileId || '',
+        importedProfileId,
         arrProfileId: sh.arrProfileId,
         selectedCFs: Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]),
         scoreOverrides: sh.scoreOverrides || null,
@@ -9644,6 +9776,27 @@ function clonarr() {
         this.qualityOverrides = { ...sh.qualityOverrides };
         this.qualityOverrideActive = true;
       }
+      // Restore extra CFs — selectedCFs that aren't in the profile
+      if (sh.selectedCFs && sh.scoreOverrides) {
+        const inProfile = new Set();
+        for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) inProfile.add(fi.trashId);
+        for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+          for (const cf of g.cfs) inProfile.add(cf.trashId);
+        }
+        const extras = {};
+        for (const tid of Object.keys(sh.selectedCFs)) {
+          if (sh.selectedCFs[tid] && !inProfile.has(tid) && sh.scoreOverrides[tid] !== undefined) {
+            extras[tid] = sh.scoreOverrides[tid];
+          }
+        }
+        if (Object.keys(extras).length > 0) {
+          this.extraCFs = extras;
+          this.extraCFsActive = true;
+          // Load all CFs for the browser
+          const appType = this.profileDetail?.instance?.type;
+          if (appType) this.loadExtraCFList();
+        }
+      }
       // Restore behavior from sync history
       if (sh.behavior) {
         this.syncForm.behavior = { ...this.syncForm.behavior, ...sh.behavior };
@@ -9742,7 +9895,7 @@ function clonarr() {
         const updated = {
           ...existing,
           enabled: enabled,
-          selectedCFs: this.getSelectedCFIds(),
+          selectedCFs: this.getAllSelectedCFIds(),
           behavior: this.syncForm.behavior,
           overrides: syncBody.overrides || null,
           scoreOverrides: syncBody.scoreOverrides || null,
@@ -9768,7 +9921,7 @@ function clonarr() {
           trashProfileId: this.syncForm.profileTrashId || '',
           importedProfileId: this.syncForm.importedProfileId || '',
           arrProfileId: parseInt(this.syncForm.arrProfileId) || 0,
-          selectedCFs: this.getSelectedCFIds(),
+          selectedCFs: this.getAllSelectedCFIds(),
           behavior: this.syncForm.behavior,
           overrides: syncBody.overrides || null,
           scoreOverrides: syncBody.scoreOverrides || null,
