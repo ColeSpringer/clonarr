@@ -159,7 +159,7 @@ The container includes a built-in healthcheck that verifies the web UI and TRaSH
 
 ### Unraid
 
-**Install via template:** Download [`clonarr.xml`](https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml) and place it in `/boot/config/plugins/dockerMan/templates-user/` on your Unraid server. Then go to **Docker** → **Add Container** and select **clonarr** from the Template dropdown.
+**Install via Community Apps:** Search for **clonarr** in the Apps tab — click Install and configure your settings.
 
 **Or install manually:** Go to **Docker** → **Add Container**, set Repository to `ghcr.io/prophetse7en/clonarr:latest`, and add the required paths and ports (see above).
 

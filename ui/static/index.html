@@ -139,7 +139,9 @@
   .cat-required-core .detail-section-header { border-left: 3px solid #484f58; }
   .cf-info { display: inline-block; cursor: default; color: #484f58; font-size: 11px; margin-left: 4px; }
   .cf-info:hover { color: #8b949e; }
-  #cf-tooltip-portal { position: fixed; width: 340px; max-width: 90vw; padding: 10px 12px; background: #1c2129; border: 1px solid #30363d; border-radius: 6px; font-size: 12px; color: #c9d1d9; line-height: 1.5; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none; display: none; word-wrap: break-word; }
+  #cf-tooltip-portal { position: fixed; width: 340px; max-width: 90vw; padding: 10px 12px; background: #1c2129; border: 1px solid #30363d; border-radius: 6px; font-size: 12px; color: #c9d1d9; line-height: 1.5; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: none; word-wrap: break-word; }
+  #cf-tooltip-portal a { color: #58a6ff; text-decoration: underline; }
+  #cf-tooltip-portal a:hover { color: #79c0ff; }
   #cf-tooltip-portal .desc-table { white-space: normal; }
   .desc-table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 11px; }
   .desc-table th, .desc-table td { border: 1px solid #30363d; padding: 2px 6px; text-align: left; }
@@ -8766,29 +8768,34 @@ function clonarr() {
     },
 
     showCFTooltip(event, text) {
+      clearTimeout(window._tooltipHideTimer);
       const el = document.getElementById('cf-tooltip-portal');
       if (!el) return;
       el.innerHTML = sanitizeHTML(text);
       el.style.display = 'block';
       const rect = event.target.getBoundingClientRect();
-      const x = Math.max(8, Math.min(rect.left, window.innerWidth - 360));
-      // Measure after making visible
+      // Position to the right of the icon, vertically centered
+      const w = el.offsetWidth || 340;
       const h = el.offsetHeight;
-      let y = rect.bottom + 8;
-      if (y + h > window.innerHeight) {
-        if (rect.top - h - 8 > 0) {
-          y = rect.top - h - 8;
-        } else {
-          y = Math.max(8, window.innerHeight - h - 8);
-        }
+      let x = rect.right + 12;
+      // If not enough space on the right, try left
+      if (x + w > window.innerWidth - 8) {
+        x = rect.left - w - 12;
+      }
+      x = Math.max(8, x);
+      let y = rect.top - 8;
+      if (y + h > window.innerHeight - 8) {
+        y = Math.max(8, window.innerHeight - h - 8);
       }
       el.style.left = x + 'px';
       el.style.top = y + 'px';
     },
 
     hideCFTooltip() {
-      const el = document.getElementById('cf-tooltip-portal');
-      if (el) el.style.display = 'none';
+      window._tooltipHideTimer = setTimeout(() => {
+        const el = document.getElementById('cf-tooltip-portal');
+        if (el) el.style.display = 'none';
+      }, 200);
     },
 
     toggleOptionalCF(trashId) {
@@ -10643,7 +10650,7 @@ function clonarr() {
   };
 }
 </script>
-<div id="cf-tooltip-portal"></div>
+<div id="cf-tooltip-portal" onmouseenter="clearTimeout(window._tooltipHideTimer)" onmouseleave="const el=document.getElementById('cf-tooltip-portal'); window._tooltipHideTimer=setTimeout(()=>{if(el)el.style.display='none'},200)"></div>
 <script>
 // Clipboard fallback for non-HTTPS contexts (e.g., LAN HTTP access)
 function copyToClipboard(text) {
