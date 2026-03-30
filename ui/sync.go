@@ -257,7 +257,8 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 			plan.Summary.CFsToCreate++
 		} else {
 			cfNameToArrID[cfName] = existing.ID
-			if specsMatch(existing) {
+			nameMatches := existing.Name == cfName
+			if specsMatch(existing) && nameMatches {
 				plan.CFActions = append(plan.CFActions, CFAction{
 					TrashID: cfTrashID,
 					Name:    cfName,

@@ -137,8 +137,8 @@
   .cat-miscellaneous .detail-section-header, .cat-miscellaneous .pb-cat-header { border-left: 3px solid #484f58; }
   .cat-other .detail-section-header, .cat-other .pb-cat-header { border-left: 3px solid #484f58; }
   .cat-required-core .detail-section-header { border-left: 3px solid #484f58; }
-  .cf-info { display: inline-block; cursor: default; color: #484f58; font-size: 11px; margin-left: 4px; }
-  .cf-info:hover { color: #8b949e; }
+  .cf-info { display: inline-block; cursor: default; color: #6e7681; font-size: 11px; margin-left: 4px; }
+  .cf-info:hover { color: #c9d1d9; }
   #cf-tooltip-portal { position: fixed; width: 340px; max-width: 90vw; padding: 10px 12px; background: #1c2129; border: 1px solid #30363d; border-radius: 6px; font-size: 12px; color: #c9d1d9; line-height: 1.5; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: none; word-wrap: break-word; }
   #cf-tooltip-portal a { color: #58a6ff; text-decoration: underline; }
   #cf-tooltip-portal a:hover { color: #79c0ff; }
@@ -2387,7 +2387,7 @@
                             @mouseenter="showCFTooltip($event, cf.description)"
                             @mouseleave="hideCFTooltip()">ⓘ</span>
                       <template x-if="config.devMode">
-                        <span style="font-size:10px;color:#484f58;font-family:monospace" x-text="cf.trashId.substring(0,8)"></span>
+                        <span style="font-size:10px;color:#6e7681;font-family:monospace" x-text="cf.trashId.substring(0,8)"></span>
                       </template>
                     </div>
                     <!-- Three-state pills: Req / Opt / Fmt -->
