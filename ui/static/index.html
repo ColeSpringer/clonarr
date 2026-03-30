@@ -513,20 +513,19 @@
                 <span class="profile-group-chevron" :class="{ open: syncRulesExpanded[tab.type] }">&#9654;</span>
                 <span style="font-size:13px;font-weight:500">Sync Rules & History</span>
                 <span style="font-size:11px;color:#8b949e;margin-left:auto"
-                      x-text="(() => { let count = 0; for (const inst of instancesOfType(tab.type)) count += (syncHistory[inst.id]?.length || 0); return count > 0 ? count + ' synced profile' + (count !== 1 ? 's' : '') : 'No syncs yet'; })()"></span>
+                      x-text="(() => { let count = 0; for (const inst of instancesOfType(tab.type)) count += (syncHistory[inst.id]?.filter(sh => !sh.importedProfileId)?.length || 0); return count > 0 ? count + ' synced profile' + (count !== 1 ? 's' : '') : 'No syncs yet'; })()"></span>
               </div>
               <div x-show="syncRulesExpanded[tab.type]" style="border-top:1px solid #21262d">
                 <template x-for="inst in instancesOfType(tab.type)" :key="'sr-'+inst.id">
-                  <template x-if="syncHistory[inst.id] && syncHistory[inst.id].length > 0">
+                  <template x-if="syncHistory[inst.id]?.filter(sh => !sh.importedProfileId)?.length > 0">
                     <div>
                       <div style="padding:8px 16px;font-size:11px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:#0d1117;border-bottom:1px solid #21262d;display:flex;align-items:center">
                         <span x-text="inst.name"></span>
-                        <button class="btn btn-sm" style="margin-left:auto;font-size:10px;padding:2px 8px;border-color:#238636;color:#3fb950" @click.stop="syncAllForInstance(inst)" title="Re-sync all profiles on this instance">Sync All</button>
+                        <button class="btn btn-sm" style="margin-left:auto;font-size:10px;padding:2px 8px;border-color:#238636;color:#3fb950" @click.stop="syncAllForInstance(inst)" title="Re-sync all TRaSH profiles on this instance">Sync All</button>
                       </div>
-                      <template x-for="sh in syncHistory[inst.id]" :key="sh.arrProfileId">
+                      <template x-for="sh in syncHistory[inst.id].filter(s => !s.importedProfileId)" :key="sh.arrProfileId">
                         <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
                           <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
-                          <span x-show="sh.importedProfileId" style="font-size:9px;background:#1f3a5f;color:#58a6ff;padding:1px 5px;border-radius:3px;flex-shrink:0">Builder</span>
                           <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
                               <label class="toggle toggle-sm" @click.stop title="Toggle auto-sync for this profile">
                                 <input type="checkbox"
@@ -546,7 +545,7 @@
                           </template>
                           <span style="color:#8b949e;margin-left:auto" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
                           <span style="color:#8b949e" x-text="timeAgo(sh.lastSync)"></span>
-                          <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)" title="Open profile with saved settings">Edit</button>
+                          <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)" title="Edit sync settings — overrides, optional CFs, behavior">Edit</button>
                           <button class="btn btn-sm" style="border-color:#238636;color:#3fb950" @click.stop="quickSync(inst, sh)" title="Re-sync with saved settings">Sync</button>
                           <button class="btn btn-sm" style="color:#f85149;border-color:#f85149" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" title="Remove sync history and auto-sync rule">Remove</button>
                         </div>
@@ -554,7 +553,7 @@
                     </div>
                   </template>
                 </template>
-                <template x-if="!instancesOfType(tab.type).some(inst => syncHistory[inst.id]?.length > 0)">
+                <template x-if="!instancesOfType(tab.type).some(inst => syncHistory[inst.id]?.some(sh => !sh.importedProfileId))">
                   <div style="padding:16px;text-align:center;color:#484f58;font-size:12px">No sync history yet. Sync a profile from the list below to get started.</div>
                 </template>
               </div>
@@ -641,6 +640,52 @@
                   <button class="btn btn-sm btn-danger" @click.stop="deleteImportedProfile(p.id, tab.type)" title="Delete this profile">Delete</button>
                 </div>
               </div>
+            </template>
+          </div>
+          <!-- Builder Sync Rules & History -->
+          <div class="card" style="margin-top:16px">
+            <div style="padding:10px 16px;font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;border-bottom:1px solid #21262d;display:flex;align-items:center">
+              Synced Profiles
+              <span style="background:#21262d;color:#8b949e;padding:0 6px;border-radius:8px;margin-left:6px;text-transform:none;letter-spacing:0"
+                    x-text="(() => { let c=0; for (const inst of instancesOfType(tab.type)) c += (syncHistory[inst.id]?.filter(sh => sh.importedProfileId)?.length || 0); return c; })()"></span>
+              <span style="font-size:10px;color:#484f58;margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">Scores follow your builder profile — not TRaSH Guides updates</span>
+            </div>
+            <template x-for="inst in instancesOfType(tab.type)" :key="'bsr-'+inst.id">
+              <template x-if="syncHistory[inst.id]?.filter(sh => sh.importedProfileId)?.length > 0">
+                <div>
+                  <div style="padding:6px 16px;font-size:10px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:#0d1117;border-bottom:1px solid #21262d" x-text="inst.name"></div>
+                  <template x-for="sh in syncHistory[inst.id].filter(s => s.importedProfileId)" :key="'bsh-'+sh.arrProfileId">
+                    <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #161b22;gap:8px;font-size:12px">
+                      <span style="color:#58a6ff;font-weight:500" x-text="sh.profileName"></span>
+                      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+                        <label class="toggle toggle-sm" @click.stop title="Toggle auto-sync for this profile">
+                          <input type="checkbox"
+                                 :checked="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled"
+                                 @change="(() => { const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId); if (rule) toggleAutoSyncRule(rule); })()">
+                          <span class="slider"></span>
+                        </label>
+                        <span style="font-size:9px"
+                              :style="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'color:#3fb950' : 'color:#f8514980'"
+                              x-text="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'auto-sync' : 'auto-sync off'"></span>
+                      </div>
+                      <span style="color:#484f58">&rarr;</span>
+                      <span style="color:#e1e4e8" x-text="sh.arrProfileName"></span>
+                      <template x-if="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">
+                        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#3d1f1f;color:#f85149;flex-shrink:0"
+                              :title="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">error</span>
+                      </template>
+                      <span style="color:#8b949e;margin-left:auto" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
+                      <span style="color:#8b949e" x-text="timeAgo(sh.lastSync)"></span>
+                      <button class="btn btn-sm" @click.stop="resyncProfile(inst, sh)" title="Edit the builder profile — changes affect this sync rule">Edit</button>
+                      <button class="btn btn-sm" style="border-color:#238636;color:#3fb950" @click.stop="quickSync(inst, sh)" title="Re-sync profile to Arr">Sync</button>
+                      <button class="btn btn-sm" style="color:#f85149;border-color:#f85149" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" title="Remove sync rule (profile is kept)">Remove</button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </template>
+            <template x-if="!instancesOfType(tab.type).some(inst => syncHistory[inst.id]?.some(sh => sh.importedProfileId))">
+              <div style="padding:16px;text-align:center;color:#484f58;font-size:12px">No builder profiles synced yet.</div>
             </template>
           </div>
         </div>
@@ -2610,7 +2655,9 @@
                   <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Cutoff</div>
                   <div style="display:flex;align-items:center;gap:8px;height:28px">
                     <template x-if="!pdOverrideActive">
-                      <span style="font-size:12px;font-weight:500" x-text="profileDetail?.detail?.profile?.cutoff || '—'"></span>
+                      <span style="font-size:12px;font-weight:500"
+                            :style="pdOverrides.cutoffQuality && pdOverrides.cutoffQuality !== (profileDetail?.detail?.profile?.cutoff || '') ? 'color:#d29922' : ''"
+                            x-text="pdOverrides.cutoffQuality && pdOverrides.cutoffQuality !== (profileDetail?.detail?.profile?.cutoff || '') ? pdOverrides.cutoffQuality : (profileDetail?.detail?.profile?.cutoff || '—')"></span>
                     </template>
                     <template x-if="pdOverrideActive">
                       <select class="pb-input" style="width:100%;font-size:12px" x-model="pdOverrides.cutoffQuality"
@@ -9691,8 +9738,9 @@ function clonarr() {
       }
     },
 
-    async syncAllForInstance(inst) {
-      const entries = this.syncHistory[inst.id] || [];
+    async syncAllForInstance(inst, builderOnly = false) {
+      const all = this.syncHistory[inst.id] || [];
+      const entries = builderOnly ? all.filter(sh => sh.importedProfileId) : all.filter(sh => !sh.importedProfileId);
       if (!entries.length) return;
       const results = [];
       for (const sh of entries) {

@@ -41,7 +41,13 @@ type ScoreAction struct {
 }
 
 // HasChanges returns true if the plan contains any create/update actions.
+// Note: profile-level settings (min score, cutoff score, etc.) can only be detected
+// during ExecuteSyncPlan, so this always returns true for update mode to ensure
+// settings changes are not skipped.
 func (p *SyncPlan) HasChanges() bool {
+	if !p.CreateProfile {
+		return true // update mode: always execute to catch settings changes
+	}
 	return p.Summary.CFsToCreate > 0 || p.Summary.CFsToUpdate > 0 ||
 		p.Summary.ScoresToSet > 0 || p.Summary.ScoresToZero > 0 ||
 		p.Summary.QualityChanged || p.CreateProfile
@@ -493,6 +499,7 @@ type SyncResult struct {
 	QualityDetails  []string `json:"qualityDetails,omitempty"`  // e.g. "Remux-1080p: Enabled → Disabled"
 	CFDetails       []string `json:"cfDetails,omitempty"`       // e.g. "Created: HDR", "Updated: Hulu"
 	ScoreDetails    []string `json:"scoreDetails,omitempty"`    // e.g. "BHDStudio: 1000 → 2240"
+	SettingsDetails []string `json:"settingsDetails,omitempty"` // e.g. "Cutoff Score: 10000 → 8000"
 	ProfileCreated  bool     `json:"profileCreated,omitempty"`
 	ArrProfileID    int      `json:"arrProfileId,omitempty"`
 	ArrProfileName  string   `json:"arrProfileName,omitempty"`
@@ -699,17 +706,32 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 					arrProfile.Items[i].Allowed = override
 				}
 			}
-			// Re-resolve cutoff — disabled quality can't be cutoff
+			// Re-resolve cutoff only if current cutoff quality is now disabled
+			currentCutoffAllowed := false
 			for _, item := range arrProfile.Items {
-				if item.Allowed {
-					name := item.Name
-					if name == "" && item.Quality != nil {
-						name = item.Quality.Name
-					}
-					if cid, err := resolveCutoff(name, arrProfile.Items); err == nil {
-						arrProfile.Cutoff = cid
-					}
+				id := 0
+				if item.Quality != nil {
+					id = item.Quality.ID
+				} else {
+					id = item.ID
+				}
+				if id == arrProfile.Cutoff && item.Allowed {
+					currentCutoffAllowed = true
 					break
+				}
+			}
+			if !currentCutoffAllowed {
+				for _, item := range arrProfile.Items {
+					if item.Allowed {
+						name := item.Name
+						if name == "" && item.Quality != nil {
+							name = item.Quality.Name
+						}
+						if cid, err := resolveCutoff(name, arrProfile.Items); err == nil {
+							arrProfile.Cutoff = cid
+						}
+						break
+					}
 				}
 			}
 		}
@@ -915,6 +937,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			for i := range targetProfile.FormatItems {
 				fi := &targetProfile.FormatItems[i]
 				if fi.Score != 0 && !syncedArrIDs[fi.Format] {
+					result.ScoreDetails = append(result.ScoreDetails, fmt.Sprintf("%s: %d → 0 (reset — no longer in profile)", fi.Name, fi.Score))
 					fi.Score = 0
 					updated = true
 					result.ScoresZeroed++
@@ -1008,7 +1031,24 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 
 		// Resolve cutoff after quality items rebuild so the ID matches the final item set
 		if !skipCutoff {
-			if cutoffName == "" {
+			// Check if the desired cutoff quality is still allowed
+			cutoffAllowed := false
+			if cutoffName != "" {
+				for _, item := range targetProfile.Items {
+					name := item.Name
+					if name == "" && item.Quality != nil { name = item.Quality.Name }
+					if name == cutoffName && item.Allowed {
+						cutoffAllowed = true
+						break
+					}
+				}
+			}
+			// If cutoff quality was disabled (or empty), pick first allowed
+			if cutoffName == "" || !cutoffAllowed {
+				if cutoffName != "" {
+					log.Printf("Sync: cutoff %q is disabled, selecting first allowed quality", cutoffName)
+				}
+				cutoffName = ""
 				for _, item := range targetProfile.Items {
 					if item.Allowed {
 						if item.Name != "" {
@@ -1040,6 +1080,18 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 				prevMinUpgradeFormatScore, targetProfile.MinUpgradeFormatScore,
 				prevCutoffFormatScore, targetProfile.CutoffFormatScore,
 				prevUpgradeAllowed, targetProfile.UpgradeAllowed)
+			if targetProfile.MinFormatScore != prevMinFormatScore {
+				result.SettingsDetails = append(result.SettingsDetails, fmt.Sprintf("Min Score: %d → %d", prevMinFormatScore, targetProfile.MinFormatScore))
+			}
+			if targetProfile.MinUpgradeFormatScore != prevMinUpgradeFormatScore {
+				result.SettingsDetails = append(result.SettingsDetails, fmt.Sprintf("Min Upgrade: %d → %d", prevMinUpgradeFormatScore, targetProfile.MinUpgradeFormatScore))
+			}
+			if targetProfile.CutoffFormatScore != prevCutoffFormatScore {
+				result.SettingsDetails = append(result.SettingsDetails, fmt.Sprintf("Cutoff Score: %d → %d", prevCutoffFormatScore, targetProfile.CutoffFormatScore))
+			}
+			if targetProfile.UpgradeAllowed != prevUpgradeAllowed {
+				result.SettingsDetails = append(result.SettingsDetails, fmt.Sprintf("Upgrades: %v → %v", prevUpgradeAllowed, targetProfile.UpgradeAllowed))
+			}
 		}
 
 		if updated {

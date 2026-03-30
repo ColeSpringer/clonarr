@@ -404,8 +404,11 @@ func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName str
 				description += "\n  - " + d
 			}
 		}
-		if result.ScoresUpdated > 0 {
-			description += fmt.Sprintf("\n**Scores:** %d updated", result.ScoresUpdated)
+		if result.ScoresUpdated > 0 || result.ScoresZeroed > 0 {
+			parts := []string{}
+			if result.ScoresUpdated > 0 { parts = append(parts, fmt.Sprintf("%d updated", result.ScoresUpdated)) }
+			if result.ScoresZeroed > 0 { parts = append(parts, fmt.Sprintf("%d reset to 0", result.ScoresZeroed)) }
+			description += fmt.Sprintf("\n**Scores:** %s", strings.Join(parts, ", "))
 			for _, d := range result.ScoreDetails {
 				if len(description) > 1800 { description += "\n  - ..."; break }
 				description += "\n  - " + d
@@ -418,7 +421,13 @@ func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName str
 				description += "\n  - " + d
 			}
 		}
-		if result.CFsCreated == 0 && result.CFsUpdated == 0 && result.ScoresUpdated == 0 && !result.QualityUpdated {
+		if len(result.SettingsDetails) > 0 {
+			description += "\n**Settings:**"
+			for _, d := range result.SettingsDetails {
+				description += "\n  - " + d
+			}
+		}
+		if result.CFsCreated == 0 && result.CFsUpdated == 0 && result.ScoresUpdated == 0 && result.ScoresZeroed == 0 && !result.QualityUpdated && len(result.SettingsDetails) == 0 {
 			description += "\n**No changes** — profile already in sync"
 		}
 	}

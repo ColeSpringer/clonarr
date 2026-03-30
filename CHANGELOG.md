@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.7.3-beta
+
+### Features
+- **Builder sync rules in Builder tab** — Builder synced profiles now shown in Profile Builder tab instead of TRaSH Sync, with distinct tooltips and "Sync All" per tab.
+- **Discord notifications for settings changes** — Auto-sync notifications now show profile settings changes (Min Score, Cutoff Score, etc.) and zeroed scores with CF names.
+
+### Bug fixes
+- **Create-mode cutoff override preserved** — Cutoff override no longer replaced by first allowed quality when user's chosen cutoff is still valid.
+- **Update-mode settings-only changes detected** — HasChanges() now always executes for updates, catching min score and cutoff changes that were previously skipped.
+- **Cutoff read-only display shows override** — After Done, cutoff override now shown in amber instead of always showing TRaSH default.
+
 ## v1.7.2-beta
 
 ### Features
@@ -13,6 +24,10 @@
 - **Extra CF browser wrong type** — Reset on profile switch to prevent showing radarr CFs for sonarr.
 - **Resync loads grouped browser** — extraCFGroups populated after resync (was empty).
 - **Reset to TRaSH clears Extra CFs** — Toggle, search, and selections all cleared.
+- **CF name casing auto-corrected** — CFs with wrong casing (e.g. HULU vs Hulu) are now updated to match TRaSH's canonical name on sync.
+- **Orphaned scores case-insensitive** — Maintenance Reset Non-Synced Scores no longer flags CFs with different casing as out of sync.
+- **Tooltip links clickable** — SQP description tooltips now have styled, clickable links. Tooltip stays visible when hovering over it.
+- **CF info icon more readable** — Info icon and trash ID in builder now use lighter color for better visibility.
 
 ## v1.7.1-beta
 
