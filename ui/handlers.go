@@ -2931,7 +2931,7 @@ func scanUnsyncedScores(app *App, client *ArrClient, inst Instance) (*CleanupSca
 	for _, ip := range importedProfiles {
 		for trashID := range ip.FormatItems {
 			if comment, ok := ip.FormatComments[trashID]; ok {
-				syncedCFNames[comment] = true
+				syncedCFNames[strings.ToLower(comment)] = true
 			}
 		}
 	}
@@ -2943,7 +2943,7 @@ func scanUnsyncedScores(app *App, client *ArrClient, inst Instance) (*CleanupSca
 			if ad != nil {
 				resolved, _ := ResolveProfileCFs(ad, sh.ProfileTrashID)
 				for _, rcf := range resolved {
-					syncedCFNames[rcf.Name] = true
+					syncedCFNames[strings.ToLower(rcf.Name)] = true
 				}
 			}
 		}
@@ -2977,7 +2977,7 @@ func scanUnsyncedScores(app *App, client *ArrClient, inst Instance) (*CleanupSca
 						break
 					}
 				}
-				if cfName == "" || syncedCFNames[cfName] {
+				if cfName == "" || syncedCFNames[strings.ToLower(cfName)] {
 					continue
 				}
 				cfScores[fi.Format] = &cfScoreInfo{
