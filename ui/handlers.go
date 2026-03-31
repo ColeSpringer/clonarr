@@ -704,14 +704,14 @@ func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build name→ID maps for matching
+	// Build name→ID maps for matching (case-insensitive)
 	existingCFByName := make(map[string]*ArrCF, len(existingCFs))
 	for i := range existingCFs {
-		existingCFByName[existingCFs[i].Name] = &existingCFs[i]
+		existingCFByName[strings.ToLower(existingCFs[i].Name)] = &existingCFs[i]
 	}
 	existingProfileByName := make(map[string]*ArrQualityProfile, len(existingProfiles))
 	for i := range existingProfiles {
-		existingProfileByName[existingProfiles[i].Name] = &existingProfiles[i]
+		existingProfileByName[strings.ToLower(existingProfiles[i].Name)] = &existingProfiles[i]
 	}
 
 	type RestoreAction struct {
@@ -728,7 +728,7 @@ func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Restore Custom Formats
 	for _, cf := range backup.CustomFormats {
 		oldID := cf.ID
-		existing := existingCFByName[cf.Name]
+		existing := existingCFByName[strings.ToLower(cf.Name)]
 		action := "create"
 		if existing != nil {
 			action = "update"
@@ -767,7 +767,7 @@ func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
 
 	// Step 2: Restore Profiles (remap CF IDs in formatItems)
 	for _, profile := range backup.Profiles {
-		existing := existingProfileByName[profile.Name]
+		existing := existingProfileByName[strings.ToLower(profile.Name)]
 		action := "create"
 		if existing != nil {
 			action = "update"
@@ -786,7 +786,7 @@ func (app *App) handleInstanceRestore(w http.ResponseWriter, r *http.Request) {
 				if newID, ok := cfIDMap[fi.Format]; ok {
 					fi.Format = newID
 				} else if cfName := backupCFByID[fi.Format]; cfName != "" {
-					if ecf := existingCFByName[cfName]; ecf != nil {
+					if ecf := existingCFByName[strings.ToLower(cfName)]; ecf != nil {
 						fi.Format = ecf.ID
 					}
 				}
