@@ -2477,25 +2477,37 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure an auto-sync rule exists for this profile (disabled by default)
+	// If a rule exists but source type changed (builder↔TRaSH), update it to match
 	arrID := req.ArrProfileID
 	if result.ProfileCreated {
 		arrID = result.ArrProfileID
 	}
+	newSource := "trash"
+	if req.ImportedProfileID != "" {
+		newSource = "imported"
+	}
 	app.config.Update(func(cfg *Config) {
-		for _, r := range cfg.AutoSync.Rules {
+		for i, r := range cfg.AutoSync.Rules {
 			if r.InstanceID == req.InstanceID && r.ArrProfileID == arrID {
-				return // rule already exists
+				// Rule exists — update source type and selections if they changed
+				if r.ProfileSource != newSource || r.TrashProfileID != req.ProfileTrashID || r.ImportedProfileID != req.ImportedProfileID {
+					app.debugLog.Logf(LogSync, "Auto-sync rule %s: updating source %s→%s for Arr profile %d", r.ID, r.ProfileSource, newSource, arrID)
+					cfg.AutoSync.Rules[i].ProfileSource = newSource
+					cfg.AutoSync.Rules[i].TrashProfileID = req.ProfileTrashID
+					cfg.AutoSync.Rules[i].ImportedProfileID = req.ImportedProfileID
+					cfg.AutoSync.Rules[i].SelectedCFs = req.SelectedCFs
+					cfg.AutoSync.Rules[i].ScoreOverrides = req.ScoreOverrides
+					cfg.AutoSync.Rules[i].Behavior = req.Behavior
+					cfg.AutoSync.Rules[i].Overrides = req.Overrides
+				}
+				return
 			}
-		}
-		source := "trash"
-		if req.ImportedProfileID != "" {
-			source = "imported"
 		}
 		cfg.AutoSync.Rules = append(cfg.AutoSync.Rules, AutoSyncRule{
 			ID:                generateID(),
 			Enabled:           false,
 			InstanceID:        req.InstanceID,
-			ProfileSource:     source,
+			ProfileSource:     newSource,
 			TrashProfileID:    req.ProfileTrashID,
 			ImportedProfileID: req.ImportedProfileID,
 			ArrProfileID:      arrID,
@@ -2541,6 +2553,9 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
 			app.debugLog.Logf(LogAutoSync, "Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
+		} else if len(profiles) == 0 {
+			log.Printf("Cleanup: skipping %s — returned 0 profiles (instance may still be starting)", inst.Name)
+			app.debugLog.Logf(LogAutoSync, "Cleanup: skipping %s — 0 profiles returned, likely still starting", inst.Name)
 		} else {
 			validIDs := make(map[int]bool)
 			for _, p := range profiles {

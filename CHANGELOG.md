@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.5-beta
+
+### Bug fixes
+- **Builder/TRaSH sync rule separation** — Auto-sync disabled for builder profiles (manual sync only). Prevents builder rules from overwriting TRaSH sync history on pull.
+- **Auto-sync rule updated on source change** — Syncing a TRaSH profile to an Arr profile with a builder rule now converts the rule permanently. No merge-back possible.
+- **Confirm dialog on source change** — Warning shown when syncing overwrites a rule of different type (Builder→TRaSH or TRaSH→Builder).
+- **Startup cleanup safety** — Cleanup skips instances returning 0 profiles (race condition when Arr is still starting).
+
 ## v1.7.4-beta
 
 ### Features

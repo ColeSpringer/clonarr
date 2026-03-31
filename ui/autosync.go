@@ -31,6 +31,9 @@ func (app *App) autoSyncAfterPull() {
 		if !rule.Enabled {
 			continue
 		}
+		if rule.ProfileSource == "imported" {
+			continue // builder profiles are manual-sync only
+		}
 		if rule.LastSyncCommit == currentCommit {
 			continue // no repo changes since last sync
 		}
@@ -249,6 +252,11 @@ func (app *App) cleanupStaleRules() {
 			log.Printf("Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
 			app.debugLog.Logf(LogAutoSync, "Startup cleanup: skipping %s — not reachable: %v", inst.Name, err)
 			continue // instance unreachable — do NOT remove any rules
+		}
+		if len(profiles) == 0 {
+			log.Printf("Cleanup: skipping %s — returned 0 profiles (instance may still be starting)", inst.Name)
+			app.debugLog.Logf(LogAutoSync, "Startup cleanup: skipping %s — 0 profiles returned, likely still starting", inst.Name)
+			continue // safety: Arr may be starting up and not yet serving profiles
 		}
 		ids := make(map[int]bool)
 		for _, p := range profiles {
