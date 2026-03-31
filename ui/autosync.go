@@ -59,6 +59,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	inst, ok := app.config.GetInstance(rule.InstanceID)
 	if !ok {
 		log.Printf("Auto-sync: skipping rule %s — instance %s not found", rule.ID, rule.InstanceID)
+		app.debugLog.Logf(LogAutoSync, "Rule %s: skipped — instance %s not found", rule.ID, rule.InstanceID)
 		return
 	}
 
@@ -66,6 +67,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string) {
 	mu := getSyncMutex(inst.ID)
 	if !mu.TryLock() {
 		log.Printf("Auto-sync: skipping rule %s — sync already in progress for %s", rule.ID, inst.Name)
+		app.debugLog.Logf(LogAutoSync, "Rule %s: skipped — sync already in progress for %s", rule.ID, inst.Name)
 		return
 	}
 	defer mu.Unlock()
@@ -245,6 +247,7 @@ func (app *App) cleanupStaleRules() {
 		profiles, err := client.ListProfiles()
 		if err != nil {
 			log.Printf("Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
+			app.debugLog.Logf(LogAutoSync, "Startup cleanup: skipping %s — not reachable: %v", inst.Name, err)
 			continue // instance unreachable — do NOT remove any rules
 		}
 		ids := make(map[int]bool)
@@ -262,6 +265,7 @@ func (app *App) cleanupStaleRules() {
 			valid, ok := validProfiles[r.InstanceID]
 			if ok && !valid[r.ArrProfileID] {
 				log.Printf("Cleanup: removing stale auto-sync rule %s (Arr profile %d deleted from %s)", r.ID, r.ArrProfileID, instNames[r.InstanceID])
+				app.debugLog.Logf(LogAutoSync, "Startup cleanup: removing auto-sync rule %s (Arr profile %d deleted from %s)", r.ID, r.ArrProfileID, instNames[r.InstanceID])
 				continue
 			}
 			cleaned = append(cleaned, r)
@@ -273,6 +277,7 @@ func (app *App) cleanupStaleRules() {
 			valid, ok := validProfiles[h.InstanceID]
 			if ok && !valid[h.ArrProfileID] {
 				log.Printf("Cleanup: removing stale sync history for %q (Arr profile %d deleted from %s)", h.ProfileName, h.ArrProfileID, instNames[h.InstanceID])
+				app.debugLog.Logf(LogAutoSync, "Startup cleanup: removing sync history for %q (Arr profile %d deleted from %s)", h.ProfileName, h.ArrProfileID, instNames[h.InstanceID])
 				events = append(events, CleanupEvent{
 					ProfileName:  h.ProfileName,
 					InstanceName: instNames[h.InstanceID],

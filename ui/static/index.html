@@ -602,7 +602,8 @@
         <div class="page" x-show="getProfileTab(tab.type) === 'builder'">
           <div style="margin-bottom:16px">
             <div style="font-size:18px;font-weight:600">Profile Builder</div>
-            <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5">Create custom profiles from TRaSH templates or from scratch, import from Recyclarr or TRaSH JSON, and sync them to your <span x-text="tab.label"></span> instance.</div>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5"><strong style="color:#d29922">For advanced users.</strong> Build custom profiles for testing or guide development. Profiles created here use fixed scores that do <strong>not</strong> follow TRaSH Guide updates.</div>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5"><strong>To sync TRaSH profiles to your <span x-text="tab.label"></span> instance, use the TRaSH Sync tab</strong> — it keeps your profiles updated automatically when TRaSH Guides change.</div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-sm" style="background:#1f6feb;color:#fff" @click="openProfileBuilder(tab.type)">Create New Profile</button>
               <button class="btn btn-sm" style="background:#238636;color:#fff" @click="showImportModal = tab.type">Import</button>
@@ -4862,8 +4863,8 @@ function clonarr() {
         this._nowTick = Date.now();
         this.loadTrashStatus();
       }, 30000);
-      // Re-test instances every 5 minutes
-      setInterval(() => this.testAllInstances(), 300000);
+      // Re-test instances every 60 seconds
+      setInterval(() => this.testAllInstances(), 60000);
     },
 
     async loadConfig() {
@@ -9643,7 +9644,9 @@ function clonarr() {
           if (result.cfsCreated) parts.push(`${result.cfsCreated} CFs created`);
           if (result.cfsUpdated) parts.push(`${result.cfsUpdated} CFs updated`);
           if (result.scoresUpdated) parts.push(`${result.scoresUpdated} scores`);
-          if (result.errors?.length) {
+          if (result.error) {
+            this.showToast(`Sync failed: ${result.error}`, 'error', 8000);
+          } else if (result.errors?.length) {
             this.showToast(`Sync failed: ${result.errors[0]}`, 'error', 8000);
           } else {
             this.showToast(`"${this.syncForm.profileName}" synced — ${parts.length ? parts.join(', ') : 'no changes'}`, 'info', 6000);
@@ -9720,8 +9723,14 @@ function clonarr() {
           body: JSON.stringify(body)
         });
         const result = await r.json();
+        if (result.error) {
+          if (!silent) this.showToast(`"${sh.profileName}" sync failed: ${result.error}`, 'error', 8000);
+          this.setRuleSyncError(inst.id, sh.arrProfileId, result.error);
+          return { ok: false, name: sh.profileName, error: result.error };
+        }
         if (result.errors?.length) {
           if (!silent) this.showToast(`"${sh.profileName}" sync failed: ${result.errors[0]}`, 'error', 8000);
+          this.setRuleSyncError(inst.id, sh.arrProfileId, result.errors[0]);
           return { ok: false, name: sh.profileName, error: result.errors[0] };
         }
         const parts = [];
@@ -9730,12 +9739,28 @@ function clonarr() {
         if (result.scoresUpdated) parts.push(`${result.scoresUpdated} scores`);
         const summary = parts.length ? parts.join(', ') : 'no changes';
         if (!silent) this.showToast(`"${sh.profileName}" synced — ${summary}`, 'info', 6000);
+        this.setRuleSyncError(inst.id, sh.arrProfileId, '');
         await this.loadSyncHistory(inst.id);
         return { ok: true, name: sh.profileName, summary };
       } catch (e) {
         if (!silent) this.showToast(`Sync error: ${e.message}`, 'error', 8000);
+        this.setRuleSyncError(inst.id, sh.arrProfileId, e.message);
         return { ok: false, name: sh.profileName, error: e.message };
       }
+    },
+
+    async setRuleSyncError(instanceId, arrProfileId, error) {
+      const rule = this.autoSyncRules.find(r => r.instanceId === instanceId && r.arrProfileId === arrProfileId);
+      if (!rule) return;
+      rule.lastSyncError = error;
+      try {
+        await fetch(`/api/auto-sync/rules/${rule.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rule)
+        });
+        await this.loadAutoSyncRules();
+      } catch (e) { /* best effort */ }
     },
 
     async syncAllForInstance(inst, builderOnly = false) {
@@ -9748,7 +9773,8 @@ function clonarr() {
       }
       const lines = results.map(r => r.ok ? `${r.name} — ${r.summary}` : `${r.name} — FAILED: ${r.error}`);
       const errors = results.filter(r => !r.ok).length;
-      this.showToast(`Sync All (${inst.name}):\n${lines.join('\n')}`, errors > 0 ? 'warning' : 'info', 8000);
+      const toastType = errors === results.length ? 'error' : errors > 0 ? 'warning' : 'info';
+      this.showToast(`Sync All (${inst.name}):\n${lines.join('\n')}`, toastType, 8000);
     },
 
     // --- Sync History ---

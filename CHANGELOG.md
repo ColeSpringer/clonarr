@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.7.4-beta
+
+### Features
+- **Instance health check every 60s** — Connection status now updates automatically within a minute when instances go up or down (was 5 minutes).
+- **Comprehensive debug logging** — Cleanup, auto-sync, TRaSH pull, and sync errors now all logged to debug.log for easier troubleshooting.
+- **Profile Builder description** — Clarified as "For advanced users" with amber warning, pointing users to TRaSH Sync tab.
+
+### Bug fixes
+- **Sync errors shown as "no changes"** — Backend returns `{"error":"..."}` but frontend only checked `result.errors` (array). Connection failures now correctly show red error toast.
+- **Error badge persists through toggle** — Toggling auto-sync no longer clears the error badge. Error clears only when a sync succeeds.
+- **Sync All/quickSync sets error badge** — Manual sync failures now set lastSyncError on auto-sync rules, not just auto-sync failures.
+- **Sync All toast type** — All failures = red, some = amber, none = blue (was always amber or blue).
+
 ## v1.7.3-beta
 
 ### Features

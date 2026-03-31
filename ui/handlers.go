@@ -1216,6 +1216,7 @@ func (app *App) autoSyncQualitySizes() {
 		defs, err := client.ListQualityDefinitions()
 		if err != nil {
 			log.Printf("Auto-sync QS [%s]: failed to fetch definitions: %v", inst.Name, err)
+			app.debugLog.Logf(LogAutoSync, "QS [%s]: failed to fetch definitions: %v", inst.Name, err)
 			continue
 		}
 
@@ -1264,8 +1265,10 @@ func (app *App) autoSyncQualitySizes() {
 
 		if err := client.UpdateQualityDefinitions(updated); err != nil {
 			log.Printf("Auto-sync QS [%s/%s]: sync failed: %v", inst.Name, as.Type, err)
+			app.debugLog.Logf(LogError, "QS [%s/%s]: sync failed: %v", inst.Name, as.Type, err)
 		} else {
 			log.Printf("Auto-sync QS [%s/%s]: synced %d qualities", inst.Name, as.Type, len(updated))
+			app.debugLog.Logf(LogAutoSync, "QS [%s/%s]: synced %d qualities", inst.Name, as.Type, len(updated))
 		}
 	}
 }
@@ -1281,8 +1284,10 @@ func (app *App) handleTrashPull(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		if err := app.trash.CloneOrPull(cfg.TrashRepo.URL, cfg.TrashRepo.Branch); err != nil {
 			log.Printf("TRaSH pull failed: %v", err)
+			app.debugLog.Logf(LogError, "TRaSH pull failed: %v", err)
 			app.trash.SetPullError(err.Error())
 		} else {
+			app.debugLog.Logf(LogAutoSync, "TRaSH pull completed — running auto-sync")
 			app.autoSyncQualitySizes()
 			app.autoSyncAfterPull()
 		}
@@ -2396,6 +2401,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 	plan, err := BuildSyncPlan(ad, inst, req, imported, customCFs, lastSyncedCFs)
 	if err != nil {
 		log.Printf("Apply plan error for %s: %v", inst.Name, err)
+		app.debugLog.Logf(LogError, "Apply plan error for %s: %v", inst.Name, err)
 		writeError(w, 500, "Failed to build sync plan")
 		return
 	}
@@ -2403,6 +2409,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 	result, err := ExecuteSyncPlan(ad, inst, req, plan, imported, customCFs, behavior)
 	if err != nil {
 		log.Printf("Apply exec error for %s: %v", inst.Name, err)
+		app.debugLog.Logf(LogError, "Apply exec error for %s: %v", inst.Name, err)
 		writeError(w, 500, "Failed to execute sync")
 		return
 	}
@@ -2457,6 +2464,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 					((r.TrashProfileID != "" && r.TrashProfileID == req.ProfileTrashID) ||
 						(r.ImportedProfileID != "" && r.ImportedProfileID == req.ImportedProfileID)) {
 					log.Printf("Sync: updating auto-sync rule %s with new Arr profile ID %d", r.ID, result.ArrProfileID)
+					app.debugLog.Logf(LogSync, "Auto-sync rule %s updated with new Arr profile ID %d", r.ID, result.ArrProfileID)
 					r.ArrProfileID = result.ArrProfileID
 					return
 				}
@@ -2465,6 +2473,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := app.config.UpsertSyncHistory(entry); err != nil {
 		log.Printf("Failed to save sync history: %v", err)
+		app.debugLog.Logf(LogError, "Failed to save sync history: %v", err)
 	}
 
 	// Ensure an auto-sync rule exists for this profile (disabled by default)
@@ -2531,6 +2540,7 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 		profiles, err := client.ListProfiles()
 		if err != nil {
 			log.Printf("Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
+			app.debugLog.Logf(LogAutoSync, "Cleanup: skipping %s — instance not reachable: %v", inst.Name, err)
 		} else {
 			validIDs := make(map[int]bool)
 			for _, p := range profiles {
@@ -2542,6 +2552,7 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 				for _, h := range cfg.SyncHistory {
 					if h.InstanceID == id && !validIDs[h.ArrProfileID] {
 						log.Printf("Cleanup: removing stale sync history for %q (Arr profile %d deleted from %s)", h.ProfileName, h.ArrProfileID, inst.Name)
+						app.debugLog.Logf(LogAutoSync, "Cleanup: removing stale sync history for %q (Arr profile %d deleted from %s)", h.ProfileName, h.ArrProfileID, inst.Name)
 						events = append(events, CleanupEvent{
 							ProfileName:  h.ProfileName,
 							InstanceName: inst.Name,
@@ -2556,6 +2567,7 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 				for _, r := range cfg.AutoSync.Rules {
 					if r.InstanceID == id && !validIDs[r.ArrProfileID] && r.ArrProfileID != 0 {
 						log.Printf("Cleanup: removing stale auto-sync rule %s (Arr profile %d deleted from %s)", r.ID, r.ArrProfileID, inst.Name)
+						app.debugLog.Logf(LogAutoSync, "Cleanup: removing stale auto-sync rule %s (Arr profile %d deleted from %s)", r.ID, r.ArrProfileID, inst.Name)
 						continue
 					}
 					cleanedRules = append(cleanedRules, r)
@@ -3284,11 +3296,7 @@ func (app *App) handleUpdateAutoSyncRule(w http.ResponseWriter, r *http.Request)
 			if cfg.AutoSync.Rules[i].ID == id {
 				rule.LastSyncCommit = cfg.AutoSync.Rules[i].LastSyncCommit
 				rule.LastSyncTime = cfg.AutoSync.Rules[i].LastSyncTime
-				if rule.Enabled && !cfg.AutoSync.Rules[i].Enabled {
-					rule.LastSyncError = ""
-				} else {
-					rule.LastSyncError = cfg.AutoSync.Rules[i].LastSyncError
-				}
+				// Frontend controls lastSyncError — passes current value or empty to clear
 				cfg.AutoSync.Rules[i] = rule
 				found = true
 				return
