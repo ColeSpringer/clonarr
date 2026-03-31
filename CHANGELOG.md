@@ -7,6 +7,7 @@
 - **Auto-sync rule updated on source change** — Syncing a TRaSH profile to an Arr profile with a builder rule now converts the rule permanently. No merge-back possible.
 - **Confirm dialog on source change** — Warning shown when syncing overwrites a rule of different type (Builder→TRaSH or TRaSH→Builder).
 - **Startup cleanup safety** — Cleanup skips instances returning 0 profiles (race condition when Arr is still starting).
+- **Reset Non-Synced Scores** — Now includes extra CFs, custom CFs, and all CFs from sync history. Previously only checked standard TRaSH profile CFs, causing user-synced CFs to be falsely flagged.
 
 ## v1.7.4-beta
 

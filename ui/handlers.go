@@ -2962,18 +2962,32 @@ func scanUnsyncedScores(app *App, client *ArrClient, inst Instance) (*CleanupSca
 			}
 		}
 	}
-	// Also check TRaSH profiles from sync history
+	// Also check TRaSH profiles and all synced CFs from sync history
 	cfg := app.config.Get()
+	ad := app.trash.GetAppData(inst.Type)
 	for _, sh := range cfg.SyncHistory {
 		if sh.InstanceID == inst.ID {
-			ad := app.trash.GetAppData(inst.Type)
+			// Resolve standard TRaSH profile CFs
 			if ad != nil {
 				resolved, _ := ResolveProfileCFs(ad, sh.ProfileTrashID)
 				for _, rcf := range resolved {
 					syncedCFNames[strings.ToLower(rcf.Name)] = true
 				}
 			}
+			// Include ALL CFs from sync history (covers extra CFs, custom CFs, score overrides)
+			if ad != nil {
+				for _, trashID := range sh.SyncedCFs {
+					if cf, ok := ad.CustomFormats[trashID]; ok {
+						syncedCFNames[strings.ToLower(cf.Name)] = true
+					}
+				}
+			}
 		}
+	}
+	// Include custom CFs synced to this instance
+	customCFs := app.customCFs.List(inst.Type)
+	for _, ccf := range customCFs {
+		syncedCFNames[strings.ToLower(ccf.Name)] = true
 	}
 
 	// Build CF name→ID map
