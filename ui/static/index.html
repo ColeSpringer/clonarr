@@ -1995,6 +1995,22 @@
     <div class="page">
       <a class="back-link" @click="cancelProfileBuilder()">&larr; Back to Profiles</a>
 
+      <!-- Top action bar -->
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px">
+        <template x-if="!_resyncReturnSubTab">
+          <button class="btn btn-primary" @click="saveCustomProfile()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save profile changes without syncing">
+            <template x-if="pbSaving"><span class="spinner"></span></template>
+            <template x-if="!pbSaving"><span x-text="pb.editId ? 'Update Profile' : 'Create Profile'"></span></template>
+          </button>
+        </template>
+        <template x-if="pb.editId">
+          <div style="display:flex;gap:6px">
+            <button class="btn" style="border-color:#238636;color:#3fb950" @click="saveAndSyncBuilder()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save changes and sync to existing Arr profile">Save & Sync</button>
+            <button class="btn" style="border-color:#58a6ff;color:#58a6ff" @click="saveAndSyncBuilderAsNew()" :disabled="!pb.name.trim() || pbSelectedCount() === 0 || pbSaving" title="Save and create as new Arr profile">Create New</button>
+          </div>
+        </template>
+      </div>
+
       <!-- Info banner when editing from Sync Rules -->
       <template x-if="_resyncReturnSubTab && pb.editId">
         <div style="margin-top:8px;padding:8px 14px;background:#1a1500;border:1px solid #d29922;border-radius:6px;font-size:11px;color:#d29922;line-height:1.5">
@@ -3669,14 +3685,16 @@
         </div>
       </div>
 
-      <!-- Auto-sync toggle -->
-      <div style="margin-bottom:12px;padding:8px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e1e4e8">
-          <input type="checkbox" :checked="autoSyncRuleForSync != null" @change="toggleAutoSyncForProfile($event.target.checked)" style="accent-color:#58a6ff">
-          Auto-sync this profile
-        </label>
-        <div style="font-size:11px;color:#8b949e;margin-top:4px;margin-left:22px">When TRaSH Guides updates, automatically sync changes to this instance</div>
-      </div>
+      <!-- Auto-sync toggle (hidden for builder profiles — manual sync only) -->
+      <template x-if="!syncForm.importedProfileId">
+        <div style="margin-bottom:12px;padding:8px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e1e4e8">
+            <input type="checkbox" :checked="autoSyncRuleForSync != null" @change="toggleAutoSyncForProfile($event.target.checked)" style="accent-color:#58a6ff">
+            Auto-sync this profile
+          </label>
+          <div style="font-size:11px;color:#8b949e;margin-top:4px;margin-left:22px">When TRaSH Guides updates, automatically sync changes to this instance</div>
+        </div>
+      </template>
       <div class="modal-actions">
         <button class="btn" @click="showSyncModal = false">Cancel</button>
         <button class="btn btn-blue" @click="startDryRun()" :disabled="syncing || (syncMode === 'create' && !syncForm.newProfileName.trim()) || (syncMode === 'update' && (!syncForm.arrProfileId || syncForm.arrProfileId === '0'))">Dry Run</button>
@@ -4665,6 +4683,8 @@ function clonarr() {
 
     // Profile Builder
     profileBuilder: false,
+    _resyncReturnSubTab: null,
+    _resyncNavigating: false,
     pbSettingsOpen: true,
     pbLoading: false,
     pbTemplateLoading: false,

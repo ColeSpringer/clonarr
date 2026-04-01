@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.7-beta
+
+### Bug fixes
+- **Profile Builder buttons missing** — `_resyncReturnSubTab` and `_resyncNavigating` were not declared in Alpine data, causing console errors and hiding Create/Save/Sync buttons entirely.
+- **Top action bar in Profile Builder** — Save/Sync buttons now shown at top of builder (not just in sticky bottom bar), matching user expectation.
+- **Auto-sync hidden for builder profiles** — Sync modal no longer shows auto-sync toggle for builder profiles (manual sync only, prevents TRaSH/builder conflicts).
+
 ## v1.7.6-beta
 
 ### Features
