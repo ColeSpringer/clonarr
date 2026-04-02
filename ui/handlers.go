@@ -1431,6 +1431,9 @@ type ProfileComparison struct {
 	// NEW: TRaSH group-based comparison
 	FormatItems        []CompareFormatItem      `json:"formatItems"`
 	Groups             []CompareGroup           `json:"groups"`
+	// Profile settings and quality comparison
+	SettingsDiffs      []SettingDiff            `json:"settingsDiffs,omitempty"`
+	QualityDiffs       []QualityItemDiff        `json:"qualityDiffs,omitempty"`
 	// LEGACY (keep for now)
 	OptionalCategories []CompareCategory        `json:"optionalCategories"` // optional CF groups categorized
 	Summary            ComparisonSummary        `json:"summary"`
@@ -1439,10 +1442,28 @@ type ProfileComparison struct {
 
 // ComparisonSummary holds counts for the comparison.
 type ComparisonSummary struct {
-	Missing      int `json:"missing"`      // CFs in TRaSH but not in Arr instance
-	WrongScore   int `json:"wrongScore"`   // CFs exist but score differs
-	Matching     int `json:"matching"`     // CFs exist with correct score
-	Extra        int `json:"extra"`        // CFs in Arr profile not in TRaSH profile
+	Missing       int `json:"missing"`       // CFs in TRaSH but not in Arr instance
+	WrongScore    int `json:"wrongScore"`    // CFs exist but score differs
+	Matching      int `json:"matching"`      // CFs exist with correct score
+	Extra         int `json:"extra"`         // CFs in Arr profile not in TRaSH profile
+	SettingsDiffs int `json:"settingsDiffs"` // profile settings that differ
+	QualityDiffs  int `json:"qualityDiffs"`  // quality items that differ
+}
+
+// SettingDiff describes a profile setting that differs between Arr and TRaSH.
+type SettingDiff struct {
+	Name    string `json:"name"`
+	Current string `json:"current"`
+	Desired string `json:"desired"`
+	Match   bool   `json:"match"`
+}
+
+// QualityItemDiff describes a quality item that differs between Arr and TRaSH.
+type QualityItemDiff struct {
+	Name           string `json:"name"`
+	CurrentAllowed bool   `json:"currentAllowed"`
+	DesiredAllowed bool   `json:"desiredAllowed"`
+	Match          bool   `json:"match"`
 }
 
 // CompareFormatItem is a formatItem CF with comparison status.
@@ -1801,6 +1822,87 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 		}
 		comp.ExtraCFs = append(comp.ExtraCFs, fi)
 		comp.Summary.Extra++
+	}
+
+	// Compare profile settings
+	addSetting := func(name, current, desired string) {
+		match := current == desired
+		comp.SettingsDiffs = append(comp.SettingsDiffs, SettingDiff{
+			Name: name, Current: current, Desired: desired, Match: match,
+		})
+		if !match {
+			comp.Summary.SettingsDiffs++
+		}
+	}
+	addSetting("Upgrade Allowed", fmt.Sprintf("%v", arrProfile.UpgradeAllowed), fmt.Sprintf("%v", trashProfile.UpgradeAllowed))
+	addSetting("Min Format Score", fmt.Sprintf("%d", arrProfile.MinFormatScore), fmt.Sprintf("%d", trashProfile.MinFormatScore))
+	addSetting("Cutoff Format Score", fmt.Sprintf("%d", arrProfile.CutoffFormatScore), fmt.Sprintf("%d", trashProfile.CutoffFormatScore))
+	addSetting("Min Upgrade Format Score", fmt.Sprintf("%d", arrProfile.MinUpgradeFormatScore), fmt.Sprintf("%d", trashProfile.MinUpgradeFormatScore))
+	// Language
+	arrLang := "Unknown"
+	if arrProfile.Language != nil {
+		arrLang = arrProfile.Language.Name
+	}
+	addSetting("Language", arrLang, trashProfile.Language)
+	// Cutoff: TRaSH stores as quality name, Arr stores as ID — resolve for display
+	arrCutoffName := "Unknown"
+	for _, item := range arrProfile.Items {
+		id := 0
+		name := item.Name
+		if item.Quality != nil {
+			id = item.Quality.ID
+			if name == "" {
+				name = item.Quality.Name
+			}
+		} else {
+			id = item.ID
+		}
+		if id == arrProfile.Cutoff {
+			arrCutoffName = name
+			break
+		}
+	}
+	addSetting("Cutoff", arrCutoffName, trashProfile.Cutoff)
+
+	// Compare quality items: TRaSH items vs Arr items
+	// Build Arr quality state: name → allowed
+	arrQuality := make(map[string]bool)
+	var collectArrQualities func(items []ArrQualityItem)
+	collectArrQualities = func(items []ArrQualityItem) {
+		for _, item := range items {
+			name := item.Name
+			if name == "" && item.Quality != nil {
+				name = item.Quality.Name
+			}
+			if name != "" {
+				arrQuality[strings.ToLower(name)] = item.Allowed
+			}
+			if len(item.Items) > 0 {
+				collectArrQualities(item.Items)
+			}
+		}
+	}
+	collectArrQualities(arrProfile.Items)
+
+	// Compare against TRaSH quality items
+	for _, tItem := range trashProfile.Items {
+		name := tItem.Name
+		desiredAllowed := tItem.Allowed
+		currentAllowed, exists := arrQuality[strings.ToLower(name)]
+		if !exists {
+			// Quality item not found in Arr — skip (may be a group name that maps differently)
+			continue
+		}
+		match := currentAllowed == desiredAllowed
+		comp.QualityDiffs = append(comp.QualityDiffs, QualityItemDiff{
+			Name:           name,
+			CurrentAllowed: currentAllowed,
+			DesiredAllowed: desiredAllowed,
+			Match:          match,
+		})
+		if !match {
+			comp.Summary.QualityDiffs++
+		}
 	}
 
 	return comp

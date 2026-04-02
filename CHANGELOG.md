@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.7.9-beta
+
+### Features
+- **Compare overhaul** — Compare tab now shows profile settings (min score, cutoff, language, upgrade allowed, quality items) alongside CF comparison. All sections in collapsible cards with summary badges.
+- **Settings sync from Compare** — Checkboxes on each setting/quality diff: checked syncs to TRaSH value, unchecked keeps current value as override. Overrides passed to sync modal automatically.
+- **Override badges on sync rules** — TRaSH Sync tab shows amber "X overrides" pill on rules with score, quality, or settings overrides. Hover for breakdown.
+- **Auto-sync immediate run** — Enabling auto-sync toggle now runs sync immediately instead of waiting for next TRaSH pull.
+- **Pull toast notification** — Manual pull shows toast with result: "TRaSH data up to date" or diff summary.
+
+### Bug fixes
+- **Sync All Fixes** — Now shows confirm dialog explaining what will happen. Uses correct profile pre-selection via resyncTargetArrProfileId.
+- **Required CFs counts** — Compare badges now show section-specific counts (not global totals that included grouped CFs).
+- **Auto-sync hidden in Compare sync** — Sync modal from Compare hides auto-sync toggle.
+- **Select option type mismatch** — Fixed String vs number comparison for Arr profile dropdown pre-selection.
+
 ## v1.7.8-beta
 
 ### Bug fixes
