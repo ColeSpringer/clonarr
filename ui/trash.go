@@ -118,6 +118,17 @@ type TrashNaming struct {
 
 // --- Aggregated Data ---
 
+// ConflictEntry is a CF reference in a conflict group.
+type ConflictEntry struct {
+	TrashID string `json:"trash_id"`
+	Name    string `json:"name,omitempty"`
+}
+
+// ConflictsData holds mutually exclusive CF groups from conflicts.json.
+type ConflictsData struct {
+	CustomFormats [][]ConflictEntry `json:"custom_formats"`
+}
+
 // AppData holds all parsed TRaSH data for one app (radarr or sonarr).
 type AppData struct {
 	CustomFormats map[string]*TrashCF // keyed by trash_id
@@ -126,6 +137,7 @@ type AppData struct {
 	ProfileGroups []*ProfileGroup
 	QualitySizes  []*TrashQualitySize
 	Naming        *TrashNaming
+	Conflicts     *ConflictsData // mutually exclusive CFs from conflicts.json (nil if not present)
 }
 
 // PullDiff summarizes what changed in the last pull (for GUI display).
@@ -205,9 +217,12 @@ func (ts *trashStore) DataDir() string {
 // Groups changes by app type (Radarr/Sonarr) and category (CFs, Profiles, Groups, etc).
 // Uses git diff --name-status to show Added/Modified/Deleted per file.
 func (ts *trashStore) DiffChangedFiles(prevCommit, newCommit string) string {
-	out, err := exec.Command("git", "-C", ts.dataDir, "diff", "--name-status", prevCommit, newCommit).Output()
+	cmd := exec.Command("git", "-C", ts.dataDir, "diff", "--name-status", prevCommit, newCommit)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		log.Printf("DiffChangedFiles: git diff failed: %v", err)
+		log.Printf("DiffChangedFiles: git diff %s..%s failed: %v (stderr: %s)", prevCommit, newCommit, err, stderr.String())
 		return ""
 	}
 
@@ -513,9 +528,9 @@ func (ts *trashStore) CloneOrPull(repoURL, branch string) error {
 			log.Printf("Warning: failed to update remote URL: %v", err)
 		}
 
-		// M13: Pull with explicit branch
+		// M13: Pull with explicit branch (deepen=1 so previous commit is available for diff)
 		log.Printf("Pulling TRaSH repo in %s (branch: %s)", ts.dataDir, branch)
-		cmd := exec.Command("git", "-C", ts.dataDir, "fetch", "origin", branch)
+		cmd := exec.Command("git", "-C", ts.dataDir, "fetch", "--deepen=1", "origin", branch)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -748,6 +763,18 @@ func (ts *trashStore) parseAppData(app string) (AppData, error) {
 			}
 			ad.Naming = n
 			break // one naming file per app
+		}
+	}
+
+	// Parse conflicts.json (mutually exclusive CFs) — nil if file doesn't exist yet
+	conflictsFile := filepath.Join(base, "conflicts.json")
+	if data, err := os.ReadFile(conflictsFile); err == nil {
+		var conflicts ConflictsData
+		if err := json.Unmarshal(data, &conflicts); err != nil {
+			log.Printf("Warning: skip conflicts %s: %v", app, err)
+		} else if len(conflicts.CustomFormats) > 0 {
+			ad.Conflicts = &conflicts
+			log.Printf("Loaded %d conflict groups for %s", len(conflicts.CustomFormats), app)
 		}
 	}
 

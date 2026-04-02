@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.7.8-beta
+
+### Bug fixes
+- **Optional exclusive groups (SDR) can now deactivate all** — SDR and similar "pick one" groups now allow deselecting all toggles. Golden Rule still requires at least one active.
+- **Shallow clone diff detection** — Pull diff now works reliably with shallow clones (fetch uses `--deepen=1`).
+
+### Internal
+- Prepared support for upcoming TRaSH conflicts.json (mutually exclusive CF declarations). Will activate automatically when TRaSH merges the data.
+
 ## v1.7.7-beta
 
 ### Bug fixes

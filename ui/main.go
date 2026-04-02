@@ -213,6 +213,7 @@ func main() {
 	mux.HandleFunc("GET /api/trash/{app}/profiles/{id}", app.handleTrashProfileDetail)
 	mux.HandleFunc("GET /api/trash/{app}/quality-sizes", app.handleTrashQualitySizes)
 	mux.HandleFunc("GET /api/trash/{app}/naming", app.handleTrashNaming)
+	mux.HandleFunc("GET /api/trash/{app}/conflicts", app.handleTrashConflicts)
 
 	// Import
 	mux.HandleFunc("POST /api/import/profile", app.handleImportProfile)

@@ -1341,6 +1341,20 @@ func (app *App) handleTrashCFGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, groups)
 }
 
+func (app *App) handleTrashConflicts(w http.ResponseWriter, r *http.Request) {
+	appType := r.PathValue("app")
+	if appType != "radarr" && appType != "sonarr" {
+		writeError(w, 400, "app must be 'radarr' or 'sonarr'")
+		return
+	}
+	ad := app.trash.GetAppData(appType)
+	if ad == nil || ad.Conflicts == nil {
+		writeJSON(w, ConflictsData{CustomFormats: [][]ConflictEntry{}})
+		return
+	}
+	writeJSON(w, ad.Conflicts)
+}
+
 func (app *App) handleTrashProfiles(w http.ResponseWriter, r *http.Request) {
 	appType := r.PathValue("app")
 	if appType != "radarr" && appType != "sonarr" {

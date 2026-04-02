@@ -3063,7 +3063,7 @@
                       <template x-if="!cf.required">
                         <label class="toggle toggle-sm">
                           <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]"
-                                 @change="group.exclusive ? toggleExclusiveCF(cf.trashId, group.cfs) : toggleOptionalCF(cf.trashId)">
+                                 @change="group.exclusive ? toggleExclusiveCF(cf.trashId, group.cfs, group.name?.includes('Golden Rule')) : toggleOptionalCF(cf.trashId)">
                           <span class="slider"></span>
                         </label>
                       </template>
@@ -4602,6 +4602,7 @@ function clonarr() {
 
     // CF browse (all CFs + groups per app type)
     cfBrowseData: {},  // { radarr: { cfs: [...], groups: [...] } }
+    conflictsData: {}, // { radarr: { custom_formats: [[...], ...] }, sonarr: ... }
 
     // Import Custom CFs
     showImportCFModal: false,
@@ -4820,6 +4821,8 @@ function clonarr() {
       this.loadQualitySizes('sonarr');
       this.loadCFBrowse('radarr');
       this.loadCFBrowse('sonarr');
+      this.loadConflicts('radarr');
+      this.loadConflicts('sonarr');
       this.loadNaming('radarr');
       this.loadNaming('sonarr');
       this.loadImportedProfiles('radarr');
@@ -5224,6 +5227,13 @@ function clonarr() {
         const customCFs = customRes.ok ? await customRes.json() : [];
         this.cfBrowseData = { ...this.cfBrowseData, [appType]: { cfs, groups, customCFs } };
       } catch (e) { /* not yet cloned */ }
+    },
+
+    async loadConflicts(appType) {
+      try {
+        const res = await fetch(`/api/trash/${appType}/conflicts`);
+        if (res.ok) this.conflictsData = { ...this.conflictsData, [appType]: await res.json() };
+      } catch (e) { /* not available */ }
     },
 
     // --- Import ---
@@ -8648,6 +8658,8 @@ function clonarr() {
             this.loadQualitySizes('sonarr');
             this.loadCFBrowse('radarr');
             this.loadCFBrowse('sonarr');
+            this.loadConflicts('radarr');
+            this.loadConflicts('sonarr');
             this.loadNaming('radarr');
             this.loadNaming('sonarr');
             // Reload sync data and check for cleanup events
@@ -8771,17 +8783,40 @@ function clonarr() {
       this.groupExpanded = { ...this.groupExpanded, [key]: !this.groupExpanded[key] };
     },
 
-    toggleExclusiveCF(trashId, groupCFs) {
+    // Returns conflicting CF trash_ids that should be deactivated when activating trashId
+    getConflictingCFs(appType, trashId) {
+      const conflicts = this.conflictsData[appType]?.custom_formats;
+      if (!conflicts) return [];
+      const conflicting = [];
+      for (const group of conflicts) {
+        if (group.some(cf => cf.trash_id === trashId)) {
+          for (const cf of group) {
+            if (cf.trash_id !== trashId) conflicting.push(cf.trash_id);
+          }
+        }
+      }
+      return conflicting;
+    },
+
+    toggleExclusiveCF(trashId, groupCFs, mustHaveOne = false) {
       const updated = { ...this.selectedOptionalCFs };
       const enabling = !updated[trashId];
       if (enabling) {
-        // Radio behavior: activate this one, deactivate all others
+        // Radio behavior: activate this one, deactivate all others in group
         for (const cf of groupCFs) {
           updated[cf.trashId] = (cf.trashId === trashId);
         }
-      } else {
-        // Cannot deactivate the last active one — force it back on
+        // Also deactivate cross-group conflicts from conflicts.json
+        const appType = this.profileDetail?.instance?.type || this.currentTab;
+        for (const conflictId of this.getConflictingCFs(appType, trashId)) {
+          updated[conflictId] = false;
+        }
+      } else if (mustHaveOne) {
+        // Golden Rule: cannot deactivate the last active one
         updated[trashId] = true;
+      } else {
+        // Optional exclusive (e.g. SDR): allow deactivating all
+        updated[trashId] = false;
       }
       this.selectedOptionalCFs = updated;
     },
@@ -8818,7 +8853,15 @@ function clonarr() {
     },
 
     toggleOptionalCF(trashId) {
-      this.selectedOptionalCFs = { ...this.selectedOptionalCFs, [trashId]: !this.selectedOptionalCFs[trashId] };
+      const updated = { ...this.selectedOptionalCFs, [trashId]: !this.selectedOptionalCFs[trashId] };
+      // If enabling, deactivate any conflicting CFs (cross-group conflicts from conflicts.json)
+      if (updated[trashId]) {
+        const appType = this.profileDetail?.instance?.type || this.currentTab;
+        for (const conflictId of this.getConflictingCFs(appType, trashId)) {
+          updated[conflictId] = false;
+        }
+      }
+      this.selectedOptionalCFs = updated;
     },
 
     // --- Category helpers ---
