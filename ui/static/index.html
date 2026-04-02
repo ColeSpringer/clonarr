@@ -8644,14 +8644,24 @@ function clonarr() {
 
     async pullTrash() {
       this.pulling = true;
+      const prevCommit = this.trashStatus?.commitHash || '';
       try {
         const r = await fetch('/api/trash/pull', { method: 'POST' });
-        if (!r.ok) { this.pulling = false; return; }
+        if (!r.ok) { this.pulling = false; this.showToast('Pull failed', 'error'); return; }
         const poll = setInterval(async () => {
           await this.loadTrashStatus();
           if (!this.trashStatus.pulling) {
             clearInterval(poll);
             this.pulling = false;
+            // Show toast based on pull result
+            if (this.trashStatus.pullError) {
+              this.showToast('Pull failed: ' + this.trashStatus.pullError, 'error');
+            } else if (this.trashStatus.commitHash !== prevCommit && this.trashStatus.lastDiff?.summary) {
+              const summary = this.trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '').replace(/\n/g, ', ').replace(/:,/g, ':');
+              this.showToast('TRaSH updated: ' + summary, 'info', 10000);
+            } else {
+              this.showToast('TRaSH data up to date', 'info', 3000);
+            }
             this.loadTrashProfiles('radarr');
             this.loadTrashProfiles('sonarr');
             this.loadQualitySizes('radarr');
@@ -8673,6 +8683,7 @@ function clonarr() {
         setTimeout(() => { clearInterval(poll); this.pulling = false; }, 120000);
       } catch (e) {
         this.pulling = false;
+        this.showToast('Pull failed: ' + e.message, 'error');
       }
     },
 
