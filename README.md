@@ -6,23 +6,9 @@ A TRaSH Guides sync tool for Radarr and Sonarr with a built-in web UI. Browse, c
 
 Built as an alternative to config-driven tools like Recyclarr, with a visual interface for building, testing, and deploying TRaSH profiles.
 
-## Screenshots
+## Preview
 
-| Profiles | Profile Sync |
-|----------|-------------|
-| ![Profiles](docs/images/profiles.png) | ![Sync](docs/images/sync-profile.png) |
-
-| Profile Creator | Custom Formats |
-|----------------|----------------|
-| ![Creator](docs/images/profile-creator.png) | ![CFs](docs/images/CF.png) |
-
-| CF Creator | Quality Size |
-|-----------|-------------|
-| ![CF Creator](docs/images/CF-Creator.png) | ![Quality Size](docs/images/quality-size.png) |
-
-| File Naming | Maintenance |
-|------------|-------------|
-| ![File Naming](docs/images/file-naming.png) | ![Maintenance](docs/images/maintenance.png) |
+![Clonarr Preview](docs/images/clonarr-preview.gif)
 
 ## Features
 
