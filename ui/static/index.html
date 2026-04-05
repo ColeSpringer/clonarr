@@ -3562,7 +3562,7 @@
           <div class="setting-row">
             <div class="setting-label">App Token</div>
             <div class="setting-value" style="display:flex;gap:8px;align-items:center">
-              <input :type="gotifyTokenVisible ? 'text' : 'password'" class="input" style="width:300px" x-model="autoSyncSettings.gotifyToken" @change="saveAutoSyncSettings()" placeholder="App token from Gotify">
+              <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="new-password" class="input" style="width:300px" x-model="autoSyncSettings.gotifyToken" @change="saveAutoSyncSettings()" placeholder="App token from Gotify">
               <button class="btn btn-sm" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'" style="min-width:32px"></button>
               <button class="btn btn-sm" @click="testGotify()" :disabled="!autoSyncSettings.gotifyUrl || !autoSyncSettings.gotifyToken || gotifyTesting">
                 <span x-show="!gotifyTesting">Test</span><span x-show="gotifyTesting">...</span>
