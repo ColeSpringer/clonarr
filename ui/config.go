@@ -37,9 +37,20 @@ type AutoSyncConfig struct {
 	Enabled            bool           `json:"enabled"`
 	NotifyOnSuccess    bool           `json:"notifyOnSuccess"`
 	NotifyOnFailure    bool           `json:"notifyOnFailure"`
-	NotifyOnRepoUpdate bool           `json:"notifyOnRepoUpdate"` // Discord notification when TRaSH repo has new commits
+	NotifyOnRepoUpdate bool           `json:"notifyOnRepoUpdate"`
 	DiscordWebhook     string         `json:"discordWebhook,omitempty"`
-	Rules              []AutoSyncRule `json:"rules,omitempty"`
+	DiscordWebhookUpdates string      `json:"discordWebhookUpdates,omitempty"` // separate webhook for TRaSH repo updates (falls back to main if empty)
+	// Gotify
+	GotifyEnabled          bool   `json:"gotifyEnabled"`
+	GotifyURL              string `json:"gotifyUrl,omitempty"`
+	GotifyToken            string `json:"gotifyToken,omitempty"`
+	GotifyPriorityCritical bool   `json:"gotifyPriorityCritical"`
+	GotifyPriorityWarning  bool   `json:"gotifyPriorityWarning"`
+	GotifyPriorityInfo     bool   `json:"gotifyPriorityInfo"`
+	GotifyCriticalValue    *int   `json:"gotifyCriticalValue,omitempty"`
+	GotifyWarningValue     *int   `json:"gotifyWarningValue,omitempty"`
+	GotifyInfoValue        *int   `json:"gotifyInfoValue,omitempty"`
+	Rules                  []AutoSyncRule `json:"rules,omitempty"`
 }
 
 // AutoSyncRule defines one auto-sync binding (profile → instance).
@@ -186,6 +197,19 @@ func (cs *configStore) Load() error {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return fmt.Errorf("parse config: %w", err)
+	}
+	// Apply defaults for Gotify priority values (nil = never set by user)
+	if cfg.AutoSync.GotifyCriticalValue == nil {
+		v := 8
+		cfg.AutoSync.GotifyCriticalValue = &v
+	}
+	if cfg.AutoSync.GotifyWarningValue == nil {
+		v := 5
+		cfg.AutoSync.GotifyWarningValue = &v
+	}
+	if cfg.AutoSync.GotifyInfoValue == nil {
+		v := 3
+		cfg.AutoSync.GotifyInfoValue = &v
 	}
 	cs.config = &cfg
 	return nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -3318,11 +3319,21 @@ func (app *App) handleSaveCleanupKeep(w http.ResponseWriter, r *http.Request) {
 func (app *App) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	cfg := app.config.Get()
 	writeJSON(w, map[string]any{
-		"enabled":            cfg.AutoSync.Enabled,
-		"notifyOnSuccess":    cfg.AutoSync.NotifyOnSuccess,
-		"notifyOnFailure":    cfg.AutoSync.NotifyOnFailure,
-		"notifyOnRepoUpdate": cfg.AutoSync.NotifyOnRepoUpdate,
-		"discordWebhook":     cfg.AutoSync.DiscordWebhook,
+		"enabled":               cfg.AutoSync.Enabled,
+		"notifyOnSuccess":       cfg.AutoSync.NotifyOnSuccess,
+		"notifyOnFailure":       cfg.AutoSync.NotifyOnFailure,
+		"notifyOnRepoUpdate":    cfg.AutoSync.NotifyOnRepoUpdate,
+		"discordWebhook":        cfg.AutoSync.DiscordWebhook,
+		"discordWebhookUpdates": cfg.AutoSync.DiscordWebhookUpdates,
+		"gotifyEnabled":         cfg.AutoSync.GotifyEnabled,
+		"gotifyUrl":             cfg.AutoSync.GotifyURL,
+		"gotifyToken":           cfg.AutoSync.GotifyToken,
+		"gotifyPriorityCritical": cfg.AutoSync.GotifyPriorityCritical,
+		"gotifyPriorityWarning":  cfg.AutoSync.GotifyPriorityWarning,
+		"gotifyPriorityInfo":     cfg.AutoSync.GotifyPriorityInfo,
+		"gotifyCriticalValue":    cfg.AutoSync.GotifyCriticalValue,
+		"gotifyWarningValue":     cfg.AutoSync.GotifyWarningValue,
+		"gotifyInfoValue":        cfg.AutoSync.GotifyInfoValue,
 	})
 }
 
@@ -3330,11 +3341,21 @@ func (app *App) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Request
 func (app *App) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req struct {
-		Enabled            bool   `json:"enabled"`
-		NotifyOnSuccess    bool   `json:"notifyOnSuccess"`
-		NotifyOnFailure    bool   `json:"notifyOnFailure"`
-		NotifyOnRepoUpdate bool   `json:"notifyOnRepoUpdate"`
-		DiscordWebhook     string `json:"discordWebhook"`
+		Enabled               bool   `json:"enabled"`
+		NotifyOnSuccess       bool   `json:"notifyOnSuccess"`
+		NotifyOnFailure       bool   `json:"notifyOnFailure"`
+		NotifyOnRepoUpdate    bool   `json:"notifyOnRepoUpdate"`
+		DiscordWebhook        string `json:"discordWebhook"`
+		DiscordWebhookUpdates string `json:"discordWebhookUpdates"`
+		GotifyEnabled         bool   `json:"gotifyEnabled"`
+		GotifyURL             string `json:"gotifyUrl"`
+		GotifyToken           string `json:"gotifyToken"`
+		GotifyPriorityCritical bool  `json:"gotifyPriorityCritical"`
+		GotifyPriorityWarning  bool  `json:"gotifyPriorityWarning"`
+		GotifyPriorityInfo     bool  `json:"gotifyPriorityInfo"`
+		GotifyCriticalValue    int   `json:"gotifyCriticalValue"`
+		GotifyWarningValue     int   `json:"gotifyWarningValue"`
+		GotifyInfoValue        int   `json:"gotifyInfoValue"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "Invalid JSON")
@@ -3348,6 +3369,18 @@ func (app *App) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reques
 		writeError(w, 400, "Discord webhook must start with https://discord.com/api/webhooks/")
 		return
 	}
+	webhookUpdates := strings.TrimSpace(req.DiscordWebhookUpdates)
+	if webhookUpdates != "" &&
+		!strings.HasPrefix(webhookUpdates, "https://discord.com/api/webhooks/") &&
+		!strings.HasPrefix(webhookUpdates, "https://discordapp.com/api/webhooks/") {
+		writeError(w, 400, "Discord updates webhook must start with https://discord.com/api/webhooks/")
+		return
+	}
+	gotifyURL := strings.TrimSpace(req.GotifyURL)
+	if gotifyURL != "" && !strings.HasPrefix(gotifyURL, "http://") && !strings.HasPrefix(gotifyURL, "https://") {
+		writeError(w, 400, "Gotify URL must start with http:// or https://")
+		return
+	}
 
 	if err := app.config.Update(func(cfg *Config) {
 		cfg.AutoSync.Enabled = req.Enabled
@@ -3355,12 +3388,59 @@ func (app *App) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reques
 		cfg.AutoSync.NotifyOnFailure = req.NotifyOnFailure
 		cfg.AutoSync.NotifyOnRepoUpdate = req.NotifyOnRepoUpdate
 		cfg.AutoSync.DiscordWebhook = webhook
+		cfg.AutoSync.DiscordWebhookUpdates = webhookUpdates
+		cfg.AutoSync.GotifyEnabled = req.GotifyEnabled
+		cfg.AutoSync.GotifyURL = gotifyURL
+		cfg.AutoSync.GotifyToken = strings.TrimSpace(req.GotifyToken)
+		cfg.AutoSync.GotifyPriorityCritical = req.GotifyPriorityCritical
+		cfg.AutoSync.GotifyPriorityWarning = req.GotifyPriorityWarning
+		cfg.AutoSync.GotifyPriorityInfo = req.GotifyPriorityInfo
+		cv, wv, iv := req.GotifyCriticalValue, req.GotifyWarningValue, req.GotifyInfoValue
+		cfg.AutoSync.GotifyCriticalValue = &cv
+		cfg.AutoSync.GotifyWarningValue = &wv
+		cfg.AutoSync.GotifyInfoValue = &iv
 	}); err != nil {
 		writeError(w, 500, "Failed to save settings")
 		return
 	}
 
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (app *App) handleTestGotify(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var req struct {
+		URL   string `json:"url"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" || req.Token == "" {
+		writeError(w, 400, "url and token required")
+		return
+	}
+	payload := map[string]any{
+		"title":   "Clonarr Test",
+		"message": "If you see this, Gotify is configured correctly!",
+		"priority": 5,
+		"extras": map[string]any{
+			"client::display": map[string]string{
+				"contentType": "text/markdown",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	client := &http.Client{Timeout: 10 * time.Second}
+	gotifyURL := strings.TrimRight(req.URL, "/") + "/message?token=" + url.QueryEscape(req.Token)
+	resp, err := client.Post(gotifyURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		writeError(w, 502, fmt.Sprintf("Failed to reach Gotify: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		writeError(w, resp.StatusCode, fmt.Sprintf("Gotify returned %d", resp.StatusCode))
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
 }
 
 // handleListAutoSyncRules returns all auto-sync rules with instance names resolved.

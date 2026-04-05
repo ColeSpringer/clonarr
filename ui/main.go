@@ -262,6 +262,7 @@ func main() {
 	// Auto-Sync
 	mux.HandleFunc("GET /api/auto-sync/settings", app.handleGetAutoSyncSettings)
 	mux.HandleFunc("PUT /api/auto-sync/settings", app.handleSaveAutoSyncSettings)
+	mux.HandleFunc("POST /api/auto-sync/test-gotify", app.handleTestGotify)
 	mux.HandleFunc("GET /api/auto-sync/rules", app.handleListAutoSyncRules)
 	mux.HandleFunc("POST /api/auto-sync/rules", app.handleCreateAutoSyncRule)
 	mux.HandleFunc("PUT /api/auto-sync/rules/{id}", app.handleUpdateAutoSyncRule)

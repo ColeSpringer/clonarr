@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.8.1
+
+First stable release — all previous beta versions consolidated.
+
+### Features
+- **Gotify push notifications** — Configurable Gotify support for all notification types (auto-sync, cleanup, repo updates, changelog). Per-level priority toggles (Critical/Warning/Info) with customizable priority values.
+- **Second Discord webhook** — Separate webhook for TRaSH Guides updates (repo changes, weekly changelog), keeping sync notifications on the main webhook.
+- **Settings reorganized** — Collapsible accordion sections: Instances, Notifications, Auto-Sync, Advanced. Cleaner layout as settings grew.
+
+### Bug fixes
+- **Gotify fires independently of Discord** — Notifications no longer require a Discord webhook to be set. Gotify and Discord send independently.
+- **Priority value 0 preserved** — Gotify priority value of 0 (silent) now persists correctly through restarts instead of being reset to defaults.
+
 ## v1.8.0-beta
 
 ### Features

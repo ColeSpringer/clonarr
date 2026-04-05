@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -341,11 +342,75 @@ func (app *App) cleanupStaleRules() {
 	}
 }
 
+// sendGotify sends a Gotify push notification with the given severity level.
+// level: "critical", "warning", or "info"
+func (app *App) sendGotify(title, message, level string) {
+	cfg := app.config.Get()
+	if !cfg.AutoSync.GotifyEnabled || cfg.AutoSync.GotifyURL == "" || cfg.AutoSync.GotifyToken == "" {
+		return
+	}
+
+	var priority int
+	switch level {
+	case "critical":
+		if !cfg.AutoSync.GotifyPriorityCritical {
+			return
+		}
+		if cfg.AutoSync.GotifyCriticalValue != nil {
+			priority = *cfg.AutoSync.GotifyCriticalValue
+		}
+	case "warning":
+		if !cfg.AutoSync.GotifyPriorityWarning {
+			return
+		}
+		if cfg.AutoSync.GotifyWarningValue != nil {
+			priority = *cfg.AutoSync.GotifyWarningValue
+		}
+	default:
+		if !cfg.AutoSync.GotifyPriorityInfo {
+			return
+		}
+		if cfg.AutoSync.GotifyInfoValue != nil {
+			priority = *cfg.AutoSync.GotifyInfoValue
+		}
+	}
+
+	// Ensure markdown renders properly in Gotify:
+	// - Double newline before bold headers for paragraph break
+	// - Double newline before list items for proper list rendering
+	msg := message
+	msg = strings.ReplaceAll(msg, "\n**", "\n\n**")
+	msg = strings.ReplaceAll(msg, "\n- ", "\n\n- ")
+	// Clean up any triple+ newlines from double-replacing
+	for strings.Contains(msg, "\n\n\n") {
+		msg = strings.ReplaceAll(msg, "\n\n\n", "\n\n")
+	}
+
+	payload := map[string]any{
+		"title":    title,
+		"message":  msg,
+		"priority": priority,
+		"extras": map[string]any{
+			"client::display": map[string]string{
+				"contentType": "text/markdown",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	client := &http.Client{Timeout: 10 * time.Second}
+	gotifyURL := strings.TrimRight(cfg.AutoSync.GotifyURL, "/") + "/message?token=" + url.QueryEscape(cfg.AutoSync.GotifyToken)
+	resp, err := client.Post(gotifyURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("Gotify: send failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+}
+
 // notifyCleanup sends a Discord notification for auto-cleanup events.
 func (app *App) notifyCleanup(events []CleanupEvent) {
 	cfg := app.config.Get()
-	webhook := cfg.AutoSync.DiscordWebhook
-	if webhook == "" || !cfg.AutoSync.NotifyOnFailure {
+	if !cfg.AutoSync.NotifyOnFailure {
 		return
 	}
 
@@ -353,25 +418,28 @@ func (app *App) notifyCleanup(events []CleanupEvent) {
 	for _, ev := range events {
 		description += fmt.Sprintf("**%s** — deleted in %s, sync rule removed\n", ev.ProfileName, ev.InstanceName)
 	}
+	description = strings.TrimSpace(description)
 
-	embed := map[string]any{
-		"title":       "Sync Rules Cleaned Up",
-		"description": strings.TrimSpace(description),
-		"color":       0xd29922, // amber
-		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
-	}
-	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
-	if err != nil {
-		return
+	// Discord notification
+	if webhook := cfg.AutoSync.DiscordWebhook; webhook != "" {
+		embed := map[string]any{
+			"title":       "Sync Rules Cleaned Up",
+			"description": description,
+			"color":       0xd29922, // amber
+			"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+		}
+		if payload, err := json.Marshal(map[string]any{"embeds": []any{embed}}); err == nil {
+			client := &http.Client{Timeout: 10 * time.Second}
+			if resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload)); err != nil {
+				log.Printf("Cleanup: Discord notification failed: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		log.Printf("Cleanup: Discord notification failed: %v", err)
-		return
-	}
-	resp.Body.Close()
+	// Gotify notification
+	go app.sendGotify("Clonarr: Sync Rules Cleaned Up", description, "warning")
 }
 
 // isConnectionError checks if an error is a network/connection problem (instance unreachable).
@@ -418,9 +486,6 @@ func (app *App) updateAutoSyncRuleError(ruleID, errMsg string) {
 // notifyAutoSync sends Discord notification for auto-sync result.
 func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName string, result *SyncResult, syncErr error) {
 	cfg := app.config.Get()
-	if cfg.AutoSync.DiscordWebhook == "" {
-		return
-	}
 	if syncErr != nil && !cfg.AutoSync.NotifyOnFailure {
 		return
 	}
@@ -475,29 +540,34 @@ func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName str
 			}
 		}
 		if result.CFsCreated == 0 && result.CFsUpdated == 0 && result.ScoresUpdated == 0 && result.ScoresZeroed == 0 && !result.QualityUpdated && len(result.SettingsDetails) == 0 {
-			return // no actual changes — skip Discord notification
+			return // no actual changes — skip notification
 		}
 	}
 
-	embed := map[string]any{
-		"title":       title,
-		"description": description,
-		"color":       color,
-		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
-	}
-	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
-	if err != nil {
-		log.Printf("Auto-sync: failed to marshal Discord payload: %v", err)
-		return
+	// Discord notification
+	if webhook := cfg.AutoSync.DiscordWebhook; webhook != "" {
+		embed := map[string]any{
+			"title":       title,
+			"description": description,
+			"color":       color,
+			"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+		}
+		if payload, err := json.Marshal(map[string]any{"embeds": []any{embed}}); err == nil {
+			client := &http.Client{Timeout: 10 * time.Second}
+			if resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload)); err != nil {
+				log.Printf("Auto-sync: Discord notification failed: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(cfg.AutoSync.DiscordWebhook, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		log.Printf("Auto-sync: Discord notification failed: %v", err)
-		return
+	// Gotify notification
+	level := "info"
+	if syncErr != nil {
+		level = "critical"
 	}
-	resp.Body.Close()
+	go app.sendGotify("Clonarr: "+title, description, level)
 }
 
 // notifyRepoUpdate sends a Discord notification when the TRaSH repo has new commits.
@@ -505,10 +575,6 @@ func (app *App) notifyAutoSync(rule AutoSyncRule, inst Instance, profileName str
 func (app *App) notifyRepoUpdate(prevCommit, newCommit string) {
 	cfg := app.config.Get()
 	if !cfg.AutoSync.NotifyOnRepoUpdate {
-		return
-	}
-	webhook := cfg.AutoSync.DiscordWebhook
-	if webhook == "" {
 		return
 	}
 
@@ -520,26 +586,31 @@ func (app *App) notifyRepoUpdate(prevCommit, newCommit string) {
 		description += "\n" + status.LastDiff.Summary
 	}
 
-	embed := map[string]any{
-		"title":       "TRaSH Guides Updated",
-		"description": description,
-		"color":       0x58a6ff, // blue
-		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+	// Discord notification — use updates webhook if set, otherwise fall back to main
+	webhook := cfg.AutoSync.DiscordWebhookUpdates
+	if webhook == "" {
+		webhook = cfg.AutoSync.DiscordWebhook
 	}
-	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
-	if err != nil {
-		log.Printf("Repo update: failed to marshal Discord payload: %v", err)
-		return
+	if webhook != "" {
+		embed := map[string]any{
+			"title":       "TRaSH Guides Updated",
+			"description": description,
+			"color":       0x58a6ff, // blue
+			"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+		}
+		if payload, err := json.Marshal(map[string]any{"embeds": []any{embed}}); err == nil {
+			client := &http.Client{Timeout: 10 * time.Second}
+			if resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload)); err != nil {
+				log.Printf("Repo update: Discord notification failed: %v", err)
+			} else {
+				resp.Body.Close()
+				log.Printf("Repo update: Discord notification sent (%s → %s)", prevCommit, newCommit)
+			}
+		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		log.Printf("Repo update: Discord notification failed: %v", err)
-		return
-	}
-	resp.Body.Close()
-	log.Printf("Repo update: Discord notification sent (%s → %s)", prevCommit, newCommit)
+	// Gotify notification
+	go app.sendGotify("Clonarr: TRaSH Guides Updated", description, "info")
 }
 
 // notifyChangelog sends a separate Discord notification when updates.txt has a new date section.
@@ -548,11 +619,7 @@ func (app *App) notifyChangelog(section ChangelogSection) {
 	if !cfg.AutoSync.NotifyOnRepoUpdate {
 		return
 	}
-	webhook := cfg.AutoSync.DiscordWebhook
-	if webhook == "" {
-		return
-	}
-
+	// Build Discord description
 	description := fmt.Sprintf("**Week of %s** — %d changes", section.Date, len(section.Entries))
 	for _, e := range section.Entries {
 		icon := "🔧"
@@ -574,24 +641,49 @@ func (app *App) notifyChangelog(section ChangelogSection) {
 		description += line
 	}
 
-	embed := map[string]any{
-		"title":       "TRaSH Weekly Changelog",
-		"description": description,
-		"color":       0xd29922, // amber
-		"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+	// Discord notification — use updates webhook if set, otherwise fall back to main
+	webhook := cfg.AutoSync.DiscordWebhookUpdates
+	if webhook == "" {
+		webhook = cfg.AutoSync.DiscordWebhook
 	}
-	payload, err := json.Marshal(map[string]any{"embeds": []any{embed}})
-	if err != nil {
-		log.Printf("Changelog: failed to marshal Discord payload: %v", err)
-		return
+	if webhook != "" {
+		embed := map[string]any{
+			"title":       "TRaSH Weekly Changelog",
+			"description": description,
+			"color":       0xd29922, // amber
+			"footer":      map[string]string{"text": "Clonarr " + Version + " by ProphetSe7en"},
+		}
+		if payload, err := json.Marshal(map[string]any{"embeds": []any{embed}}); err == nil {
+			client := &http.Client{Timeout: 10 * time.Second}
+			if resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload)); err != nil {
+				log.Printf("Changelog: Discord notification failed: %v", err)
+			} else {
+				resp.Body.Close()
+				log.Printf("Changelog: Discord notification sent (week of %s)", section.Date)
+			}
+		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(webhook, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		log.Printf("Changelog: Discord notification failed: %v", err)
-		return
+	// Gotify notification — use markdown bullet list for proper line breaks
+	gotifyMsg := fmt.Sprintf("**Week of %s** — %d changes\n\n", section.Date, len(section.Entries))
+	for _, e := range section.Entries {
+		icon := "🔧"
+		if e.Type == "feat" {
+			icon = "✨"
+		} else if e.Type == "fix" {
+			icon = "🐛"
+		} else if e.Type == "refactor" {
+			icon = "♻️"
+		}
+		line := fmt.Sprintf("- %s **%s:** %s", icon, e.Scope, e.Msg)
+		if e.PR != "" {
+			line += fmt.Sprintf(" [#%s](https://github.com/TRaSH-Guides/Guides/pull/%s)", e.PR, e.PR)
+		}
+		if len(gotifyMsg) > 1800 {
+			gotifyMsg += "\n- ..."
+			break
+		}
+		gotifyMsg += line + "\n"
 	}
-	resp.Body.Close()
-	log.Printf("Changelog: Discord notification sent (week of %s)", section.Date)
+	go app.sendGotify("Clonarr: TRaSH Weekly Changelog", gotifyMsg, "info")
 }

@@ -203,7 +203,9 @@
 
   /* Settings */
   .settings-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 20px; }
-  .settings-title { font-size: 14px; font-weight: 600; padding: 14px 20px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+  .settings-title { font-size: 14px; font-weight: 600; padding: 14px 20px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .settings-title:hover { background: #1c2128; }
+  .settings-title .arrow { color: #484f58; font-size: 11px; margin-right: 8px; }
   .settings-body { padding: 16px 20px; }
   .setting-row { display: flex; align-items: center; padding: 10px 0; }
   .setting-row + .setting-row { border-top: 1px solid #21262d; }
@@ -3358,11 +3360,11 @@
 
     <!-- Instances -->
     <div class="settings-section">
-      <div class="settings-title">
-        Instances
-        <button class="btn btn-sm btn-primary" @click="openInstanceModal()">+ Add Instance</button>
+      <div class="settings-title" @click="settingsOpen = settingsOpen === 'instances' ? '' : 'instances'">
+        <span><span class="arrow" x-text="settingsOpen === 'instances' ? '▾' : '▸'"></span> Instances</span>
+        <button class="btn btn-sm btn-primary" @click.stop="openInstanceModal()">+ Add Instance</button>
       </div>
-      <div class="settings-body">
+      <div class="settings-body" x-show="settingsOpen === 'instances'" x-transition>
         <template x-if="instances.length === 0">
           <div style="color:#8b949e;font-size:13px;padding:8px 0">No instances configured. Add your first Radarr or Sonarr instance.</div>
         </template>
@@ -3395,8 +3397,10 @@
 
     <!-- TRaSH Guides -->
     <div class="settings-section">
-      <div class="settings-title">TRaSH Guides</div>
-      <div class="settings-body">
+      <div class="settings-title" @click="settingsOpen = settingsOpen === 'trash' ? '' : 'trash'">
+        <span><span class="arrow" x-text="settingsOpen === 'trash' ? '▾' : '▸'"></span> TRaSH Guides</span>
+      </div>
+      <div class="settings-body" x-show="settingsOpen === 'trash'" x-transition>
         <div class="setting-row">
           <div class="setting-label">Repository URL</div>
           <div class="setting-value">
@@ -3407,6 +3411,22 @@
           <div class="setting-label">Branch</div>
           <div class="setting-value">
             <input class="input" style="width:150px" x-model="config.trashRepo.branch" @change="saveConfig()">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Pull Interval</div>
+          <div class="setting-value" style="display:flex;align-items:center;gap:10px">
+            <select class="input" style="width:180px" x-model="config.pullInterval" @change="saveConfig(['pullInterval'])">
+              <option value="0">Disabled</option>
+              <option value="5m">Every 5 minutes</option>
+              <option value="15m">Every 15 minutes</option>
+              <option value="30m">Every 30 minutes</option>
+              <option value="1h">Every hour</option>
+              <option value="6h">Every 6 hours</option>
+              <option value="12h">Every 12 hours</option>
+              <option value="24h">Every 24 hours</option>
+            </select>
+            <span style="font-size:12px;color:#8b949e">Auto-pull TRaSH data at this interval</span>
           </div>
         </div>
         <div class="setting-row">
@@ -3427,10 +3447,12 @@
       </div>
     </div>
 
-    <!-- Sync Schedule -->
+    <!-- Advanced -->
     <div class="settings-section">
-      <div class="settings-title">Developer</div>
-      <div class="settings-body">
+      <div class="settings-title" @click="settingsOpen = settingsOpen === 'advanced' ? '' : 'advanced'">
+        <span><span class="arrow" x-text="settingsOpen === 'advanced' ? '▾' : '▸'"></span> Advanced</span>
+      </div>
+      <div class="settings-body" x-show="settingsOpen === 'advanced'" x-transition>
         <div class="setting-row">
           <div class="setting-label">Developer Mode</div>
           <div class="setting-value" style="display:flex;align-items:center;gap:10px">
@@ -3440,109 +3462,50 @@
             </label>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Debug Logging -->
-    <div class="settings-section">
-      <div class="settings-title">Debug Logging</div>
-      <div class="settings-body">
         <div class="setting-row">
-          <div class="setting-label">Enable Debug Log</div>
+          <div class="setting-label">Debug Logging</div>
           <div class="setting-value" style="display:flex;align-items:center;gap:10px">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
               <input type="checkbox" x-model="config.debugLogging" @change="saveConfig(['debugLogging'])" style="accent-color:#58a6ff">
-              <span style="font-size:12px;color:#8b949e">Write detailed operations to /config/debug.log (max 1MB, auto-rotates)</span>
+              <span style="font-size:12px;color:#8b949e">Write to /config/debug.log (max 1MB, auto-rotates)</span>
             </label>
+            <a x-show="config.debugLogging" class="btn btn-sm" href="/api/debug/log/download" download="clonarr-debug.log" style="text-decoration:none;margin-left:8px">Download</a>
           </div>
         </div>
-        <div class="setting-row" x-show="config.debugLogging">
-          <div class="setting-label">Download Log</div>
-          <div class="setting-value">
-            <a class="btn btn-sm" href="/api/debug/log/download" download="clonarr-debug.log" style="text-decoration:none">Download debug.log</a>
-            <span style="font-size:11px;color:#484f58;margin-left:8px">Share this file when reporting bugs</span>
+        <div style="border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
+          <div style="font-size:12px;color:#8b949e;margin-bottom:8px">
+            Connect Prowlarr to enable release searching in the Scoring Sandbox.
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Prowlarr Connection -->
-    <div class="settings-section">
-      <div class="settings-title">Prowlarr (Scoring Sandbox)</div>
-      <div class="settings-body">
-        <div style="font-size:12px;color:#8b949e;margin-bottom:12px">
-          Connect Prowlarr to enable release searching in the Scoring Sandbox. Without Prowlarr, you can still paste release names manually.
-        </div>
-        <div class="setting-row">
-          <div class="setting-label">Enabled</div>
-          <div class="setting-value">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" x-model="config.prowlarr.enabled" @change="saveConfig(['prowlarr'])" style="accent-color:#58a6ff">
-              <span style="font-size:12px;color:#8b949e" x-text="config.prowlarr?.enabled ? 'Prowlarr search enabled' : 'Search disabled (paste only)'"></span>
-            </label>
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-label">URL</div>
-          <div class="setting-value">
-            <input class="input" style="width:350px" x-model="config.prowlarr.url" @change="saveConfig(['prowlarr'])" placeholder="http://prowlarr:9696">
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-label">API Key</div>
-          <div class="setting-value" style="display:flex;gap:8px;align-items:center">
-            <input class="input" style="width:350px" x-model="config.prowlarr.apiKey" @change="saveConfig(['prowlarr'])" placeholder="Prowlarr API key">
-            <button class="btn btn-sm" @click="testProwlarr()" :disabled="prowlarrTesting || !config.prowlarr?.url || !config.prowlarr?.apiKey">
-              <span x-show="prowlarrTesting" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
-              <span x-show="!prowlarrTesting">Test</span>
-            </button>
-            <span x-show="prowlarrTestResult" style="font-size:12px">
-              <span :style="prowlarrTestResult?.ok ? 'color:#3fb950' : 'color:#f85149'" x-text="prowlarrTestResult?.message"></span>
-              <span x-show="prowlarrTestResult?.version" style="color:#8b949e;font-size:11px" x-text="' · v' + prowlarrTestResult?.version"></span>
-            </span>
+          <div class="setting-row">
+            <div class="setting-label">Prowlarr</div>
+            <div class="setting-value" style="display:flex;align-items:center;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" x-model="config.prowlarr.enabled" @change="saveConfig(['prowlarr'])" style="accent-color:#58a6ff">
+              </label>
+              <input class="input" style="width:250px" x-model="config.prowlarr.url" @change="saveConfig(['prowlarr'])" placeholder="http://prowlarr:9696">
+              <input class="input" style="width:250px" x-model="config.prowlarr.apiKey" @change="saveConfig(['prowlarr'])" placeholder="API key">
+              <button class="btn btn-sm" @click="testProwlarr()" :disabled="prowlarrTesting || !config.prowlarr?.url || !config.prowlarr?.apiKey">
+                <span x-show="prowlarrTesting" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
+                <span x-show="!prowlarrTesting">Test</span>
+              </button>
+              <span x-show="prowlarrTestResult" style="font-size:12px">
+                <span :style="prowlarrTestResult?.ok ? 'color:#3fb950' : 'color:#f85149'" x-text="prowlarrTestResult?.message"></span>
+                <span x-show="prowlarrTestResult?.version" style="color:#8b949e;font-size:11px" x-text="' · v' + prowlarrTestResult?.version"></span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Notifications -->
     <div class="settings-section">
-      <div class="settings-title">Sync Schedule</div>
-      <div class="settings-body">
-        <div class="setting-row">
-          <div class="setting-label">Pull Interval</div>
-          <div class="setting-value" style="display:flex;align-items:center;gap:10px">
-            <select class="input" style="width:180px" x-model="config.pullInterval" @change="saveConfig(['pullInterval'])">
-              <option value="0">Disabled</option>
-              <option value="5m">Every 5 minutes</option>
-              <option value="15m">Every 15 minutes</option>
-              <option value="30m">Every 30 minutes</option>
-              <option value="1h">Every hour</option>
-              <option value="6h">Every 6 hours</option>
-              <option value="12h">Every 12 hours</option>
-              <option value="24h">Every 24 hours</option>
-            </select>
-            <span style="font-size:12px;color:#8b949e">Auto-pull TRaSH data at this interval</span>
-          </div>
-        </div>
+      <div class="settings-title" @click="settingsOpen = settingsOpen === 'notifications' ? '' : 'notifications'">
+        <span><span class="arrow" x-text="settingsOpen === 'notifications' ? '▾' : '▸'"></span> Notifications</span>
       </div>
-    </div>
-
-    <!-- Auto-Sync -->
-    <div class="settings-section">
-      <div class="settings-title">Auto-Sync</div>
-      <div class="settings-body">
-        <div style="font-size:12px;color:#8b949e;margin-bottom:12px;line-height:1.5">
-          Auto-sync runs after each TRaSH pull when new changes are detected — not on a fixed schedule.
-          The pull interval controls how often Clonarr checks for TRaSH updates. Enable auto-sync per profile from the Sync modal, and manage rules under Profiles → TRaSH Sync.
-        </div>
+      <div class="settings-body" x-show="settingsOpen === 'notifications'" x-transition>
         <div class="setting-row">
-          <div class="setting-label">Discord Webhook</div>
-          <div class="setting-value">
-            <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhook" @change="saveAutoSyncSettings()" placeholder="https://discord.com/api/webhooks/...">
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-label">Notifications</div>
+          <div class="setting-label">Events</div>
           <div class="setting-value" style="display:flex;gap:16px">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e1e4e8">
               <input type="checkbox" x-model="autoSyncSettings.notifyOnSuccess" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
@@ -3559,12 +3522,76 @@
           </div>
         </div>
 
-        <!-- Rules reference -->
-        <div style="margin-top:12px;font-size:11px;color:#484f58">
-          <span x-text="autoSyncRules.length"></span> active rule(s) — manage under Profiles → TRaSH Sync → Sync Rules & History
+        <!-- Discord -->
+        <div style="border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
+          <div style="font-size:13px;font-weight:600;color:#e1e4e8;margin-bottom:8px">Discord</div>
+          <div class="setting-row">
+            <div class="setting-label">Sync webhook</div>
+            <div class="setting-value">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhook" @change="saveAutoSyncSettings()" placeholder="https://discord.com/api/webhooks/...">
+            </div>
+          </div>
+          <div style="font-size:11px;color:#484f58;margin:-4px 0 8px 180px">Sync success, failure, and cleanup</div>
+          <div class="setting-row">
+            <div class="setting-label">Updates webhook</div>
+            <div class="setting-value">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhookUpdates" @change="saveAutoSyncSettings()" placeholder="Optional — falls back to sync webhook if empty">
+            </div>
+          </div>
+          <div style="font-size:11px;color:#484f58;margin:-4px 0 4px 180px">TRaSH repo updates and weekly changelog</div>
+        </div>
+
+        <!-- Gotify -->
+        <div style="border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
+          <div style="font-size:13px;font-weight:600;color:#e1e4e8;margin-bottom:8px">Gotify</div>
+          <div class="setting-row">
+            <div class="setting-label">Enable</div>
+            <div class="setting-value">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e1e4e8">
+                <input type="checkbox" x-model="autoSyncSettings.gotifyEnabled" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
+                Send push notifications via Gotify
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">URL</div>
+            <div class="setting-value">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.gotifyUrl" @change="saveAutoSyncSettings()" placeholder="https://gotify.example.com">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">App Token</div>
+            <div class="setting-value" style="display:flex;gap:8px;align-items:center">
+              <input :type="gotifyTokenVisible ? 'text' : 'password'" class="input" style="width:300px" x-model="autoSyncSettings.gotifyToken" @change="saveAutoSyncSettings()" placeholder="App token from Gotify">
+              <button class="btn btn-sm" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'" style="min-width:32px"></button>
+              <button class="btn btn-sm" @click="testGotify()" :disabled="!autoSyncSettings.gotifyUrl || !autoSyncSettings.gotifyToken || gotifyTesting">
+                <span x-show="!gotifyTesting">Test</span><span x-show="gotifyTesting">...</span>
+              </button>
+              <span x-show="gotifyTestResult" :style="gotifyTestResult === 'Sent!' ? 'color:#3fb950;font-size:12px' : 'color:#f85149;font-size:12px'" x-text="gotifyTestResult"></span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Levels</div>
+            <div class="setting-value" style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e1e4e8">
+                <input type="checkbox" x-model="autoSyncSettings.gotifyPriorityCritical" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
+                Critical <input type="number" class="input" style="width:50px;text-align:center;margin-left:4px" min="0" max="10" x-model.number="autoSyncSettings.gotifyCriticalValue" @change="saveAutoSyncSettings()">
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e1e4e8">
+                <input type="checkbox" x-model="autoSyncSettings.gotifyPriorityWarning" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
+                Warning <input type="number" class="input" style="width:50px;text-align:center;margin-left:4px" min="0" max="10" x-model.number="autoSyncSettings.gotifyWarningValue" @change="saveAutoSyncSettings()">
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e1e4e8">
+                <input type="checkbox" x-model="autoSyncSettings.gotifyPriorityInfo" @change="saveAutoSyncSettings()" style="accent-color:#58a6ff">
+                Info <input type="number" class="input" style="width:50px;text-align:center;margin-left:4px" min="0" max="10" x-model.number="autoSyncSettings.gotifyInfoValue" @change="saveAutoSyncSettings()">
+              </label>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#484f58;margin:4px 0 0 180px">Critical: sync failures · Warning: stale cleanup · Info: sync success, repo updates, changelog</div>
         </div>
       </div>
     </div>
+
   </div>
 
   <!-- ==================== ABOUT ==================== -->
@@ -4928,7 +4955,11 @@ function clonarr() {
     syncPreviewLoading: false,
 
     // Auto-Sync
-    autoSyncSettings: { enabled: false, notifyOnSuccess: true, notifyOnFailure: true, notifyOnRepoUpdate: false, discordWebhook: '' },
+    autoSyncSettings: { enabled: false, notifyOnSuccess: true, notifyOnFailure: true, notifyOnRepoUpdate: false, discordWebhook: '', discordWebhookUpdates: '', gotifyEnabled: false, gotifyUrl: '', gotifyToken: '', gotifyPriorityCritical: true, gotifyPriorityWarning: true, gotifyPriorityInfo: false, gotifyCriticalValue: 8, gotifyWarningValue: 5, gotifyInfoValue: 3 },
+    gotifyTokenVisible: false,
+    settingsOpen: 'instances',
+    gotifyTesting: false,
+    gotifyTestResult: '',
     autoSyncRules: [],
     autoSyncRuleForSync: null, // existing rule that matches current syncForm (if any)
 
@@ -10243,6 +10274,30 @@ function clonarr() {
           body: JSON.stringify(this.autoSyncSettings)
         });
       } catch (e) { console.error('saveAutoSyncSettings:', e); }
+    },
+
+    async testGotify() {
+      if (!this.autoSyncSettings.gotifyUrl || !this.autoSyncSettings.gotifyToken) return;
+      this.gotifyTesting = true;
+      this.gotifyTestResult = '';
+      try {
+        const resp = await fetch('/api/auto-sync/test-gotify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: this.autoSyncSettings.gotifyUrl, token: this.autoSyncSettings.gotifyToken }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          this.gotifyTestResult = err.error || 'Failed';
+        } else {
+          this.gotifyTestResult = 'Sent!';
+        }
+      } catch (e) {
+        this.gotifyTestResult = e.message;
+      } finally {
+        this.gotifyTesting = false;
+        setTimeout(() => { this.gotifyTestResult = ''; }, 5000);
+      }
     },
 
     async loadAutoSyncRules() {
