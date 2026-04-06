@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8.4
+
+### Fixed
+
+- **CF tooltip showing raw markdown** — Descriptions with Wikipedia links (e.g. streaming service CFs) now display as clean text instead of raw markdown syntax
+
 ## v1.8.3
 
 ### Fixed
