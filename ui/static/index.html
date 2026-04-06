@@ -3426,7 +3426,7 @@
         <div class="setting-row">
           <div class="setting-label">Repository URL</div>
           <div class="setting-value">
-            <input class="input" style="width:400px" x-model="config.trashRepo.url" @change="saveConfig()">
+            <input class="input" style="width:400px" x-model="config.trashRepo.url" @change="saveConfig()" autocomplete="one-time-code">
           </div>
         </div>
         <div class="setting-row">
@@ -3504,8 +3504,8 @@
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
                 <input type="checkbox" x-model="config.prowlarr.enabled" @change="saveConfig(['prowlarr'])" style="accent-color:#58a6ff">
               </label>
-              <input class="input" style="width:250px" x-model="config.prowlarr.url" @change="saveConfig(['prowlarr'])" placeholder="http://prowlarr:9696">
-              <input class="input" style="width:250px" x-model="config.prowlarr.apiKey" @change="saveConfig(['prowlarr'])" placeholder="API key">
+              <input class="input" style="width:250px" x-model="config.prowlarr.url" @change="saveConfig(['prowlarr'])" placeholder="http://prowlarr:9696" autocomplete="one-time-code">
+              <input class="input" style="width:250px" x-model="config.prowlarr.apiKey" @change="saveConfig(['prowlarr'])" placeholder="API key" autocomplete="one-time-code">
               <button class="btn btn-sm" @click="testProwlarr()" :disabled="prowlarrTesting || !config.prowlarr?.url || !config.prowlarr?.apiKey">
                 <span x-show="prowlarrTesting" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
                 <span x-show="!prowlarrTesting">Test</span>
@@ -3550,14 +3550,14 @@
           <div class="setting-row">
             <div class="setting-label">Sync webhook</div>
             <div class="setting-value">
-              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhook" @change="saveAutoSyncSettings()" placeholder="https://discord.com/api/webhooks/...">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhook" @change="saveAutoSyncSettings()" placeholder="https://discord.com/api/webhooks/..." autocomplete="one-time-code">
             </div>
           </div>
           <div style="font-size:11px;color:#6e7681;margin:-4px 0 8px 180px">Sync success, failure, and cleanup</div>
           <div class="setting-row">
             <div class="setting-label">Updates webhook</div>
             <div class="setting-value">
-              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhookUpdates" @change="saveAutoSyncSettings()" placeholder="Optional — falls back to sync webhook if empty">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.discordWebhookUpdates" @change="saveAutoSyncSettings()" placeholder="Optional — falls back to sync webhook if empty" autocomplete="one-time-code">
             </div>
           </div>
           <div style="font-size:11px;color:#6e7681;margin:-4px 0 4px 180px">TRaSH repo updates and weekly changelog</div>
@@ -3578,13 +3578,13 @@
           <div class="setting-row">
             <div class="setting-label">URL</div>
             <div class="setting-value">
-              <input class="input" style="width:400px" x-model="autoSyncSettings.gotifyUrl" @change="saveAutoSyncSettings()" placeholder="https://gotify.example.com">
+              <input class="input" style="width:400px" x-model="autoSyncSettings.gotifyUrl" @change="saveAutoSyncSettings()" placeholder="https://gotify.example.com" autocomplete="one-time-code">
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-label">App Token</div>
             <div class="setting-value" style="display:flex;gap:8px;align-items:center">
-              <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="new-password" class="input" style="width:300px" x-model="autoSyncSettings.gotifyToken" @change="saveAutoSyncSettings()" placeholder="App token from Gotify">
+              <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="one-time-code" class="input" style="width:300px" x-model="autoSyncSettings.gotifyToken" @change="saveAutoSyncSettings()" placeholder="App token from Gotify">
               <button class="btn btn-sm" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'" style="min-width:32px"></button>
               <button class="btn btn-sm" @click="testGotify()" :disabled="!autoSyncSettings.gotifyUrl || !autoSyncSettings.gotifyToken || gotifyTesting">
                 <span x-show="!gotifyTesting">Test</span><span x-show="gotifyTesting">...</span>
@@ -3656,11 +3656,11 @@
       </div>
       <div class="form-group">
         <label>URL</label>
-        <input class="input" x-model="instanceForm.url" placeholder="http://192.168.0.5:7878">
+        <input class="input" x-model="instanceForm.url" placeholder="http://192.168.0.5:7878" autocomplete="one-time-code">
       </div>
       <div class="form-group">
         <label>API Key</label>
-        <input class="input" x-model="instanceForm.apiKey" :placeholder="editingInstance ? 'Leave empty to keep current key' : 'Radarr/Sonarr API key'" :type="editingInstance && !instanceForm.apiKey ? 'text' : 'password'">
+        <input class="input" x-model="instanceForm.apiKey" :placeholder="editingInstance ? 'Leave empty to keep current key' : 'Radarr/Sonarr API key'" :type="editingInstance && !instanceForm.apiKey ? 'text' : 'password'" autocomplete="one-time-code">
         <div x-show="editingInstance && !instanceForm.apiKey" style="font-size:11px;color:#8b949e;margin-top:4px">API key is saved — leave empty to keep it, or enter a new one to replace it.</div>
       </div>
       <!-- Test result -->

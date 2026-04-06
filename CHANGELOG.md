@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8.3
+
+### Fixed
+
+- **Browser autofill popup on Settings** — URL and token fields no longer trigger browser password save/fill dialogs
+
 ## v1.8.2
 
 ### Improved
