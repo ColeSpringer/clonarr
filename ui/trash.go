@@ -813,7 +813,7 @@ func (ts *trashStore) parseAppData(app string) (AppData, error) {
 // Regex patterns for stripping markdown/HTML from CF descriptions.
 var (
 	reHTML        = regexp.MustCompile(`<[^>]+>`)
-	reMarkdownLn  = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)(\{[^}]*\})?`)
+	reMarkdownLn  = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)(\{[^}]*\})?`)
 	reComment     = regexp.MustCompile(`<!--[\s\S]*?-->`)
 	reTemplate    = regexp.MustCompile(`\{\{[^}]+\}\}`)
 	reIncludeMd   = regexp.MustCompile(`\{!\s*include-markdown\s+"[^"]+"\s*!\}`)

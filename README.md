@@ -1,6 +1,10 @@
 # Clonarr
 
-Latest version: `v1.8.1` — Please report issues on [GitHub](https://github.com/prophetse7en/clonarr/issues).
+![GitHub Release](https://img.shields.io/github/v/release/ProphetSe7en/clonarr?label=latest) ![GitHub last commit](https://img.shields.io/github/last-commit/ProphetSe7en/clonarr/main?label=last%20commit)
+
+Available tags: `v1.8.4` (pinned), `latest` (stable release), `dev` (development)
+
+Please report issues on [GitHub](https://github.com/prophetse7en/clonarr/issues).
 
 A TRaSH Guides sync tool for Radarr and Sonarr with a built-in web UI. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes — no YAML configs, no CLI, just a browser.
 
