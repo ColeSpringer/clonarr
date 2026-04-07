@@ -10234,7 +10234,8 @@ function clonarr() {
             behavior: this.syncForm.behavior || existingRule.behavior,
             overrides: syncBody.overrides || null,
             scoreOverrides: syncBody.scoreOverrides || null,
-            qualityOverrides: syncBody.qualityOverrides || null
+            qualityOverrides: syncBody.qualityOverrides || null,
+            qualityStructure: syncBody.qualityStructure || null
           };
           try {
             await fetch(`/api/auto-sync/rules/${existingRule.id}`, {
@@ -10274,6 +10275,7 @@ function clonarr() {
         selectedCFs: Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]),
         scoreOverrides: sh.scoreOverrides || null,
         qualityOverrides: sh.qualityOverrides || null,
+        qualityStructure: sh.qualityStructure || null,
         overrides: sh.overrides || null,
         behavior: sh.behavior || null
       };
@@ -10855,6 +10857,7 @@ function clonarr() {
           overrides: syncBody.overrides || null,
           scoreOverrides: syncBody.scoreOverrides || null,
           qualityOverrides: syncBody.qualityOverrides || null,
+          qualityStructure: syncBody.qualityStructure || null,
           arrProfileId: parseInt(this.syncForm.arrProfileId) || existing.arrProfileId
         };
         try {
@@ -10880,7 +10883,8 @@ function clonarr() {
           behavior: this.syncForm.behavior,
           overrides: syncBody.overrides || null,
           scoreOverrides: syncBody.scoreOverrides || null,
-          qualityOverrides: syncBody.qualityOverrides || null
+          qualityOverrides: syncBody.qualityOverrides || null,
+          qualityStructure: syncBody.qualityStructure || null
         };
         try {
           const r = await fetch('/api/auto-sync/rules', {
