@@ -13,7 +13,7 @@ FROM alpine:3.21
 ARG VERSION=1.8.4
 LABEL org.opencontainers.image.version=${VERSION}
 
-RUN apk add --no-cache git tzdata ca-certificates su-exec && \
+RUN apk add --no-cache git tini tzdata ca-certificates su-exec && \
     addgroup -g 100 users 2>/dev/null || true && \
     adduser -D -u 99 -G users nobody 2>/dev/null || true && \
     mkdir -p /config && \
@@ -33,4 +33,4 @@ EXPOSE 6060
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:6060/api/trash/status || exit 1
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]

@@ -533,6 +533,14 @@ func (ts *trashStore) CloneOrPull(repoURL, branch string) error {
 	}
 
 	if _, err := os.Stat(filepath.Join(ts.dataDir, ".git")); err == nil {
+		// Disable git auto-gc — it detaches into the background and the orphan
+		// gets reparented to PID 1 (clonarr), which doesn't reap unknown children,
+		// causing zombie process buildup over time. (v1.8.5 zombie leak fix)
+		disableGC := exec.Command("git", "-C", ts.dataDir, "config", "gc.auto", "0")
+		if err := disableGC.Run(); err != nil {
+			log.Printf("Warning: failed to disable git gc.auto: %v", err)
+		}
+
 		// Enable sparse-checkout on existing full clones (migration)
 		sparseFile := filepath.Join(ts.dataDir, ".git", "info", "sparse-checkout")
 		if _, serr := os.Stat(sparseFile); serr != nil {
@@ -588,6 +596,12 @@ func (ts *trashStore) CloneOrPull(repoURL, branch string) error {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("sparse-checkout set: %w", err)
+		}
+
+		// Disable git auto-gc on fresh clone — see migration block above (v1.8.5).
+		disableGC := exec.Command("git", "-C", ts.dataDir, "config", "gc.auto", "0")
+		if err := disableGC.Run(); err != nil {
+			log.Printf("Warning: failed to disable git gc.auto: %v", err)
 		}
 	}
 
