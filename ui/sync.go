@@ -1031,8 +1031,12 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 						result.QualityUpdated = true
 						updated = true
 					}
-					log.Printf("Sync: updated quality items: %d items (%d from TRaSH, %d unused)",
-						len(targetProfile.Items), len(newItems), len(unused))
+					source := "TRaSH"
+					if usingStructureOverride {
+						source = "override"
+					}
+					log.Printf("Sync: updated quality items: %d items (%d from %s, %d unused)",
+						len(targetProfile.Items), len(newItems), source, len(unused))
 				}
 			}
 		}
@@ -1204,24 +1208,44 @@ func BuildArrProfile(
 	}
 	items = append(unused, items...)
 
-	// Resolve cutoff name → numeric ID
-	// If cutoff is empty, default to the first allowed quality group/item
+	// Resolve cutoff name → numeric ID.
+	// If cutoff is empty, default to the first allowed quality group/item.
+	// When a quality structure override is active, the original TRaSH cutoff may
+	// no longer exist in the overridden items (user merged/renamed/deleted the
+	// group it pointed to). In that case fall back to first-allowed here — the
+	// caller's post-build override logic (req.Overrides.CutoffQuality) will set
+	// the real cutoff afterwards.
 	cutoffName := profile.Cutoff
-	if cutoffName == "" {
+	pickFirstAllowed := func() string {
 		for _, item := range items {
 			if item.Allowed {
 				if item.Name != "" {
-					cutoffName = item.Name
+					return item.Name
 				} else if item.Quality != nil {
-					cutoffName = item.Quality.Name
+					return item.Quality.Name
 				}
-				break
 			}
 		}
+		return ""
+	}
+	if cutoffName == "" {
+		cutoffName = pickFirstAllowed()
 	}
 	cutoffID, err := resolveCutoff(cutoffName, items)
 	if err != nil {
-		return nil, fmt.Errorf("resolve cutoff: %w", err)
+		if len(qualityStructureOverride) > 0 {
+			// Original TRaSH cutoff isn't in the overridden structure — try first allowed.
+			fallback := pickFirstAllowed()
+			if fallback != "" {
+				if cid, ferr := resolveCutoff(fallback, items); ferr == nil {
+					cutoffID = cid
+					err = nil
+				}
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve cutoff: %w", err)
+		}
 	}
 
 	// Build FormatItems from CFs + scores
