@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -407,45 +409,26 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 		}
 		// else "do_not_adjust": leave unsynced CF scores as-is
 
-		// Compare quality items: check if desired allowed qualities differ from Arr.
-		// Source: structure override trumps TRaSH items.
+		// Fingerprint-based diff: catches reorder, regroup, and extract drift
+		// that a set-based diff misses. Structure override trumps TRaSH items.
 		desiredItems := profile.Items
 		if len(req.QualityStructure) > 0 {
 			desiredItems = req.QualityStructure
 		}
 		if len(desiredItems) > 0 {
-			trashAllowed := make(map[string]bool)
-			for _, item := range desiredItems {
-				if item.Allowed {
-					trashAllowed[item.Name] = true
-				}
+			filtered := filterArrItemsToDesired(targetProfile.Items, desiredItems)
+			if fingerprintTrashItems(desiredItems) != fingerprintArrItems(filtered) {
+				plan.Summary.QualityChanged = true
 			}
-			arrAllowed := make(map[string]bool)
-			for _, item := range targetProfile.Items {
-				if item.Allowed {
-					name := item.Name
-					if name == "" && item.Quality != nil {
-						name = item.Quality.Name
-					}
-					if name != "" {
-						arrAllowed[name] = true
-					}
-				}
+		}
+		// Cutoff drift — honors the "__skip__" override.
+		if !(req.Overrides != nil && req.Overrides.CutoffQuality != nil && *req.Overrides.CutoffQuality == "__skip__") {
+			desiredCutoff := profile.Cutoff
+			if req.Overrides != nil && req.Overrides.CutoffQuality != nil {
+				desiredCutoff = *req.Overrides.CutoffQuality
 			}
-			// Check for differences
-			for name := range trashAllowed {
-				if !arrAllowed[name] {
-					plan.Summary.QualityChanged = true
-					break
-				}
-			}
-			if !plan.Summary.QualityChanged {
-				for name := range arrAllowed {
-					if !trashAllowed[name] {
-						plan.Summary.QualityChanged = true
-						break
-					}
-				}
+			if desiredCutoff != "" && cutoffIDToName(targetProfile.Cutoff, targetProfile.Items) != desiredCutoff {
+				plan.Summary.QualityChanged = true
 			}
 		}
 	} else {
@@ -787,6 +770,18 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 		if targetProfile.Language != nil {
 			prevLanguageID = targetProfile.Language.ID
 		}
+		// Snapshot the current quality structure — filtered to items TRaSH manages
+		// so the comparison is insensitive to Radarr's unused-tail ordering, which
+		// isn't guaranteed across API calls.
+		desiredItemsSnapshot := profile.Items
+		if len(req.QualityStructure) > 0 {
+			desiredItemsSnapshot = req.QualityStructure
+		}
+		var prevItemsFingerprint string
+		if len(desiredItemsSnapshot) > 0 {
+			prevItemsFingerprint = fingerprintArrItems(filterArrItemsToDesired(targetProfile.Items, desiredItemsSnapshot))
+		}
+		prevCutoffName := cutoffIDToName(targetProfile.Cutoff, targetProfile.Items)
 
 		// Update profile-level settings (cutoff, min scores, upgrade)
 		targetProfile.UpgradeAllowed = profile.UpgradeAllowed
@@ -1023,6 +1018,13 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 							})
 						}
 					}
+					// Sort unused by quality ID for deterministic ordering. Radarr's
+					// definition list order isn't guaranteed across API calls, so
+					// without this the structure fingerprint could produce false
+					// positives and trigger no-op PUTs on every sync.
+					sort.SliceStable(unused, func(i, j int) bool {
+						return unused[i].Quality.ID < unused[j].Quality.ID
+					})
 					for i, j := 0, len(newItems)-1; i < j; i, j = i+1, j-1 {
 						newItems[i], newItems[j] = newItems[j], newItems[i]
 					}
@@ -1102,10 +1104,26 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 						log.Printf("Sync: cutoff resolved %q → %d (was %d)", cutoffName, cid, targetProfile.Cutoff)
 						targetProfile.Cutoff = cid
 						updated = true
+						if prevCutoffName != cutoffName {
+							result.SettingsDetails = append(result.SettingsDetails,
+								fmt.Sprintf("Upgrade Until: %s → %s", prevCutoffName, cutoffName))
+						}
 					}
 				} else {
 					log.Printf("Warning: could not resolve cutoff %q: %v", cutoffName, err)
 				}
+			}
+		}
+
+		// Catch drift missed by the enable/disable loop above: reorder, regroup,
+		// extract-from-group. Both snapshots are filtered to the TRaSH-managed
+		// subset so Radarr's unused-tail ordering can't produce false positives.
+		if len(desiredItemsSnapshot) > 0 {
+			postFP := fingerprintArrItems(filterArrItemsToDesired(targetProfile.Items, desiredItemsSnapshot))
+			if postFP != prevItemsFingerprint && !result.QualityUpdated {
+				result.QualityDetails = append(result.QualityDetails, "Quality structure: restored")
+				result.QualityUpdated = true
+				updated = true
 			}
 		}
 
@@ -1202,6 +1220,10 @@ func BuildArrProfile(
 			})
 		}
 	}
+	// Deterministic unused order — see rebuild path for rationale.
+	sort.SliceStable(unused, func(i, j int) bool {
+		return unused[i].Quality.ID < unused[j].Quality.ID
+	})
 	// Reverse profile items so first-in-YAML (highest priority) ends up last in array (top of UI)
 	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
 		items[i], items[j] = items[j], items[i]
@@ -1429,6 +1451,113 @@ func resolveCutoff(cutoffName string, items []ArrQualityItem) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("cutoff %q not found in resolved items", cutoffName)
+}
+
+// cutoffIDToName reverse-resolves a cutoff ID to its display name.
+// Returns "#<id>" if no match is found.
+func cutoffIDToName(id int, items []ArrQualityItem) string {
+	if id == 0 {
+		return "(none)"
+	}
+	for _, item := range items {
+		if item.ID > 0 && item.ID == id && item.Name != "" {
+			return item.Name
+		}
+		if item.Quality != nil && item.Quality.ID == id {
+			return item.Quality.Name
+		}
+	}
+	return fmt.Sprintf("#%d", id)
+}
+
+// arrItemName returns the display name for an Arr quality item — group name if
+// it's a group, quality name if it's a flat item. Encapsulates the
+// "fall through to Quality.Name when Name is empty" pattern.
+func arrItemName(it ArrQualityItem) string {
+	if it.Name != "" {
+		return it.Name
+	}
+	if it.Quality != nil {
+		return it.Quality.Name
+	}
+	return ""
+}
+
+// fpQuality formats a single flat quality. Names are quoted via strconv.Quote so
+// they can safely contain any of the reserved delimiters (|, ,, =, [, ]).
+func fpQuality(name string, allowed bool) string {
+	return "Q:" + strconv.Quote(name) + "=" + strconv.FormatBool(allowed)
+}
+
+// fpGroup formats a quality group with its ordered member names.
+func fpGroup(name string, allowed bool, members []string) string {
+	quoted := make([]string, len(members))
+	for i, m := range members {
+		quoted[i] = strconv.Quote(m)
+	}
+	return "G:" + strconv.Quote(name) + "=" + strconv.FormatBool(allowed) + "[" + strings.Join(quoted, ",") + "]"
+}
+
+// fingerprintArrItems produces a deterministic, delimiter-safe string from an
+// Arr quality-item tree capturing ordering, group structure, and allowed state.
+// This is what lets the sync detect drift the set-based diff misses: reorders,
+// regroups, and moving a quality in/out of a group with the same allowed state.
+func fingerprintArrItems(items []ArrQualityItem) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		if len(it.Items) > 0 || (it.Name != "" && it.Quality == nil) {
+			members := make([]string, 0, len(it.Items))
+			for _, sub := range it.Items {
+				members = append(members, arrItemName(sub))
+			}
+			parts = append(parts, fpGroup(it.Name, it.Allowed, members))
+		} else {
+			parts = append(parts, fpQuality(arrItemName(it), it.Allowed))
+		}
+	}
+	return strings.Join(parts, "|")
+}
+
+// fingerprintTrashItems produces the same canonical format as fingerprintArrItems
+// but from a TRaSH-shaped []QualityItem. This lets the plan phase compare desired
+// (TRaSH) against current (Arr) without building an intermediate tree.
+func fingerprintTrashItems(items []QualityItem) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		if len(it.Items) > 0 {
+			parts = append(parts, fpGroup(it.Name, it.Allowed, it.Items))
+		} else {
+			parts = append(parts, fpQuality(it.Name, it.Allowed))
+		}
+	}
+	return strings.Join(parts, "|")
+}
+
+// filterArrItemsToDesired returns the subset of Arr items that TRaSH manages:
+// groups (always kept — a stale group surfaces as drift), plus flat qualities
+// whose name appears in the desired set. Drops the "unused" tail so fingerprint
+// comparisons are insensitive to Radarr's API response ordering of unused items.
+func filterArrItemsToDesired(arrItems []ArrQualityItem, desired []QualityItem) []ArrQualityItem {
+	desiredNames := make(map[string]bool, len(desired)*2)
+	for _, it := range desired {
+		if it.Name != "" {
+			desiredNames[it.Name] = true
+		}
+		for _, sub := range it.Items {
+			desiredNames[sub] = true
+		}
+	}
+	out := make([]ArrQualityItem, 0, len(arrItems))
+	for _, it := range arrItems {
+		if len(it.Items) > 0 {
+			out = append(out, it)
+			continue
+		}
+		if desiredNames[arrItemName(it)] {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // --- Helpers ---

@@ -220,3 +220,190 @@ func TestCustomCFToArr_EmptySpecs(t *testing.T) {
 		t.Errorf("expected 0 specs, got %d", len(result.Specifications))
 	}
 }
+
+// --- fingerprintArrItems / fingerprintTrashItems ---
+// These functions are the core of the structure-drift detection that closes the
+// five blindspots the set-based quality diff used to miss: reorder items,
+// reorder groups, move a quality into/out of a group with the same allowed state,
+// and structural changes that leave the allowed set untouched.
+
+// helper: build a flat Arr quality item
+func arrQ(id int, name string, allowed bool) ArrQualityItem {
+	return ArrQualityItem{
+		Quality: &ArrQualityRef{ID: id, Name: name},
+		Items:   []ArrQualityItem{},
+		Allowed: allowed,
+	}
+}
+
+// helper: build an Arr group
+func arrG(groupID int, name string, allowed bool, members ...ArrQualityItem) ArrQualityItem {
+	return ArrQualityItem{
+		ID:      groupID,
+		Name:    name,
+		Items:   members,
+		Allowed: allowed,
+	}
+}
+
+func TestFingerprintArrItems_FlatOnly(t *testing.T) {
+	items := []ArrQualityItem{
+		arrQ(1, "DVD", false),
+		arrQ(3, "Bluray-1080p", true),
+		arrQ(4, "WEB 1080p", true),
+	}
+	got := fingerprintArrItems(items)
+	want := `Q:"DVD"=false|Q:"Bluray-1080p"=true|Q:"WEB 1080p"=true`
+	if got != want {
+		t.Errorf("fingerprint mismatch:\n  got:  %s\n  want: %s", got, want)
+	}
+}
+
+func TestFingerprintArrItems_ReorderChangesFingerprint(t *testing.T) {
+	a := []ArrQualityItem{arrQ(1, "A", true), arrQ(2, "B", true), arrQ(3, "C", false)}
+	b := []ArrQualityItem{arrQ(3, "C", false), arrQ(1, "A", true), arrQ(2, "B", true)}
+	if fingerprintArrItems(a) == fingerprintArrItems(b) {
+		t.Error("reorder must produce different fingerprints (set-based diff blindspot)")
+	}
+}
+
+func TestFingerprintArrItems_WithGroup(t *testing.T) {
+	items := []ArrQualityItem{
+		arrQ(1, "SDTV", false),
+		arrG(1000, "WEB 1080p", true,
+			arrQ(10, "WEBDL-1080p", true),
+			arrQ(11, "WEBRip-1080p", true),
+		),
+		arrQ(20, "Remux-1080p", true),
+	}
+	got := fingerprintArrItems(items)
+	want := `Q:"SDTV"=false|G:"WEB 1080p"=true["WEBDL-1080p","WEBRip-1080p"]|Q:"Remux-1080p"=true`
+	if got != want {
+		t.Errorf("fingerprint mismatch:\n  got:  %s\n  want: %s", got, want)
+	}
+}
+
+func TestFingerprintArrItems_GroupMemberReorderChangesFingerprint(t *testing.T) {
+	a := []ArrQualityItem{
+		arrG(1000, "WEB 1080p", true,
+			arrQ(10, "WEBDL-1080p", true),
+			arrQ(11, "WEBRip-1080p", true),
+		),
+	}
+	b := []ArrQualityItem{
+		arrG(1000, "WEB 1080p", true,
+			arrQ(11, "WEBRip-1080p", true),
+			arrQ(10, "WEBDL-1080p", true),
+		),
+	}
+	if fingerprintArrItems(a) == fingerprintArrItems(b) {
+		t.Error("group member reorder must produce different fingerprints")
+	}
+}
+
+// Group names are user-editable. A malicious (or just creative) name containing
+// the format's reserved delimiters must not collide with a different structure.
+func TestFingerprintArrItems_DelimiterInjectionSafe(t *testing.T) {
+	// A flat quality literally named `foo"|G:"bar=true[`
+	a := []ArrQualityItem{arrQ(1, `foo"|G:"bar=true[`, true)}
+	// A group with the innocuous name `foo` containing quality `bar`
+	b := []ArrQualityItem{
+		arrG(1000, "foo", true, arrQ(10, "bar", true)),
+	}
+	if fingerprintArrItems(a) == fingerprintArrItems(b) {
+		t.Errorf("delimiter injection collision:\n  a: %s\n  b: %s", fingerprintArrItems(a), fingerprintArrItems(b))
+	}
+}
+
+func TestFingerprintArrItems_ExtractFromGroupChangesFingerprint(t *testing.T) {
+	// Before: WEBDL-1080p is inside the group, allowed=true
+	a := []ArrQualityItem{
+		arrG(1000, "WEB 1080p", true,
+			arrQ(10, "WEBDL-1080p", true),
+			arrQ(11, "WEBRip-1080p", true),
+		),
+	}
+	// After: WEBDL-1080p extracted from the group, still allowed=true
+	// Set-based diff sees the same {WEBDL-1080p, WEBRip-1080p, WEB 1080p}
+	// allowed set and misses this. Fingerprint must catch it.
+	b := []ArrQualityItem{
+		arrQ(10, "WEBDL-1080p", true),
+		arrG(1000, "WEB 1080p", true,
+			arrQ(11, "WEBRip-1080p", true),
+		),
+	}
+	if fingerprintArrItems(a) == fingerprintArrItems(b) {
+		t.Error("extracting a quality from a group with same allowed-state must produce different fingerprints (set-based diff blindspot)")
+	}
+}
+
+func TestFingerprintTrashItems_MatchesArrFingerprint(t *testing.T) {
+	// Both representations should produce the identical canonical string
+	// so plan-phase can compare desired (TRaSH) vs current (Arr) directly.
+	trash := []QualityItem{
+		{Name: "SDTV", Allowed: false},
+		{Name: "WEB 1080p", Allowed: true, Items: []string{"WEBDL-1080p", "WEBRip-1080p"}},
+		{Name: "Remux-1080p", Allowed: true},
+	}
+	arr := []ArrQualityItem{
+		arrQ(1, "SDTV", false),
+		arrG(1000, "WEB 1080p", true,
+			arrQ(10, "WEBDL-1080p", true),
+			arrQ(11, "WEBRip-1080p", true),
+		),
+		arrQ(20, "Remux-1080p", true),
+	}
+	if fingerprintTrashItems(trash) != fingerprintArrItems(arr) {
+		t.Errorf("representations diverged:\n  trash: %s\n  arr:   %s", fingerprintTrashItems(trash), fingerprintArrItems(arr))
+	}
+}
+
+func TestFilterArrItemsToDesired_DropsUnusedTail(t *testing.T) {
+	// Typical live Arr profile: lots of disallowed "unused" qualities at the top,
+	// followed by the actually-configured items. TRaSH only knows about the latter.
+	arr := []ArrQualityItem{
+		arrQ(1, "REGIONAL", false),      // unused
+		arrQ(2, "CAM", false),           // unused
+		arrQ(3, "TELECINE", false),      // unused
+		arrQ(10, "WEBDL-1080p", true),   // in desired
+		arrG(1000, "WEB 1080p", true,    // group always kept
+			arrQ(11, "WEBRip-1080p", true),
+		),
+	}
+	desired := []QualityItem{
+		{Name: "WEBDL-1080p", Allowed: true},
+		{Name: "WEB 1080p", Allowed: true, Items: []string{"WEBRip-1080p"}},
+	}
+	filtered := filterArrItemsToDesired(arr, desired)
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered items (WEBDL + group), got %d", len(filtered))
+	}
+	if fingerprintArrItems(filtered) != fingerprintTrashItems(desired) {
+		t.Errorf("after filtering, fingerprints should match:\n  got:  %s\n  want: %s",
+			fingerprintArrItems(filtered), fingerprintTrashItems(desired))
+	}
+}
+
+func TestCutoffIDToName_FlatAndGroup(t *testing.T) {
+	items := []ArrQualityItem{
+		arrQ(1, "SDTV", false),
+		arrG(1000, "WEB 1080p", true, arrQ(10, "WEBDL-1080p", true)),
+		arrQ(20, "Remux-1080p", true),
+	}
+	cases := []struct {
+		id   int
+		want string
+	}{
+		{1, "SDTV"},
+		{1000, "WEB 1080p"},
+		{20, "Remux-1080p"},
+		{0, "(none)"},
+		{999, "#999"}, // fallback for unknown
+	}
+	for _, c := range cases {
+		got := cutoffIDToName(c.id, items)
+		if got != c.want {
+			t.Errorf("cutoffIDToName(%d): got %q, want %q", c.id, got, c.want)
+		}
+	}
+}

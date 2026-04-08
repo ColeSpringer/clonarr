@@ -2740,6 +2740,14 @@
               <span> — <span x-text="syncResult.errors.length"></span> errors</span>
             </template>
           </div>
+          <!-- Change details (quality, settings, CF, score) — matches the toast shown by Sync/Sync All -->
+          <template x-if="[...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])].length > 0">
+            <div style="margin-top:8px;font-size:11px;color:#8b949e">
+              <template x-for="(d, i) in [...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])]" :key="i">
+                <div style="padding:1px 0" x-text="d"></div>
+              </template>
+            </div>
+          </template>
           <template x-if="syncResult.errors?.length">
             <div style="margin-top:8px;font-size:11px">
               <template x-for="(err, i) in syncResult.errors" :key="i">
@@ -10201,16 +10209,25 @@ function clonarr() {
         }
         // Show toast for imported profiles (no profile detail view to show results)
         if (this.syncForm.importedProfileId) {
-          const parts = [];
-          if (result.cfsCreated) parts.push(`${result.cfsCreated} CFs created`);
-          if (result.cfsUpdated) parts.push(`${result.cfsUpdated} CFs updated`);
-          if (result.scoresUpdated) parts.push(`${result.scoresUpdated} scores`);
           if (result.error) {
             this.showToast(`Sync failed: ${result.error}`, 'error', 8000);
           } else if (result.errors?.length) {
             this.showToast(`Sync failed: ${result.errors[0]}`, 'error', 8000);
           } else {
-            this.showToast(`"${this.syncForm.profileName}" synced — ${parts.length ? parts.join(', ') : 'no changes'}`, 'info', 6000);
+            const details = [
+              ...(result.cfDetails || []),
+              ...(result.scoreDetails || []),
+              ...(result.qualityDetails || []),
+              ...(result.settingsDetails || [])
+            ];
+            let msg = `"${this.syncForm.profileName}" synced`;
+            if (details.length > 0) {
+              const shown = details.length > 5 ? [...details.slice(0, 4), `...and ${details.length - 4} more`] : details;
+              msg += '\n' + shown.join('\n');
+            } else {
+              msg += ' — no changes';
+            }
+            this.showToast(msg, 'info', details.length > 0 ? 8000 : 4000);
           }
         }
         this.syncResult = result;

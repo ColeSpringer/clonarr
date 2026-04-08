@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.8.6 (in development — `:dev` tag)
+
+### Added
+
+- **Quality Group editor in TRaSH sync overrides** — Edit quality groups directly from the Customize Overrides dialog without opening Profile Builder. Drag-and-drop to reorder, drop on a row to merge, click a group name to rename. Create / rename / merge / ungroup / delete / reorder groups inline.
+- **Multi-arch GHCR builds** — `linux/amd64` + `linux/arm64` (Apple Silicon support).
+
+### Fixed
+
+- **Five sync diff blindspots** — Sync previously missed Radarr-side changes that kept the same set of allowed qualities: reorder items, reorder groups, extracting a quality from a group, cutoff change, and upgradeUntil change. The diff was set-based and silently ignored ordering and structure. Replaced with a structure-aware fingerprint that captures ordering, group structure, and allowed-state. Covers Auto-Sync, manual Sync, and Sync All.
+- **Sync result banner hiding change details** — After Save & Sync, the profile detail banner only showed `cfsCreated` / `cfsUpdated` / `scoresUpdated` counts. Quality flips, cutoff changes, and per-CF changes were in the backend response but never rendered. Banner now lists the full details.
+- **Imported profile toast hiding change details** — Same blindspot in the `startApply` toast path. Now renders the full details list like `Sync` / `Sync All` already did.
+- **Quality structure override loss on auto-sync** — Enabled structure overrides now survive every sync regardless of upstream TRaSH quality/CF/score changes.
+- **Cutoff handling with structure override** — Cutoff dropdown reads from the override structure when set (so renamed/created groups appear). "Reset to TRaSH" properly clears the structure override.
+
+## v1.8.5
+
+### Fixed
+
+- **Zombie process leak** — `git auto-gc` was detaching as an orphan subprocess and getting reparented to the Go binary running as PID 1, which the Go runtime does not reap. Accumulated ~79 zombies in 6 hours under normal load. Fix: `tini` as PID 1 in the Dockerfile (`ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]`), plus `git config gc.auto=0` on the TRaSH data dir in `ui/trash.go` (both the fresh-clone and migration code paths). Verified zero zombies after 3+ hours in production.
+
 ## v1.8.4
 
 ### Fixed
