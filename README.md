@@ -8,7 +8,7 @@ Please report issues on [GitHub](https://github.com/prophetse7en/clonarr/issues)
 
 A fully visual TRaSH Guides sync tool for Radarr and Sonarr. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes — no YAML configs, no CLI, just a browser.
 
-Build profiles from scratch or start from TRaSH templates, test how releases score in the Scoring Sandbox, edit quality groups with drag-and-drop, and deploy to multiple instances with one click. Auto-sync keeps your profiles in sync when TRaSH Guides updates, with Discord and Gotify notifications.
+Build profiles from scratch or start from TRaSH templates, test how releases score in the Scoring Sandbox, edit quality groups with drag-and-drop, and sync to multiple Radarr and Sonarr instances. Auto-sync keeps your profiles in sync when TRaSH Guides updates, with Discord and Gotify notifications.
 
 Free, open source, and self-hosted.
 
