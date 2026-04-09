@@ -2,13 +2,15 @@
 
 ![GitHub Release](https://img.shields.io/github/v/release/ProphetSe7en/clonarr?label=latest) ![GitHub last commit](https://img.shields.io/github/last-commit/ProphetSe7en/clonarr/main?label=last%20commit)
 
-Available tags: `v1.8.4` (pinned), `latest` (stable release), `dev` (development)
+Available tags: `v1.8.6` (pinned), `latest` (stable release), `dev` (development)
 
 Please report issues on [GitHub](https://github.com/prophetse7en/clonarr/issues).
 
-A TRaSH Guides sync tool for Radarr and Sonarr with a built-in web UI. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes — no YAML configs, no CLI, just a browser.
+A fully visual TRaSH Guides sync tool for Radarr and Sonarr. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes — no YAML configs, no CLI, just a browser.
 
-Built as an alternative to config-driven tools like Recyclarr, with a visual interface for building, testing, and deploying TRaSH profiles.
+Build profiles from scratch or start from TRaSH templates, test how releases score in the Scoring Sandbox, edit quality groups with drag-and-drop, and deploy to multiple instances with one click. Auto-sync keeps your profiles in sync when TRaSH Guides updates, with Discord and Gotify notifications.
+
+Free, open source, and self-hosted.
 
 ## Preview
 
