@@ -1,6 +1,13 @@
 # Changelog
 
-## v1.8.9
+## v1.9.0
+
+### Added
+
+- **Clone profile** — Clone button on sync history row creates a copy of a synced profile with a new name, including all overrides, quality structure, and behavior settings.
+- **Inline rename** — Click the Arr profile name in sync history to rename it directly. Changes are applied to the Arr instance and local sync history. Duplicate name detection prevents accidental overwrites.
+- **Dry-run settings/quality preview** — Dry-run now shows settings changes (min score, cutoff, language, upgrade until) and quality item changes (enabled/disabled) — same detail level as the apply result.
+- **Arr profile name in Edit header** — When editing a synced profile, the header shows which Arr profile it syncs to (e.g. "Sonarr → WEB-2160p").
 
 ### Fixed
 
@@ -9,7 +16,15 @@
 - **Button text invisible in several modals** — Pull, Preview, Apply, Download Backup, and Create/Update Profile buttons appeared as empty green/colored rectangles. Caused by `<template x-if>` inside `<button>`, which browsers handle inconsistently. Replaced with `<span x-show>` across 9 buttons.
 - **Cleanup descriptions clarified** — "Delete All CFs" and "Delete All CFs & Scores" descriptions now state "(respects Keep List)" so the relationship with the Keep List above is clear.
 - **Auto-sync checkbox in sync modal** — "Auto-sync this profile" checkbox couldn't be unticked after Save & Sync. The binding checked if a rule *existed* rather than if it was *enabled*.
+- **Auto-sync rule not updated on profile change** — Changing target Arr profile in sync modal dropdown didn't update the auto-sync rule reference, causing stale checkbox state.
+- **CF score overrides lost after Done** — Static score display always showed TRaSH default after closing the override panel. Now shows overridden values in yellow.
+- **Alpine errors on quality structure** — `item.items.length` crashed on non-group items (undefined), cascading into reactive state corruption that affected CF score overrides.
+- **Custom CF false "update" on every sync** — Custom CFs with numeric field values (e.g. resolution "2160") were always reported as changed because the stored string didn't match Arr's integer. Values are now normalized before comparison.
 - **Profile Builder label clarity** — "Create New Profile" → "New Profile", "Import" → "Import JSON", builder "Import" row → "Start from" to distinguish file import from Arr instance import.
+
+### Changed
+
+- **Icon buttons** — Sync history action buttons (Edit, Sync, Clone, Remove) replaced with compact icons + tooltips for a cleaner layout.
 
 ## v1.8.8
 

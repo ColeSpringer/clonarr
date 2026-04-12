@@ -391,6 +391,81 @@ func (app *App) handleQualityDefinitions(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, result)
 }
 
+// handleRenameProfile renames a quality profile in an Arr instance and updates local sync history.
+func (app *App) handleRenameProfile(w http.ResponseWriter, r *http.Request) {
+	inst, ok := app.requireInstance(w, r)
+	if !ok {
+		return
+	}
+	profileID, err := strconv.Atoi(r.PathValue("profileId"))
+	if err != nil || profileID <= 0 {
+		writeError(w, 400, "Invalid profile ID")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		writeError(w, 400, "Name is required")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, 400, "Name is required")
+		return
+	}
+
+	client := NewArrClient(inst.URL, inst.APIKey, app.httpClient)
+	profiles, err := client.ListProfiles()
+	if err != nil {
+		writeError(w, 502, "Failed to list profiles: "+err.Error())
+		return
+	}
+	var target *ArrQualityProfile
+	for i := range profiles {
+		if profiles[i].ID == profileID {
+			target = &profiles[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, 404, "Profile not found in Arr")
+		return
+	}
+
+	// Check for duplicate name
+	for _, p := range profiles {
+		if p.ID != profileID && strings.EqualFold(p.Name, req.Name) {
+			writeError(w, 409, fmt.Sprintf("Profile %q already exists (ID %d)", p.Name, p.ID))
+			return
+		}
+	}
+
+	oldName := target.Name
+	target.Name = req.Name
+	if err := client.UpdateProfile(target); err != nil {
+		writeError(w, 502, "Failed to rename profile: "+err.Error())
+		return
+	}
+
+	// Update local sync history and auto-sync rules
+	app.config.Update(func(cfg *Config) {
+		for i := range cfg.SyncHistory {
+			if cfg.SyncHistory[i].InstanceID == inst.ID && cfg.SyncHistory[i].ArrProfileID == profileID {
+				cfg.SyncHistory[i].ArrProfileName = req.Name
+			}
+		}
+		for i := range cfg.AutoSync.Rules {
+			if cfg.AutoSync.Rules[i].InstanceID == inst.ID && cfg.AutoSync.Rules[i].ArrProfileID == profileID {
+				// Rule doesn't store arrProfileName, but keep for future
+			}
+		}
+	})
+
+	log.Printf("Renamed profile %d on %s: %q → %q", profileID, inst.Name, oldName, req.Name)
+	writeJSON(w, map[string]any{"ok": true, "oldName": oldName, "newName": req.Name})
+}
+
 // handleInstanceProfileExport fetches a profile from an Arr instance,
 // converts it to an ImportedProfile (same as the import system), and saves it.
 func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Request) {

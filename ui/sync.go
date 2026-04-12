@@ -15,15 +15,17 @@ import (
 
 // SyncPlan describes what changes would be made to an Arr instance.
 type SyncPlan struct {
-	InstanceID     string        `json:"instanceId"`
-	InstanceName   string        `json:"instanceName"`
-	ProfileName    string        `json:"profileName"`
-	ArrProfileName string        `json:"arrProfileName,omitempty"`
-	CreateProfile  bool          `json:"createProfile,omitempty"`
-	NewProfileName string        `json:"newProfileName,omitempty"`
-	CFActions      []CFAction    `json:"cfActions"`
-	ScoreActions   []ScoreAction `json:"scoreActions"`
-	Summary        SyncSummary   `json:"summary"`
+	InstanceID      string        `json:"instanceId"`
+	InstanceName    string        `json:"instanceName"`
+	ProfileName     string        `json:"profileName"`
+	ArrProfileName  string        `json:"arrProfileName,omitempty"`
+	CreateProfile   bool          `json:"createProfile,omitempty"`
+	NewProfileName  string        `json:"newProfileName,omitempty"`
+	CFActions       []CFAction    `json:"cfActions"`
+	ScoreActions    []ScoreAction `json:"scoreActions"`
+	Summary         SyncSummary   `json:"summary"`
+	QualityPreview  []string      `json:"qualityPreview,omitempty"`  // e.g. "Bluray-2160p: Enabled → Disabled"
+	SettingsPreview []string      `json:"settingsPreview,omitempty"` // e.g. "Upgrade Until: WEB 1080p → WEB 2160p"
 }
 
 // CFAction describes a CF create/update/unchanged action.
@@ -430,6 +432,124 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 			}
 			if desiredCutoff != "" && cutoffIDToName(targetProfile.Cutoff, targetProfile.Items) != desiredCutoff {
 				plan.Summary.QualityChanged = true
+			}
+		}
+
+		// --- Preview: settings changes ---
+		// Compute desired settings (same logic as ExecuteSyncPlan)
+		desiredMinFormatScore := profile.MinFormatScore
+		desiredMinUpgradeFormatScore := profile.MinUpgradeFormatScore
+		if desiredMinUpgradeFormatScore < 1 {
+			desiredMinUpgradeFormatScore = max(targetProfile.MinUpgradeFormatScore, 1)
+		}
+		desiredCutoffFormatScore := profile.CutoffFormatScore
+		desiredUpgradeAllowed := profile.UpgradeAllowed
+		if req.Overrides != nil {
+			if req.Overrides.MinFormatScore != nil {
+				desiredMinFormatScore = *req.Overrides.MinFormatScore
+			}
+			if req.Overrides.MinUpgradeFormatScore != nil {
+				v := *req.Overrides.MinUpgradeFormatScore
+				if v < 1 { v = 1 }
+				desiredMinUpgradeFormatScore = v
+			}
+			if req.Overrides.CutoffFormatScore != nil {
+				desiredCutoffFormatScore = *req.Overrides.CutoffFormatScore
+			}
+			if req.Overrides.UpgradeAllowed != nil {
+				desiredUpgradeAllowed = *req.Overrides.UpgradeAllowed
+			}
+		}
+		if targetProfile.MinFormatScore != desiredMinFormatScore {
+			plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Min Score: %d → %d", targetProfile.MinFormatScore, desiredMinFormatScore))
+		}
+		if targetProfile.MinUpgradeFormatScore != desiredMinUpgradeFormatScore {
+			plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Min Upgrade: %d → %d", targetProfile.MinUpgradeFormatScore, desiredMinUpgradeFormatScore))
+		}
+		if targetProfile.CutoffFormatScore != desiredCutoffFormatScore {
+			plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Cutoff Score: %d → %d", targetProfile.CutoffFormatScore, desiredCutoffFormatScore))
+		}
+		if targetProfile.UpgradeAllowed != desiredUpgradeAllowed {
+			plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Upgrades: %v → %v", targetProfile.UpgradeAllowed, desiredUpgradeAllowed))
+		}
+		// Language change
+		if req.Overrides != nil && req.Overrides.Language != nil {
+			prevLang := "Unknown"
+			if targetProfile.Language != nil {
+				prevLang = targetProfile.Language.Name
+			}
+			if !strings.EqualFold(prevLang, *req.Overrides.Language) {
+				plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Language: %s → %s", prevLang, *req.Overrides.Language))
+			}
+		}
+		// Cutoff quality name change
+		prevCutoffName := cutoffIDToName(targetProfile.Cutoff, targetProfile.Items)
+		desiredCutoffName := profile.Cutoff
+		if req.Overrides != nil && req.Overrides.CutoffQuality != nil && *req.Overrides.CutoffQuality != "__skip__" {
+			desiredCutoffName = *req.Overrides.CutoffQuality
+		}
+		if desiredCutoffName != "" && prevCutoffName != desiredCutoffName {
+			plan.SettingsPreview = append(plan.SettingsPreview, fmt.Sprintf("Upgrade Until: %s → %s", prevCutoffName, desiredCutoffName))
+		}
+
+		// --- Preview: quality item changes ---
+		if len(desiredItems) > 0 {
+			// Build old allowed map
+			oldAllowed := make(map[string]bool)
+			for _, item := range targetProfile.Items {
+				name := item.Name
+				if name == "" && item.Quality != nil { name = item.Quality.Name }
+				if name != "" { oldAllowed[name] = item.Allowed }
+			}
+			// Resolve desired quality items to get Allowed state
+			qualityDefs, err := client.ListQualityDefinitions()
+			if err == nil {
+				qualityByName := make(map[string]*ArrQualityDefinition)
+				for i := range qualityDefs {
+					qualityByName[qualityDefs[i].Quality.Name] = &qualityDefs[i]
+				}
+				newItems, err := resolveQualityItems(desiredItems, qualityByName)
+				if err == nil {
+					// Apply legacy flat overrides when no structure override
+					if len(req.QualityStructure) == 0 && len(req.QualityOverrides) > 0 {
+						for i := range newItems {
+							name := newItems[i].Name
+							if name == "" && newItems[i].Quality != nil { name = newItems[i].Quality.Name }
+							if override, ok := req.QualityOverrides[name]; ok {
+								newItems[i].Allowed = override
+							}
+						}
+					}
+					for _, item := range newItems {
+						name := item.Name
+						if name == "" && item.Quality != nil { name = item.Quality.Name }
+						if name == "" { continue }
+						oldState, exists := oldAllowed[name]
+						if exists && oldState != item.Allowed {
+							suffix := ""
+							if _, isOverride := req.QualityOverrides[name]; isOverride {
+								suffix = " (override)"
+							}
+							if item.Allowed {
+								plan.QualityPreview = append(plan.QualityPreview, name+": Disabled → Enabled"+suffix)
+							} else {
+								plan.QualityPreview = append(plan.QualityPreview, name+": Enabled → Disabled"+suffix)
+							}
+						}
+					}
+				}
+			}
+			// Also handle legacy flat overrides when quality rebuild was skipped
+			if len(req.QualityOverrides) > 0 && len(req.QualityStructure) == 0 && len(plan.QualityPreview) == 0 {
+				for name, override := range req.QualityOverrides {
+					if oldState, exists := oldAllowed[name]; exists && oldState != override {
+						if override {
+							plan.QualityPreview = append(plan.QualityPreview, name+": Disabled → Enabled (override)")
+						} else {
+							plan.QualityPreview = append(plan.QualityPreview, name+": Enabled → Disabled (override)")
+						}
+					}
+				}
 			}
 		}
 	} else {
@@ -1616,10 +1736,36 @@ func valuesEqual(a, b any) bool {
 	if a == nil || b == nil {
 		return false
 	}
+	// Normalize numeric types: JSON numbers from different sources may decode as
+	// float64 vs string (e.g. custom CF stores "2160" but Arr returns 2160).
+	an := toFloat64(a)
+	bn := toFloat64(b)
+	if an != nil && bn != nil {
+		return *an == *bn
+	}
 	// Normalize to JSON and compare bytes
 	aj, _ := json.Marshal(a)
 	bj, _ := json.Marshal(b)
 	return string(aj) == string(bj)
+}
+
+// toFloat64 attempts to convert a value to float64. Returns nil if not numeric.
+func toFloat64(v any) *float64 {
+	switch n := v.(type) {
+	case float64:
+		return &n
+	case int:
+		f := float64(n)
+		return &f
+	case string:
+		f, err := strconv.ParseFloat(n, 64)
+		if err != nil {
+			return nil
+		}
+		return &f
+	default:
+		return nil
+	}
 }
 
 func findProfile(ad *AppData, trashID string) *TrashQualityProfile {

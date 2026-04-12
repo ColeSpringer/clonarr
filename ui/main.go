@@ -208,6 +208,7 @@ func main() {
 	mux.HandleFunc("POST /api/instances/{id}/test", app.handleTestInstance)
 	mux.HandleFunc("POST /api/test-connection", app.handleTestConnection)
 	mux.HandleFunc("GET /api/instances/{id}/profiles", app.handleInstanceProfiles)
+	mux.HandleFunc("PUT /api/instances/{id}/profiles/{profileId}/rename", app.handleRenameProfile)
 	mux.HandleFunc("GET /api/instances/{id}/languages", app.handleInstanceLanguages)
 	mux.HandleFunc("GET /api/instances/{id}/cfs", app.handleInstanceCFs)
 	mux.HandleFunc("GET /api/instances/{id}/quality-sizes", app.handleInstanceQualitySizes)
