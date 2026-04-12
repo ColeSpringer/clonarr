@@ -4533,7 +4533,8 @@
   </div>
 
   <!-- CF Editor Modal (Create/Edit) -->
-  <div class="modal-overlay" x-show="showCFEditor" @click.self="showCFEditor = false" x-cloak>
+  <template x-if="showCFEditor">
+  <div class="modal-overlay" @click.self="showCFEditor = false">
     <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
       <div class="modal-title" x-text="cfEditorMode === 'edit' ? 'Edit Custom Format' : 'Create Custom Format'"></div>
 
@@ -4610,11 +4611,11 @@
               </div>
               <div>
                 <label style="font-size:11px;color:#6e7681;display:block;margin-bottom:2px">Type</label>
-                <select class="input" x-model="spec.implementation" @change="onSpecTypeChange(specIdx)" style="font-size:12px;padding:4px 8px">
+                <select class="input"
+                        x-effect="populateImplSelect($el, spec.implementation)"
+                        @change="spec.implementation = $el.value; onSpecTypeChange(specIdx)"
+                        style="font-size:12px;padding:4px 8px">
                   <option value="">Select type...</option>
-                  <template x-for="impl in getAvailableImplementations()" :key="impl.implementation">
-                    <option :value="impl.implementation" x-text="impl.implementationName || impl.implementation.replace('Specification','')"></option>
-                  </template>
                 </select>
               </div>
               <div style="display:flex;align-items:flex-end">
@@ -4750,6 +4751,28 @@
           <span x-show="!cfEditorSaving" x-text="cfEditorMode === 'edit' ? 'Update' : 'Create'"></span>
           <span x-show="cfEditorSaving"><span class="spinner" style="width:14px;height:14px"></span> Saving...</span>
         </button>
+      </div>
+    </div>
+  </div>
+  </template>
+
+  <!-- Export TRaSH JSON Modal -->
+  <div class="modal-overlay" x-show="cfExportContent" @click.self="cfExportContent = ''" x-cloak>
+    <div class="modal" style="max-width:700px">
+      <div class="modal-title">Export TRaSH JSON</div>
+      <div style="font-size:12px;color:#8b949e;margin-bottom:16px">
+        TRaSH Guides format — use this to share custom formats or contribute to the guides.
+      </div>
+      <div style="position:relative">
+        <pre style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:12px 16px;font-size:11px;font-family:monospace;color:#c9d1d9;max-height:400px;overflow:auto;white-space:pre;margin:0;line-height:1.5"><code x-text="cfExportContent"></code></pre>
+        <button class="btn btn-sm" style="position:absolute;top:8px;right:8px;font-size:11px"
+                @click="copyToClipboard(cfExportContent); cfExportCopied = true; setTimeout(() => cfExportCopied = false, 2000)">
+          <span x-show="!cfExportCopied">Copy</span>
+          <span x-show="cfExportCopied" style="color:#3fb950">Copied!</span>
+        </button>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn" @click="cfExportContent = ''">Close</button>
       </div>
     </div>
   </div>
@@ -5048,6 +5071,8 @@ function clonarr() {
     },
     cfEditorSaving: false,
     cfEditorResult: null,        // {error?, message}
+    cfExportContent: '',         // TRaSH JSON export text for modal
+    cfExportCopied: false,       // clipboard copy feedback
     cfEditorSchema: {},          // cached per app type: [{implementation, fields:[{name,label,type,selectOptions}]}]
     cfEditorSchemaLoading: false,
     cfEditorShowPreview: false,
@@ -7722,6 +7747,10 @@ function clonarr() {
       this.cfEditorShowPreview = false;
       this.cfEditorSpecCounter = 0;
 
+      // Set appType first so loadCFEditorSchema can read it
+      this.cfEditorForm.appType = appType;
+      await this.loadCFEditorSchema();
+
       if (mode === 'edit' && existingCF) {
         // Load full custom CF data from API
         let allCFs;
@@ -7764,8 +7793,9 @@ function clonarr() {
         };
       }
 
+      // Force Alpine reactivity on form object (needed for x-model on nested selects)
+      this.cfEditorForm = { ...this.cfEditorForm };
       this.showCFEditor = true;
-      await this.loadCFEditorSchema();
     },
 
     // Convert Arr API specification to editor format
@@ -7823,7 +7853,7 @@ function clonarr() {
         if (res.ok) {
           const schema = await res.json();
           // Parse schema into usable format: [{implementation, implementationName, fields:[{name,label,type,selectOptions}]}]
-          this.cfEditorSchema[appType] = (schema || []).map(s => ({
+          const parsed = (schema || []).map(s => ({
             implementation: s.implementation,
             implementationName: s.implementationName || s.implementation.replace('Specification', ''),
             fields: (s.fields || []).map(f => ({
@@ -7838,6 +7868,7 @@ function clonarr() {
               defaultValue: f.value,
             })),
           }));
+          this.cfEditorSchema = { ...this.cfEditorSchema, [appType]: parsed };
         }
       } catch (e) {
         console.error('Failed to load CF schema:', e);
@@ -7859,6 +7890,20 @@ function clonarr() {
 
     getAvailableImplementations() {
       return this.cfEditorSchema[this.cfEditorForm.appType] || [];
+    },
+
+    populateImplSelect(el, selectedImpl) {
+      const impls = this.getAvailableImplementations();
+      // Remove old dynamic options (keep first "Select type..." option)
+      for (let i = el.options.length - 1; i > 0; i--) el.remove(i);
+      // Add options from schema
+      impls.forEach(impl => {
+        const opt = document.createElement('option');
+        opt.value = impl.implementation;
+        opt.textContent = impl.implementationName || impl.implementation.replace('Specification', '');
+        el.appendChild(opt);
+      });
+      el.value = selectedImpl;
     },
 
     // TRaSH trash_scores context keys, derived at runtime from the actual
@@ -8089,14 +8134,8 @@ function clonarr() {
         })),
       };
 
-      const text = JSON.stringify(trashJSON, null, 2);
-      navigator.clipboard.writeText(text).then(() => {
-        this.cfEditorResult = { error: false, message: 'TRaSH JSON copied to clipboard' };
-        setTimeout(() => { this.cfEditorResult = null; }, 2000);
-      }).catch(() => {
-        // Fallback: show in a textarea
-        prompt('Copy TRaSH JSON:', text);
-      });
+      this.cfExportContent = JSON.stringify(trashJSON, null, 2);
+      this.cfExportCopied = false;
     },
 
     // --- Import Custom CFs ---

@@ -84,7 +84,8 @@ func main() {
 
 	trash := newTrashStore(dataDir)
 	profiles := newProfileStore(filepath.Join(configDir, "profiles"))
-	customCFs := newCustomCFStore(filepath.Join(configDir, "custom-cfs"))
+	customCFs := newCustomCFStore(filepath.Join(configDir, "custom", "json"))
+	customCFs.migrateFromFlatDir(filepath.Join(configDir, "custom-cfs"))
 
 	// Migrate any imported profiles from old config to per-file storage
 	migrateImportedProfiles(config, profiles)

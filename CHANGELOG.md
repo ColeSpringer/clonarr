@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8.8
+
+### Fixed
+
+- **Custom CF storage — eliminate cross-app name collisions** — Imported custom formats with identical names in Radarr and Sonarr (e.g. `!LQ`) no longer get a `(2)` suffix. CFs are now stored in app-scoped directories (`/config/custom/json/{radarr,sonarr}/cf/`). Existing installations migrate automatically on startup — old files are moved to the correct subdirectory and collision suffixes are stripped.
+- **CF editor Type dropdown empty on first open** — The "Type" dropdown in the Custom Format editor showed "Select type..." instead of the actual type (e.g. Source, Release Group) when opening a CF for the first time. Root cause: `<template x-for>` inside `<select>` is invalid HTML and the browser silently removes it. Replaced with programmatic option creation via `x-effect`.
+- **Export TRaSH JSON broken over HTTP** — The "Export TRaSH JSON" button in the CF editor silently failed on non-HTTPS connections (e.g. LAN access). Replaced with a proper export modal showing formatted JSON with a Copy button, matching the profile builder export style.
+
 ## v1.8.7
 
 ### Fixed
