@@ -676,8 +676,8 @@
             <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5"><strong style="color:#d29922">For advanced users.</strong> Build custom profiles for testing or guide development. Profiles created here use fixed scores that do <strong>not</strong> follow TRaSH Guide updates.</div>
             <div style="font-size:12px;color:#8b949e;margin-top:4px;line-height:1.5"><strong>To sync TRaSH profiles to your <span x-text="tab.label"></span> instance, use the TRaSH Sync tab</strong> — it keeps your profiles updated automatically when TRaSH Guides change.</div>
             <div style="display:flex;gap:8px;margin-top:10px">
-              <button class="btn btn-sm" style="background:#1f6feb;color:#fff" @click="openProfileBuilder(tab.type)">Create New Profile</button>
-              <button class="btn btn-sm" style="background:#238636;color:#fff" @click="showImportModal = tab.type">Import</button>
+              <button class="btn btn-sm" style="background:#1f6feb;color:#fff" @click="openProfileBuilder(tab.type)">New Profile</button>
+              <button class="btn btn-sm" style="background:#238636;color:#fff" @click="showImportModal = tab.type">Import JSON</button>
             </div>
           </div>
 
@@ -2261,7 +2261,7 @@
             <!-- Import row (first — choosing template sets everything below) -->
             <div style="font-size:10px;color:#6e7681;margin-bottom:6px">Start from a template or import from an instance — scores and settings will be applied</div>
             <div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 14px;display:flex;gap:8px;align-items:center">
-              <span style="font-size:10px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap">Import</span>
+              <span style="font-size:10px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap">Start from</span>
               <select class="pb-input" x-model="pb.templateId" style="flex:1">
                 <option value="">Template...</option>
                 <template x-for="gn in getTrashProfileGroups(pb.appType)" :key="'tg:'+gn">
@@ -4082,7 +4082,7 @@
       <template x-if="!syncForm.importedProfileId && !syncForm._fromCompare">
         <div style="margin-bottom:12px;padding:8px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e1e4e8">
-            <input type="checkbox" :checked="autoSyncRuleForSync != null" @change="toggleAutoSyncForProfile($event.target.checked)" style="accent-color:#58a6ff">
+            <input type="checkbox" :checked="autoSyncRuleForSync?.enabled" @change="toggleAutoSyncForProfile($event.target.checked)" style="accent-color:#58a6ff">
             Auto-sync this profile
           </label>
           <div style="font-size:11px;color:#8b949e;margin-top:4px;margin-left:22px">When TRaSH Guides updates, automatically sync changes to this instance</div>

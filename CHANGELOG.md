@@ -8,6 +8,8 @@
 - **Safer cleanup order** — "Delete CFs & Scores" now deletes CFs first, then resets scores. If CF deletion fails partway through, orphaned scores are harmless. Previously scores were zeroed first, which was unrecoverable if CF deletion then failed.
 - **Button text invisible in several modals** — Pull, Preview, Apply, Download Backup, and Create/Update Profile buttons appeared as empty green/colored rectangles. Caused by `<template x-if>` inside `<button>`, which browsers handle inconsistently. Replaced with `<span x-show>` across 9 buttons.
 - **Cleanup descriptions clarified** — "Delete All CFs" and "Delete All CFs & Scores" descriptions now state "(respects Keep List)" so the relationship with the Keep List above is clear.
+- **Auto-sync checkbox in sync modal** — "Auto-sync this profile" checkbox couldn't be unticked after Save & Sync. The binding checked if a rule *existed* rather than if it was *enabled*.
+- **Profile Builder label clarity** — "Create New Profile" → "New Profile", "Import" → "Import JSON", builder "Import" row → "Start from" to distinguish file import from Arr instance import.
 
 ## v1.8.8
 
