@@ -21,6 +21,11 @@
 - **Alpine errors on quality structure** — `item.items.length` crashed on non-group items (undefined), cascading into reactive state corruption that affected CF score overrides.
 - **Custom CF false "update" on every sync** — Custom CFs with numeric field values (e.g. resolution "2160") were always reported as changed because the stored string didn't match Arr's integer. Values are now normalized before comparison.
 - **Profile Builder label clarity** — "Create New Profile" → "New Profile", "Import" → "Import JSON", builder "Import" row → "Start from" to distinguish file import from Arr instance import.
+- **Extra CFs score-0 visibility** — CFs with score 0 stayed visible in "Other" after being added to extras because `!0` is `true` in JavaScript. Fixed with explicit `undefined` check.
+
+### Improved
+
+- **Extra CFs Added list** — Multi-column layout (2 cols >10, 3 cols >20) matching the Other list, preventing long single-column scrolling.
 
 ### Changed
 

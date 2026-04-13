@@ -557,7 +557,7 @@ func migrateImportedProfiles(cs *configStore, ps *profileStore) {
 	}
 
 	// Migrate to per-file storage
-	if _, err := ps.Add(profiles); err != nil {
+	if _, _, err := ps.Add(profiles); err != nil {
 		log.Printf("Warning: failed to migrate imported profiles: %v", err)
 		return
 	}

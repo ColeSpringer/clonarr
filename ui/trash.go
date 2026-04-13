@@ -1820,6 +1820,189 @@ func ProfileDetailData(ad *AppData, profileTrashID string) *ProfileDetailResult 
 	}
 }
 
+// ImportedProfileDetailData builds the same ProfileDetailResult as ProfileDetailData,
+// but for imported profiles that don't have a trashProfileId. Instead of using
+// QualityProfiles.Include to filter groups, it includes any group that has at least
+// one CF present in the imported profile's FormatItems.
+func ImportedProfileDetailData(ad *AppData, imported *ImportedProfile) *ProfileDetailResult {
+	if ad == nil || imported == nil {
+		return nil
+	}
+
+	formatItems := imported.FormatItems
+	if formatItems == nil {
+		formatItems = make(map[string]int)
+	}
+
+	scoreCtx := imported.ScoreSet
+	if scoreCtx == "" {
+		scoreCtx = "default"
+	}
+
+	// Build set of imported CF trash_ids for fast lookup
+	importedSet := make(map[string]bool, len(formatItems))
+	for tid := range formatItems {
+		importedSet[tid] = true
+	}
+
+	// If profile has a goldenRuleVariant, find the matching TRaSH profile
+	// and use QualityProfiles.Include to filter groups (same as TRaSH Sync).
+	var includeProfileID string
+	if imported.TrashProfileID != "" {
+		includeProfileID = imported.TrashProfileID
+	} else if imported.VariantGoldenRule != "" {
+		// Match based on golden rule variant + qualities
+		for _, tp := range ad.Profiles {
+			nameL := strings.ToLower(tp.Name)
+			variant := strings.ToLower(imported.VariantGoldenRule)
+			if variant == "uhd" && (strings.Contains(nameL, "uhd") || strings.Contains(nameL, "2160p")) &&
+				!strings.Contains(nameL, "anime") && !strings.Contains(nameL, "french") && !strings.Contains(nameL, "german") {
+				includeProfileID = tp.TrashID
+				break
+			}
+			if variant == "hd" && !strings.Contains(nameL, "uhd") && !strings.Contains(nameL, "2160p") &&
+				!strings.Contains(nameL, "anime") && !strings.Contains(nameL, "french") && !strings.Contains(nameL, "german") {
+				includeProfileID = tp.TrashID
+				break
+			}
+		}
+	}
+
+	// Track which CFs appear in at least one group
+	cfInGroup := make(map[string]bool)
+
+	groups := make([]CategoryCFGroup, 0)
+	for _, group := range ad.CFGroups {
+		// Filter groups: if we have a profile match, use QualityProfiles.Include
+		if includeProfileID != "" {
+			found := false
+			for _, profTrashID := range group.QualityProfiles.Include {
+				if profTrashID == includeProfileID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		} else {
+			// No profile match — include group if ANY of its CFs exist in the imported profile
+			hasMatch := false
+			for _, cfEntry := range group.CustomFormats {
+				if importedSet[cfEntry.TrashID] {
+					hasMatch = true
+					break
+				}
+			}
+			if !hasMatch {
+				continue
+			}
+		}
+
+		category, shortName := parseCategoryPrefix(group.Name)
+
+		exclusive := strings.Contains(strings.ToLower(group.TrashDescription), "only score or enable one") ||
+			strings.Contains(strings.ToLower(group.TrashDescription), "only enable one")
+
+		cg := CategoryCFGroup{
+			Name:             group.Name,
+			ShortName:        shortName,
+			Category:         category,
+			TrashDescription: group.TrashDescription,
+			DefaultEnabled:   true,
+			Exclusive:        exclusive,
+		}
+
+		for _, cfEntry := range group.CustomFormats {
+			entry := ProfileCFGroupEntry{
+				TrashID:  cfEntry.TrashID,
+				Name:     cfEntry.Name,
+				Required: cfEntry.Required,
+			}
+			if cfEntry.Default != nil && *cfEntry.Default {
+				entry.Default = true
+			}
+
+			// Score: use imported profile's score if CF is in profile, else TRaSH default
+			if score, ok := formatItems[cfEntry.TrashID]; ok {
+				entry.Score = score
+				entry.HasScore = true
+			} else if cf, ok := ad.CustomFormats[cfEntry.TrashID]; ok {
+				if s, ok := cf.TrashScores[scoreCtx]; ok {
+					entry.Score = s
+					entry.HasScore = true
+				} else if s, ok := cf.TrashScores["default"]; ok {
+					entry.Score = s
+					entry.HasScore = true
+				}
+			}
+
+			if cf, ok := ad.CustomFormats[cfEntry.TrashID]; ok {
+				entry.Description = cf.Description
+			}
+
+			cg.CFs = append(cg.CFs, entry)
+			cfInGroup[cfEntry.TrashID] = true
+		}
+
+		if len(cg.CFs) == 0 {
+			continue
+		}
+
+		groups = append(groups, cg)
+	}
+
+	// Sort groups by category order, then name
+	sort.Slice(groups, func(i, j int) bool {
+		oi := getCategoryOrder(groups[i].Category)
+		oj := getCategoryOrder(groups[j].Category)
+		if oi != oj {
+			return oi < oj
+		}
+		if groups[i].DefaultEnabled != groups[j].DefaultEnabled {
+			return groups[i].DefaultEnabled
+		}
+		return groups[i].Name < groups[j].Name
+	})
+
+	// CFs in imported profile but NOT in any group → formatItemNames
+	formatItemNames := make([]ResolvedCF, 0)
+	for tid, score := range formatItems {
+		if cfInGroup[tid] {
+			continue
+		}
+		name := tid
+		if len(tid) > 8 {
+			name = tid[:8] + "..."
+		}
+		if imported.FormatComments != nil {
+			if n, ok := imported.FormatComments[tid]; ok && n != "" {
+				name = n
+			}
+		}
+		if cf, ok := ad.CustomFormats[tid]; ok {
+			name = cf.Name
+		}
+		formatItemNames = append(formatItemNames, ResolvedCF{
+			TrashID:  tid,
+			Name:     name,
+			Score:    score,
+			HasScore: true,
+		})
+	}
+	sort.Slice(formatItemNames, func(i, j int) bool {
+		if formatItemNames[i].Score != formatItemNames[j].Score {
+			return formatItemNames[i].Score > formatItemNames[j].Score
+		}
+		return formatItemNames[i].Name < formatItemNames[j].Name
+	})
+
+	return &ProfileDetailResult{
+		FormatItemNames: formatItemNames,
+		Groups:          groups,
+	}
+}
+
 func ResolveProfileCFs(ad *AppData, profileTrashID string) ([]ResolvedCF, string) {
 	if ad == nil {
 		return nil, ""

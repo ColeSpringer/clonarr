@@ -2352,9 +2352,13 @@ func (app *App) handleTrashNaming(w http.ResponseWriter, r *http.Request) {
 func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB limit
 	var req struct {
-		YAML    string `json:"yaml"`
-		Name    string `json:"name"`    // optional override name
-		AppType string `json:"appType"` // for TRaSH JSON detection context (from active tab)
+		YAML     string `json:"yaml"`
+		Name     string `json:"name"`    // optional override name
+		AppType  string `json:"appType"` // for TRaSH JSON detection context (from active tab)
+		Includes []struct {
+			Name    string `json:"name"`
+			Content string `json:"content"`
+		} `json:"includes"` // optional include files for Recyclarr configs
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "invalid request body")
@@ -2364,6 +2368,15 @@ func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 	if content == "" {
 		writeError(w, 400, "content is required")
 		return
+	}
+
+	// Resolve Recyclarr includes: merge include file contents into the main YAML
+	if len(req.Includes) > 0 {
+		includeMap := make(map[string]string)
+		for _, inc := range req.Includes {
+			includeMap[strings.ToLower(inc.Name)] = inc.Content
+		}
+		content = mergeRecyclarrIncludes(content, includeMap)
 	}
 
 	// Build TRaSH data map for group resolution + CF name lookup
@@ -2377,11 +2390,8 @@ func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 	var profiles []ImportedProfile
 	if strings.HasPrefix(content, "{") {
 		appType := req.AppType
-		if appType == "" {
-			appType = "radarr"
-		}
-		ad := trashData[appType]
-		p, err := parseProfileJSON([]byte(content), appType, ad)
+		ad := trashData[appType] // may be nil for "auto" — parseProfileJSON handles it
+		p, err := parseProfileJSON([]byte(content), appType, ad, trashData)
 		if err != nil {
 			writeError(w, 400, err.Error())
 			return
@@ -2389,7 +2399,7 @@ func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 		profiles = []ImportedProfile{*p}
 	} else {
 		var err error
-		profiles, err = parseRecyclarrYAML([]byte(content), trashData)
+		profiles, err = parseRecyclarrYAML([]byte(content), trashData, req.AppType)
 		if err != nil {
 			writeError(w, 400, err.Error())
 			return
@@ -2422,13 +2432,15 @@ func (app *App) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := app.profiles.Add(profiles); err != nil {
+	added, skipped, err := app.profiles.Add(profiles)
+	if err != nil {
 		writeError(w, 500, "failed to save: "+err.Error())
 		return
 	}
 
 	writeJSON(w, map[string]any{
-		"imported": len(profiles),
+		"imported": added,
+		"skipped":  skipped,
 		"profiles": profiles,
 	})
 }
@@ -2445,6 +2457,133 @@ func (app *App) handleGetImportedProfiles(w http.ResponseWriter, r *http.Request
 		profiles = []ImportedProfile{}
 	}
 	writeJSON(w, profiles)
+}
+
+func (app *App) handleImportedProfileDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	profile, ok := app.profiles.Get(id)
+	if !ok {
+		writeError(w, 404, "profile not found")
+		return
+	}
+
+	snap := app.trash.Snapshot()
+	ad := SnapshotAppData(snap, profile.AppType)
+
+	// If profile has a trashProfileId and TRaSH data is available, use the standard path
+	if profile.TrashProfileID != "" && ad != nil {
+		detailData := ProfileDetailData(ad, profile.TrashProfileID)
+		if detailData != nil {
+			writeJSON(w, map[string]any{
+				"profile": map[string]any{
+					"name":                  profile.Name,
+					"upgradeAllowed":        profile.UpgradeAllowed,
+					"cutoff":                profile.Cutoff,
+					"minFormatScore":        profile.MinFormatScore,
+					"cutoffFormatScore":     profile.CutoffScore,
+					"minUpgradeFormatScore": profile.MinUpgradeFormatScore,
+					"language":              profile.Language,
+					"scoreSet":              profile.ScoreSet,
+					"items":                 profile.Qualities,
+				},
+				"trashGroups":    detailData.Groups,
+				"formatItemNames": detailData.FormatItemNames,
+				"totalCoreCFs":   len(profile.FormatItems),
+				"imported":       true,
+				"importedRaw":    profile,
+			})
+			return
+		}
+	}
+
+	// No trashProfileId or TRaSH lookup failed — build from imported data + TRaSH groups
+	var detailData *ProfileDetailResult
+	if ad != nil {
+		detailData = ImportedProfileDetailData(ad, &profile)
+	}
+
+	// Build complete quality items list: imported items + all missing items from
+	// TRaSH as disabled. This ensures the quality override editor shows all
+	// available quality levels, not just the ones from the YAML.
+	allItems := make([]QualityItem, len(profile.Qualities))
+	copy(allItems, profile.Qualities)
+	if ad != nil && len(ad.Profiles) > 0 {
+		// Use first TRaSH profile's items as the complete list
+		baseItems := ad.Profiles[0].Items
+		importedNames := make(map[string]bool)
+		for _, q := range profile.Qualities {
+			importedNames[q.Name] = true
+			// Also track sub-items for groups
+			for _, sub := range q.Items {
+				importedNames[sub] = true
+			}
+		}
+		// Append missing items as disabled
+		for _, ti := range baseItems {
+			if !importedNames[ti.Name] {
+				allItems = append(allItems, QualityItem{
+					Name:    ti.Name,
+					Allowed: false,
+					Items:   ti.Items,
+				})
+			}
+		}
+	}
+
+	resp := map[string]any{
+		"profile": map[string]any{
+			"name":                  profile.Name,
+			"upgradeAllowed":        profile.UpgradeAllowed,
+			"cutoff":                profile.Cutoff,
+			"minFormatScore":        profile.MinFormatScore,
+			"cutoffFormatScore":     profile.CutoffScore,
+			"minUpgradeFormatScore": profile.MinUpgradeFormatScore,
+			"language":              profile.Language,
+			"scoreSet":              profile.ScoreSet,
+			"items":                 allItems,
+		},
+		"totalCoreCFs": len(profile.FormatItems),
+		"imported":     true,
+		"importedRaw":  profile,
+	}
+	if detailData != nil {
+		resp["trashGroups"] = detailData.Groups
+		resp["formatItemNames"] = detailData.FormatItemNames
+	}
+	writeJSON(w, resp)
+}
+
+func (app *App) handleUpdateImportedProfile(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	profile, ok := app.profiles.Get(id)
+	if !ok {
+		writeError(w, 404, "profile not found")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var req struct {
+		VariantGoldenRule string `json:"variantGoldenRule"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	if req.VariantGoldenRule != "" {
+		v := strings.ToUpper(req.VariantGoldenRule)
+		if v != "HD" && v != "UHD" {
+			writeError(w, 400, "variantGoldenRule must be 'HD' or 'UHD'")
+			return
+		}
+		profile.VariantGoldenRule = v
+	}
+
+	if err := app.profiles.Update(profile); err != nil {
+		writeError(w, 500, "failed to update: "+err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"status": "updated"})
 }
 
 func (app *App) handleDeleteImportedProfile(w http.ResponseWriter, r *http.Request) {
@@ -2507,7 +2646,7 @@ func (app *App) handleCreateCustomProfile(w http.ResponseWriter, r *http.Request
 	p.Source = "custom"
 	p.ImportedAt = time.Now().UTC().Format(time.RFC3339)
 
-	if _, err := app.profiles.Add([]ImportedProfile{p}); err != nil {
+	if _, _, err := app.profiles.Add([]ImportedProfile{p}); err != nil {
 		writeError(w, 500, "Failed to save: "+err.Error())
 		return
 	}

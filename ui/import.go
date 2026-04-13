@@ -134,7 +134,104 @@ func sanitizeName(s string) string {
 
 // parseRecyclarrYAML parses a Recyclarr YAML config and extracts profiles.
 // If trashData is provided (keyed by "radarr"/"sonarr"), v8 custom_format_groups are resolved.
-func parseRecyclarrYAML(yamlContent []byte, trashData map[string]*AppData) ([]ImportedProfile, error) {
+// Supports three YAML layouts:
+//  1. Full config:     radarr: { instance_name: { quality_profiles: ... } }
+//  2. Named instance:  instance_name: { quality_profiles: ... }
+//  3. Flat instance:   quality_profiles: [ ... ]
+//
+// Layouts 2 and 3 use hintAppType ("radarr"/"sonarr") to determine the app type.
+// detectAppType infers radarr/sonarr from a Recyclarr instance's quality_definition.type.
+// Returns "radarr" for "movie", "sonarr" for "series"/"anime", or the hint if undetectable.
+func detectAppType(inst recyclarrInstance, hint string) string {
+	switch strings.ToLower(inst.QualityDefinition.Type) {
+	case "movie":
+		return "radarr"
+	case "series", "anime":
+		return "sonarr"
+	}
+	if hint != "" && hint != "auto" && hint != "select" {
+		return hint
+	}
+	return "radarr"
+}
+
+// mergeRecyclarrIncludes resolves `include: - config: filename` references in Recyclarr YAML.
+// Uses semantic YAML merge: parses both main and include files, merges quality_profiles and
+// custom_formats arrays per instance. Returns the merged YAML as a string.
+func mergeRecyclarrIncludes(mainYAML string, includeFiles map[string]string) string {
+	// Parse main config to find instances and their includes
+	var raw map[string]map[string]map[string]interface{} // sonarr/radarr → instance → fields
+	if err := yaml.Unmarshal([]byte(mainYAML), &raw); err != nil {
+		return mainYAML // fallback to original if unparseable
+	}
+
+	// For each instance, find its include list and merge the referenced files
+	for appType, instances := range raw {
+		_ = appType
+		for instName, inst := range instances {
+			includeList, ok := inst["include"]
+			if !ok {
+				continue
+			}
+			includes, ok := includeList.([]interface{})
+			if !ok {
+				continue
+			}
+
+			// Collect filenames
+			for _, inc := range includes {
+				incMap, ok := inc.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				fname, _ := incMap["config"].(string)
+				if fname == "" {
+					continue
+				}
+				content, ok := includeFiles[strings.ToLower(fname)]
+				if !ok {
+					continue
+				}
+
+				// Parse include file as a YAML fragment
+				var fragment map[string]interface{}
+				if err := yaml.Unmarshal([]byte(content), &fragment); err != nil {
+					continue
+				}
+
+				// Merge quality_profiles
+				if qp, ok := fragment["quality_profiles"]; ok {
+					if qpList, ok := qp.([]interface{}); ok {
+						existing, _ := inst["quality_profiles"].([]interface{})
+						inst["quality_profiles"] = append(existing, qpList...)
+					}
+				}
+
+				// Merge custom_formats
+				if cf, ok := fragment["custom_formats"]; ok {
+					if cfList, ok := cf.([]interface{}); ok {
+						existing, _ := inst["custom_formats"].([]interface{})
+						inst["custom_formats"] = append(existing, cfList...)
+					}
+				}
+			}
+
+			// Remove include key after merging
+			delete(inst, "include")
+			instances[instName] = inst
+		}
+	}
+
+	// Re-serialize to YAML
+	merged, err := yaml.Marshal(raw)
+	if err != nil {
+		return mainYAML
+	}
+	return string(merged)
+}
+
+func parseRecyclarrYAML(yamlContent []byte, trashData map[string]*AppData, hintAppType string) ([]ImportedProfile, error) {
+	// --- Layout 1: full config with radarr/sonarr top-level keys ---
 	var cfg recyclarrConfig
 	if err := yaml.Unmarshal(yamlContent, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid YAML: %w", err)
@@ -159,11 +256,42 @@ func parseRecyclarrYAML(yamlContent []byte, trashData map[string]*AppData) ([]Im
 		profiles = append(profiles, ps...)
 	}
 
-	if len(profiles) == 0 {
-		return nil, fmt.Errorf("no profiles found in YAML — ensure the file has quality_profiles and custom_formats sections")
+	if len(profiles) > 0 {
+		return profiles, nil
 	}
 
-	return profiles, nil
+	// --- Layout 3: flat instance (quality_profiles at top level) ---
+	var flat recyclarrInstance
+	if err := yaml.Unmarshal(yamlContent, &flat); err == nil && len(flat.QualityProfiles) > 0 {
+		appType := detectAppType(flat, hintAppType)
+		var ad *AppData
+		if trashData != nil {
+			ad = trashData[appType]
+		}
+		profiles = extractProfiles(flat, appType, ad)
+		if len(profiles) > 0 {
+			return profiles, nil
+		}
+	}
+
+	// --- Layout 2: named instance (instance_name: { quality_profiles: ... }) ---
+	var named map[string]recyclarrInstance
+	if err := yaml.Unmarshal(yamlContent, &named); err == nil {
+		for _, inst := range named {
+			appType := detectAppType(inst, hintAppType)
+			var ad *AppData
+			if trashData != nil {
+				ad = trashData[appType]
+			}
+			ps := extractProfiles(inst, appType, ad)
+			profiles = append(profiles, ps...)
+		}
+		if len(profiles) > 0 {
+			return profiles, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no profiles found in YAML — ensure the file has quality_profiles and custom_formats sections")
 }
 
 // extractProfiles extracts ImportedProfile structs from a Recyclarr instance config.
@@ -394,32 +522,10 @@ func extractProfiles(inst recyclarrInstance, appType string, ad *AppData) []Impo
 		profiles = append(profiles, p)
 	}
 
-	// Handle CFs referencing profiles not in quality_profiles section
-	for profileName, scores := range profileScores {
-		found := false
-		for _, p := range profiles {
-			if p.Name == profileName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			p := ImportedProfile{
-				ID:          generateID(),
-				Name:        sanitizeName(profileName),
-				AppType:     appType,
-				QualityType: inst.QualityDefinition.Type,
-				FormatItems: scores,
-			}
-			if c := profileComments[profileName]; c != nil && len(c) > 0 {
-				p.FormatComments = c
-			}
-			if fg := profileFormatGroups[profileName]; len(fg) > 0 {
-				p.FormatGroups = fg
-			}
-			profiles = append(profiles, p)
-		}
-	}
+	// Attach CF scores from assign_scores_to to matching quality_profiles.
+	// Profiles referenced only in assign_scores_to (not in quality_profiles)
+	// are skipped — they likely come from included files we don't have access to.
+	// Their scores are already merged into matching profiles above (line 328).
 
 	return profiles
 }
@@ -554,7 +660,7 @@ func resolveCustomFormatGroups(inst recyclarrInstance, appType string, ad *AppDa
 //
 // Detection: TRaSH profiles have "trash_id" + "formatItems" as map[string]string (name→trashId).
 // Clonarr exports have "id" + "formatItems" as map[string]int (trashId→score).
-func parseProfileJSON(data []byte, appType string, ad *AppData) (*ImportedProfile, error) {
+func parseProfileJSON(data []byte, appType string, ad *AppData, trashData map[string]*AppData) (*ImportedProfile, error) {
 	// Probe the JSON to detect format
 	var probe map[string]json.RawMessage
 	if err := json.Unmarshal(data, &probe); err != nil {
@@ -562,6 +668,30 @@ func parseProfileJSON(data []byte, appType string, ad *AppData) (*ImportedProfil
 	}
 
 	if _, ok := probe["trash_id"]; ok {
+		// Auto-detect app type by matching trash_id against TRaSH profiles
+		if appType == "" || appType == "select" || appType == "auto" {
+			var trashID string
+			json.Unmarshal(probe["trash_id"], &trashID)
+			if trashID != "" && trashData != nil {
+				for _, tryType := range []string{"radarr", "sonarr"} {
+					if tryAd := trashData[tryType]; tryAd != nil {
+						for _, p := range tryAd.Profiles {
+							if p.TrashID == trashID {
+								appType = tryType
+								ad = tryAd
+								break
+							}
+						}
+					}
+					if appType != "" && appType != "select" && appType != "auto" {
+						break
+					}
+				}
+			}
+			if appType == "" || appType == "select" || appType == "auto" {
+				appType = "radarr" // fallback
+			}
+		}
 		return parseTrashProfileJSON(data, appType, ad)
 	}
 	if _, ok := probe["id"]; ok {
@@ -664,6 +794,7 @@ func parseClonarrExportJSON(data []byte, ad *AppData) (*ImportedProfile, error) 
 	}
 	// Generate new ID to avoid collisions
 	profile.ID = generateID()
+	profile.Name = sanitizeName(profile.Name)
 	profile.Source = "import"
 
 	// Resolve missing formatGroups from TRaSH data

@@ -242,6 +242,8 @@ func main() {
 	// Import
 	mux.HandleFunc("POST /api/import/profile", app.handleImportProfile)
 	mux.HandleFunc("GET /api/import/{app}/profiles", app.handleGetImportedProfiles)
+	mux.HandleFunc("GET /api/import/profiles/{id}/detail", app.handleImportedProfileDetail)
+	mux.HandleFunc("PUT /api/import/profiles/{id}", app.handleUpdateImportedProfile)
 	mux.HandleFunc("DELETE /api/import/profiles/{id}", app.handleDeleteImportedProfile)
 
 	// Custom Profiles

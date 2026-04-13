@@ -11,7 +11,7 @@ func TestParseRecyclarrClassic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := parseRecyclarrYAML(data, nil)
+	profiles, err := parseRecyclarrYAML(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestParseRecyclarrV8(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := parseRecyclarrYAML(data, nil)
+	profiles, err := parseRecyclarrYAML(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

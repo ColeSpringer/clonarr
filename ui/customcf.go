@@ -113,7 +113,7 @@ func (s *customCFStore) Add(cfs []CustomCF) (int, error) {
 		if store == nil {
 			continue
 		}
-		n, err := store.Add(items)
+		n, _, err := store.Add(items)
 		if err != nil {
 			return total, err
 		}
@@ -189,7 +189,7 @@ func (s *customCFStore) migrateFromFlatDir(oldDir string) {
 			continue
 		}
 
-		if n, err := store.Add([]CustomCF{cf}); err != nil {
+		if n, _, err := store.Add([]CustomCF{cf}); err != nil {
 			log.Printf("custom-cf migration: failed to migrate %s: %v", e.Name(), err)
 		} else if n > 0 {
 			migrated++

@@ -1135,6 +1135,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 						if !usedQualities[def.Quality.ID] {
 							unused = append(unused, ArrQualityItem{
 								Quality: &ArrQualityRef{ID: def.Quality.ID, Name: def.Quality.Name},
+								Items:   []ArrQualityItem{},
 								Allowed: false,
 							})
 						}
