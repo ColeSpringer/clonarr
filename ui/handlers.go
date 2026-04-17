@@ -11,12 +11,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// Fallback for Radarr/Sonarr's parse API returning empty ReleaseGroup when the
+// trailing group token is numeric only (e.g. "…Atmos-126811"). Narrow enough to
+// leave alphanumeric groups (handled correctly by Arr) and codec tokens alone:
+// matches only a trailing dash followed by pure digits at end of string.
+var numericReleaseGroupRE = regexp.MustCompile(`-(\d+)$`)
 
 // writeJSON encodes v as JSON and writes it to w.
 func writeJSON(w http.ResponseWriter, data any) {
@@ -515,23 +522,81 @@ func (app *App) handleInstanceProfileExport(w http.ResponseWriter, r *http.Reque
 		arrCFNames[cf.ID] = cf.Name
 	}
 
-	// Build CF name → trash_id map from TRaSH data
+	// Build CF name → id map from TRaSH data + the user's custom CFs. Custom CFs created
+	// in Clonarr (ccf.ID is a "custom:<hex>" UUID, not a TRaSH hex) still need to resolve
+	// here so imports surface them in the Builder's Custom group. TRaSH wins on name
+	// collision — matches how the sync engine prefers TRaSH for known names.
 	ad := app.trash.GetAppData(inst.Type)
+	customCFs := app.customCFs.List(inst.Type)
+	customCFByID := make(map[string]CustomCF, len(customCFs))
 	nameToTrashID := make(map[string]string)
 	if ad != nil {
 		for trashID, cf := range ad.CustomFormats {
 			nameToTrashID[cf.Name] = trashID
 		}
 	}
+	for _, ccf := range customCFs {
+		customCFByID[ccf.ID] = ccf
+		if _, exists := nameToTrashID[ccf.Name]; !exists {
+			nameToTrashID[ccf.Name] = ccf.ID
+		}
+	}
 
-	// Map profile formatItems: Arr CF ID → trash_id + score
-	// Only include non-zero scored CFs — score=0 CFs cannot be distinguished
-	// from unrelated CFs in the instance (Arr lists ALL CFs on every profile)
+	// Consult Clonarr's sync history for this instance + profile. Arr lists ALL CFs on
+	// every profile (score=0 by default), so a naive import can't distinguish "unused
+	// Arr default" from "user's intentional score-0 extra". When this profile was previously
+	// synced via Clonarr, SyncedCFs + ScoreOverrides tell us exactly which CFs are tracked
+	// — we allow score=0 through for those. Mirrors the same enrichment handleCompareProfile
+	// added in the Compare flow (commit 082963c). Arr CF IDs (not trash_ids) are used so
+	// the skip check stays a cheap map lookup in the FormatItems loop.
+	knownArrIDs := make(map[int]bool)
+	if ad != nil || len(customCFByID) > 0 {
+		arrByName := make(map[string]int, len(arrCFs))
+		for i := range arrCFs {
+			arrByName[strings.ToLower(arrCFs[i].Name)] = arrCFs[i].ID
+		}
+		resolveArrID := func(id string) {
+			var name string
+			if ad != nil {
+				if tcf, ok := ad.CustomFormats[id]; ok {
+					name = tcf.Name
+				}
+			}
+			if name == "" {
+				if ccf, ok := customCFByID[id]; ok {
+					name = ccf.Name
+				}
+			}
+			if name == "" {
+				return
+			}
+			if arrID, ok := arrByName[strings.ToLower(name)]; ok {
+				knownArrIDs[arrID] = true
+			}
+		}
+		for _, sh := range app.config.GetSyncHistory(inst.ID) {
+			if sh.ArrProfileID != profileId {
+				continue
+			}
+			for _, id := range sh.SyncedCFs {
+				resolveArrID(id)
+			}
+			for id := range sh.ScoreOverrides {
+				resolveArrID(id)
+			}
+			break
+		}
+	}
+
+	// Map profile formatItems: Arr CF ID → trash_id + score.
+	// Non-zero scores always flow through. Zero scores flow through only when sync history
+	// marks the CF as intentionally tracked for this profile — otherwise we'd flood the
+	// Builder with every Arr default.
 	formatItems := make(map[string]int)
 	formatComments := make(map[string]string)
 	unmapped := []string{}
 	for _, fi := range profile.FormatItems {
-		if fi.Score == 0 {
+		if fi.Score == 0 && !knownArrIDs[fi.Format] {
 			continue
 		}
 		cfName := fi.Name
@@ -1583,14 +1648,18 @@ type QualityItemDiff struct {
 }
 
 // CompareFormatItem is a formatItem CF with comparison status.
+// ScoreOverride is set when the sync rule has a per-CF score override; UI colors the Current
+// cell differently and shows a tooltip so users know the diff is intentional.
 type CompareFormatItem struct {
-	TrashID      string `json:"trashId"`
-	Name         string `json:"name"`
-	Exists       bool   `json:"exists"`
-	ArrID        int    `json:"arrId,omitempty"`
-	CurrentScore int    `json:"currentScore"`
-	DesiredScore int    `json:"desiredScore"`
-	ScoreMatch   bool   `json:"scoreMatch"`
+	TrashID       string `json:"trashId"`
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"` // TRaSH description for hover tooltip
+	Exists        bool   `json:"exists"`
+	ArrID         int    `json:"arrId,omitempty"`
+	CurrentScore  int    `json:"currentScore"`
+	DesiredScore  int    `json:"desiredScore"`
+	ScoreMatch    bool   `json:"scoreMatch"`
+	ScoreOverride *int   `json:"scoreOverride,omitempty"` // nil if no override from sync rule
 }
 
 // CompareGroup is a TRaSH CF group with comparison status per CF.
@@ -1612,17 +1681,18 @@ type CompareGroup struct {
 
 // CompareCF is a single CF within a group with comparison status.
 type CompareCF struct {
-	TrashID      string `json:"trashId"`
-	Name         string `json:"name"`
-	Description  string `json:"description,omitempty"`
-	Required     bool   `json:"required"`
-	Default      bool   `json:"default"`
-	Exists       bool   `json:"exists"`
-	InUse        bool   `json:"inUse"`          // non-zero score in Arr (user actively chose this)
-	ArrID        int    `json:"arrId,omitempty"`
-	CurrentScore int    `json:"currentScore"`
-	DesiredScore int    `json:"desiredScore"`
-	ScoreMatch   bool   `json:"scoreMatch"`
+	TrashID       string `json:"trashId"`
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Required      bool   `json:"required"`
+	Default       bool   `json:"default"`
+	Exists        bool   `json:"exists"`
+	InUse         bool   `json:"inUse"` // non-zero score in Arr (user actively chose this)
+	ArrID         int    `json:"arrId,omitempty"`
+	CurrentScore  int    `json:"currentScore"`
+	DesiredScore  int    `json:"desiredScore"`
+	ScoreMatch    bool   `json:"scoreMatch"`
+	ScoreOverride *int   `json:"scoreOverride,omitempty"` // nil if no override from sync rule
 }
 
 // CompareCategory groups optional CF groups under a category (Streaming Services, Optional, etc.)
@@ -1658,7 +1728,10 @@ type OptionalCFState struct {
 
 // buildProfileComparison compares a specific Arr profile against a TRaSH profile.
 // Uses TRaSH CF groups consistently: ungrouped formatItems in FormatItems, grouped CFs in Groups.
-func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, arrProfileID int, syncedCFs []string, httpClient *http.Client) *ProfileComparison {
+// scoreOverrides (trash_id → score) carry the user's desired-score-per-CF from a prior Clonarr
+// sync. When a CF has an override, the Compare uses that value as the desired score instead of
+// TRaSH's default — so CFs deliberately set to 0 (or any custom score) don't show as "wrong".
+func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, arrProfileID int, syncedCFs []string, scoreOverrides map[string]int, httpClient *http.Client) *ProfileComparison {
 	comp := &ProfileComparison{
 		ArrProfileID:   arrProfileID,
 		TrashProfileID: trashProfileID,
@@ -1739,9 +1812,14 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 	if detailData != nil {
 		for _, fi := range detailData.FormatItemNames {
 			desiredScore := fi.Score
+			var description string
+			if tcf, ok := ad.CustomFormats[fi.TrashID]; ok {
+				description = tcf.Description
+			}
 			cfi := CompareFormatItem{
 				TrashID:      fi.TrashID,
 				Name:         fi.Name,
+				Description:  description,
 				DesiredScore: desiredScore,
 			}
 			if arrCF, ok := arrByName[strings.ToLower(fi.Name)]; ok {
@@ -1749,6 +1827,10 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 				cfi.ArrID = arrCF.ID
 				cfi.CurrentScore = arrScores[arrCF.ID]
 				cfi.ScoreMatch = cfi.CurrentScore == cfi.DesiredScore
+				if ov, hasOv := scoreOverrides[fi.TrashID]; hasOv {
+					ovCopy := ov
+					cfi.ScoreOverride = &ovCopy
+				}
 				trackedArrIDs[arrCF.ID] = true
 				if cfi.ScoreMatch {
 					comp.Summary.Matching++
@@ -1813,6 +1895,10 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 					ccf.Exists = true
 					ccf.ArrID = arrCF.ID
 					ccf.CurrentScore = arrScores[arrCF.ID]
+					if ov, hasOv := scoreOverrides[cf.TrashID]; hasOv {
+						ovCopy := ov
+						ccf.ScoreOverride = &ovCopy
+					}
 					trackedArrIDs[arrCF.ID] = true
 					// CF is "in use" if:
 					// - it has non-zero score (user actively scored it), OR
@@ -1835,8 +1921,9 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 					}
 				} else {
 					// CF doesn't exist in Arr
-					if group.DefaultEnabled && cf.Required {
+					if group.DefaultEnabled && cf.Required && !group.Exclusive {
 						// Required CF in default group is genuinely missing
+						// (exclusive groups counted separately — only need ONE)
 						cg.Missing++
 					}
 					// Optional/non-default CFs not in Arr = fine, user didn't want them
@@ -1851,6 +1938,20 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 					CurrentScore: ccf.CurrentScore,
 					DesiredScore: desiredScore,
 					ScoreMatch:   ccf.ScoreMatch,
+				}
+			}
+			// Exclusive groups: if required AND default-enabled AND no CF is in use,
+			// count as 1 missing (need to pick one, not all)
+			if cg.Exclusive && cg.DefaultEnabled && cg.Present == 0 {
+				hasRequired := false
+				for _, c := range cg.CFs {
+					if c.Required {
+						hasRequired = true
+						break
+					}
+				}
+				if hasRequired {
+					cg.Missing = 1
 				}
 			}
 			comp.Groups = append(comp.Groups, cg)
@@ -1925,9 +2026,47 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 		})
 	}
 
-	// Extra CFs: in Arr profile with non-zero score, not tracked by any TRaSH CF
+	// Build set of Arr CF IDs known to Clonarr via prior sync (as intentional extras or score
+	// overrides). Sync history stores trashIDs that Clonarr pushed — including any Extra CFs
+	// added via the profile-detail "Add Extra CFs" override. Without this, a score=0 extra
+	// would be hidden from the Compare (since score=0 usually means "unused in Arr profile").
+	// By matching these trashIDs back to Arr CF IDs, we recognize them as deliberate extras
+	// and show them in the diff — user can see exactly what's non-standard on the profile.
+	currentTrashIDs := make(map[string]bool)
+	if detailData != nil {
+		for _, fi := range detailData.FormatItemNames {
+			currentTrashIDs[fi.TrashID] = true
+		}
+		for _, group := range detailData.Groups {
+			for _, cf := range group.CFs {
+				currentTrashIDs[cf.TrashID] = true
+			}
+		}
+	}
+	knownExtraArrIDs := make(map[int]bool)
+	collectExtraID := func(tid string) {
+		if currentTrashIDs[tid] {
+			return
+		}
+		tcf, ok := ad.CustomFormats[tid]
+		if !ok {
+			return
+		}
+		if arrCF, ok := arrByName[strings.ToLower(tcf.Name)]; ok {
+			knownExtraArrIDs[arrCF.ID] = true
+		}
+	}
+	for tid := range syncedCFSet {
+		collectExtraID(tid)
+	}
+	for tid := range scoreOverrides {
+		collectExtraID(tid)
+	}
+
+	// Extra CFs: in Arr profile, not tracked by any TRaSH CF. Non-zero score → always included.
+	// Zero score → only included if Clonarr's sync history knows about it (intentional extra).
 	for _, fi := range arrProfile.FormatItems {
-		if fi.Score == 0 {
+		if fi.Score == 0 && !knownExtraArrIDs[fi.Format] {
 			continue
 		}
 		if trackedArrIDs[fi.Format] {
@@ -1954,12 +2093,14 @@ func buildProfileComparison(inst Instance, ad *AppData, trashProfileID string, a
 	addSetting("Min Format Score", fmt.Sprintf("%d", arrProfile.MinFormatScore), fmt.Sprintf("%d", trashProfile.MinFormatScore))
 	addSetting("Cutoff Format Score", fmt.Sprintf("%d", arrProfile.CutoffFormatScore), fmt.Sprintf("%d", trashProfile.CutoffFormatScore))
 	addSetting("Min Upgrade Format Score", fmt.Sprintf("%d", arrProfile.MinUpgradeFormatScore), fmt.Sprintf("%d", trashProfile.MinUpgradeFormatScore))
-	// Language
-	arrLang := "Unknown"
-	if arrProfile.Language != nil {
-		arrLang = arrProfile.Language.Name
+	// Language (Radarr only — Sonarr profiles don't have a language field)
+	if inst.Type == "radarr" {
+		arrLang := "Unknown"
+		if arrProfile.Language != nil {
+			arrLang = arrProfile.Language.Name
+		}
+		addSetting("Language", arrLang, trashProfile.Language)
 	}
-	addSetting("Language", arrLang, trashProfile.Language)
 	// Cutoff: TRaSH stores as quality name, Arr stores as ID — resolve for display
 	arrCutoffName := "Unknown"
 	for _, item := range arrProfile.Items {
@@ -2052,16 +2193,20 @@ func (app *App) handleCompareProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get synced CFs from sync history (to distinguish deliberately synced score-0 CFs from Arr defaults)
+	// Get synced CFs + score overrides from sync history. SyncedCFs distinguishes deliberately
+	// synced score-0 CFs from Arr defaults; ScoreOverrides lets the Compare see user-chosen
+	// desired scores (e.g. intentional 0 to disable a CF) so they don't show as "wrong score".
 	var lastSyncedCFs []string
+	var lastScoreOverrides map[string]int
 	history := app.config.GetSyncHistory(inst.ID)
 	for _, sh := range history {
 		if sh.ArrProfileID == arrProfileID {
 			lastSyncedCFs = sh.SyncedCFs
+			lastScoreOverrides = sh.ScoreOverrides
 			break
 		}
 	}
-	comp := buildProfileComparison(inst, ad, trashProfileID, arrProfileID, lastSyncedCFs, app.httpClient)
+	comp := buildProfileComparison(inst, ad, trashProfileID, arrProfileID, lastSyncedCFs, lastScoreOverrides, app.httpClient)
 
 	if comp.Error == "" {
 		app.debugLog.Logf(LogCompare, "%q vs %q on %s | %d matching, %d wrong, %d missing, %d extra",
@@ -2809,6 +2954,60 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 	for _, id := range req.SelectedCFs {
 		selectedCFMap[id] = true
 	}
+	// Build change details. Start with the sync result's human-readable strings
+	// (score changes, CF creates/updates, quality/settings changes), then enrich
+	// with CF set diff (CFs added to or removed from the sync set) by comparing
+	// allCFIDs against the previous entry's SyncedCFs. This catches group-level
+	// changes (e.g. disabling "Streaming Services General" drops 18 CFs) that
+	// the score engine doesn't report when the CFs had score=0.
+	cfSetDetails := []string{}
+	prevEntry := app.config.GetLatestSyncEntry(inst.ID, req.ArrProfileID)
+	if prevEntry != nil {
+		prevSet := make(map[string]bool, len(prevEntry.SyncedCFs))
+		for _, id := range prevEntry.SyncedCFs {
+			prevSet[id] = true
+		}
+		newSet := make(map[string]bool, len(allCFIDs))
+		for _, id := range allCFIDs {
+			newSet[id] = true
+		}
+		resolveName := func(tid string) string {
+			if ad != nil {
+				if cf, ok := ad.CustomFormats[tid]; ok {
+					return cf.Name
+				}
+			}
+			for _, a := range plan.CFActions {
+				if a.TrashID == tid {
+					return a.Name
+				}
+			}
+			return tid[:min(len(tid), 12)]
+		}
+		for _, tid := range allCFIDs {
+			if !prevSet[tid] {
+				cfSetDetails = append(cfSetDetails, "Added: "+resolveName(tid))
+			}
+		}
+		for _, tid := range prevEntry.SyncedCFs {
+			if !newSet[tid] {
+				cfSetDetails = append(cfSetDetails, "Removed: "+resolveName(tid))
+			}
+		}
+	}
+	// Merge: cfSetDetails (from set diff) + result.CFDetails (creates/updates)
+	allCFDetails := append(cfSetDetails, result.CFDetails...)
+	var changes *SyncChanges
+	if len(allCFDetails) > 0 || len(result.ScoreDetails) > 0 ||
+		len(result.QualityDetails) > 0 || len(result.SettingsDetails) > 0 {
+		changes = &SyncChanges{
+			CFDetails:       allCFDetails,
+			ScoreDetails:    result.ScoreDetails,
+			QualityDetails:  result.QualityDetails,
+			SettingsDetails: result.SettingsDetails,
+		}
+	}
+
 	entry := SyncHistoryEntry{
 		InstanceID:        inst.ID,
 		InstanceType:      inst.Type,
@@ -2828,6 +3027,7 @@ func (app *App) handleApply(w http.ResponseWriter, r *http.Request) {
 		CFsUpdated:     result.CFsUpdated,
 		ScoresUpdated:  result.ScoresUpdated,
 		LastSync:       time.Now().Format(time.RFC3339),
+		Changes:        changes,
 	}
 	// Use newly created profile info when available
 	if result.ProfileCreated {
@@ -2987,6 +3187,21 @@ func (app *App) handleSyncHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entries := app.config.GetSyncHistory(id)
+	if entries == nil {
+		entries = []SyncHistoryEntry{}
+	}
+	writeJSON(w, entries)
+}
+
+func (app *App) handleProfileChangeHistory(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	arrProfileIDStr := r.PathValue("arrProfileId")
+	arrProfileID, err := strconv.Atoi(arrProfileIDStr)
+	if err != nil || id == "" {
+		writeError(w, 400, "Invalid instance or profile ID")
+		return
+	}
+	entries := app.config.GetProfileChangeHistory(id, arrProfileID)
 	if entries == nil {
 		entries = []SyncHistoryEntry{}
 	}
@@ -3910,9 +4125,9 @@ func (app *App) handleCreateCustomCFs(w http.ResponseWriter, r *http.Request) {
 		if req.CFs[i].Category == "" {
 			req.CFs[i].Category = "Custom"
 		}
-		if req.CFs[i].ID == "" {
-			req.CFs[i].ID = generateCustomID()
-		}
+		// Always generate ID server-side — the ID is used as a filename,
+		// so accepting client-supplied IDs would allow path traversal.
+		req.CFs[i].ID = generateCustomID()
 		if req.CFs[i].ImportedAt == "" {
 			req.CFs[i].ImportedAt = now
 		}
@@ -4282,6 +4497,14 @@ func (app *App) handleScoringParseBatch(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, results)
 }
 
+// isLanguageCF returns true for CFs that depend on language matching — these can't
+// be evaluated without movie context (TMDB lookup) so they're stripped from sandbox
+// parse results. Matches: "Wrong Language", "Language: Not French", "Language: XXX".
+func isLanguageCF(name string) bool {
+	lower := strings.ToLower(name)
+	return lower == "wrong language" || strings.HasPrefix(lower, "language:")
+}
+
 // parseSingleRelease calls the Arr Parse API and enriches CFs with trash_ids.
 func (app *App) parseSingleRelease(inst Instance, title string) (*ScoringParseResult, error) {
 	client := NewArrClient(inst.URL, inst.APIKey, app.httpClient)
@@ -4361,6 +4584,14 @@ func (app *App) parseSingleRelease(inst Instance, title string) (*ScoringParseRe
 		}
 	}
 
+	// Fallback for numeric release groups that Arr's parser drops (e.g. "-126811").
+	// Only fires when Arr returned empty — alphanumeric groups stay on Arr's parse.
+	if parsed.ReleaseGroup == "" {
+		if m := numericReleaseGroupRE.FindStringSubmatch(title); m != nil {
+			parsed.ReleaseGroup = m[1]
+		}
+	}
+
 	// Build CF name → trash_id map from TRaSH data
 	ad := app.trash.GetAppData(inst.Type)
 	cfNameToTrashID := make(map[string]string)
@@ -4375,9 +4606,16 @@ func (app *App) parseSingleRelease(inst Instance, title string) (*ScoringParseRe
 		cfNameToTrashID[ccf.Name] = ccf.ID
 	}
 
-	// Enrich matched CFs with trash_ids
+	// Enrich matched CFs with trash_ids. Language-aware CFs ("Wrong Language",
+	// "Language: Not X", etc.) are filtered out: the Parse API runs without movie
+	// context so it can't resolve TMDB original language, making language CFs fire
+	// incorrectly (returning Language=Unknown → Wrong Language always matches).
+	// The language section is omitted from the parsed metadata for the same reason.
 	matchedCFs := make([]ScoringMatchedCF, 0, len(raw.CustomFormats))
 	for _, cf := range raw.CustomFormats {
+		if isLanguageCF(cf.Name) {
+			continue
+		}
 		mcf := ScoringMatchedCF{
 			ID:   cf.ID,
 			Name: cf.Name,
@@ -4387,6 +4625,7 @@ func (app *App) parseSingleRelease(inst Instance, title string) (*ScoringParseRe
 		}
 		matchedCFs = append(matchedCFs, mcf)
 	}
+	parsed.Languages = nil
 
 	return &ScoringParseResult{
 		Title:         title,
@@ -4532,6 +4771,18 @@ func (app *App) handleScoringProfileScores(w http.ResponseWriter, r *http.Reques
 			}
 		}
 	}
+
+	// Strip language-aware CFs from profile scores so they don't appear in the
+	// sandbox's "Unmatched (in profile, not in release)" list either. Same
+	// rationale as the parse-side filter: without movie context, language CFs
+	// are noise that confuses the total.
+	filtered := result.Scores[:0]
+	for _, s := range result.Scores {
+		if !isLanguageCF(s.Name) {
+			filtered = append(filtered, s)
+		}
+	}
+	result.Scores = filtered
 
 	writeJSON(w, result)
 }

@@ -1496,6 +1496,9 @@ func BuildArrProfile(
 }
 
 // resolveQualityItems converts TRaSH quality items to Arr format using quality definitions.
+// Unknown quality names are skipped with a log warning instead of failing the entire sync —
+// this handles cases like group names ("WEB 2160p") appearing without sub-items, or
+// cross-type quality names (Radarr quality in a Sonarr profile). Fixes GitHub issue #10.
 func resolveQualityItems(trashItems []QualityItem, qualityByName map[string]*ArrQualityDefinition) ([]ArrQualityItem, error) {
 	items := make([]ArrQualityItem, 0, len(trashItems))
 	groupID := 1000
@@ -1505,7 +1508,8 @@ func resolveQualityItems(trashItems []QualityItem, qualityByName map[string]*Arr
 			// Single quality
 			def, ok := qualityByName[ti.Name]
 			if !ok {
-				return nil, fmt.Errorf("quality %q not found in definitions", ti.Name)
+				log.Printf("Quality %q not found in definitions — skipping (may be a group name without sub-items or wrong app type)", ti.Name)
+				continue
 			}
 			items = append(items, ArrQualityItem{
 				Quality: &ArrQualityRef{
@@ -1519,12 +1523,13 @@ func resolveQualityItems(trashItems []QualityItem, qualityByName map[string]*Arr
 				Allowed: ti.Allowed,
 			})
 		} else {
-			// Quality group
+			// Quality group — resolve each sub-item, skip unknowns
 			nested := make([]ArrQualityItem, 0, len(ti.Items))
 			for _, subName := range ti.Items {
 				def, ok := qualityByName[subName]
 				if !ok {
-					return nil, fmt.Errorf("quality %q not found in definitions (group %q)", subName, ti.Name)
+					log.Printf("Quality %q not found in definitions (group %q) — skipping member", subName, ti.Name)
+					continue
 				}
 				nested = append(nested, ArrQualityItem{
 					Quality: &ArrQualityRef{
@@ -1538,13 +1543,17 @@ func resolveQualityItems(trashItems []QualityItem, qualityByName map[string]*Arr
 					Allowed: true,
 				})
 			}
-			items = append(items, ArrQualityItem{
-				ID:      groupID,
-				Name:    ti.Name,
-				Items:   nested,
-				Allowed: ti.Allowed,
-			})
-			groupID++
+			if len(nested) > 0 {
+				items = append(items, ArrQualityItem{
+					ID:      groupID,
+					Name:    ti.Name,
+					Items:   nested,
+					Allowed: ti.Allowed,
+				})
+				groupID++
+			} else {
+				log.Printf("Quality group %q has no resolvable members — skipping entire group", ti.Name)
+			}
 		}
 	}
 

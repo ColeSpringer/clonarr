@@ -213,6 +213,14 @@ func (fs *FileStore[T, PT]) Update(item T) error {
 // writeItem writes a single item to disk. Caller must hold mu.
 func (fs *FileStore[T, PT]) writeItem(item *T) error {
 	p := PT(item)
+	id := p.GetID()
+
+	// Guard against path traversal / invalid IDs ever reaching the filesystem.
+	// IDs are used directly as filenames ({dir}/{id}.json), so anything containing
+	// path separators or ".." could escape the store directory.
+	if id == "" || strings.ContainsAny(id, `/\`) || strings.Contains(id, "..") {
+		return fmt.Errorf("invalid ID for filesystem storage: %q", id)
+	}
 
 	data, err := json.MarshalIndent(item, "", "  ")
 	if err != nil {
@@ -220,7 +228,7 @@ func (fs *FileStore[T, PT]) writeItem(item *T) error {
 	}
 
 	// Use ID as filename — unique per item, no collisions possible
-	filename := p.GetID() + ".json"
+	filename := id + ".json"
 	path := filepath.Join(fs.dir, filename)
 
 	tmp := path + ".tmp"

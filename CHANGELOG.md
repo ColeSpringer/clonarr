@@ -1,5 +1,93 @@
 # Changelog
 
+## v2.0.0
+
+### Compare — Redesigned
+
+- **Table layout** for Required CFs and CF Groups — current vs TRaSH values side-by-side with checkboxes per row
+- **Profile Settings table** — compares Language, Upgrade Allowed, Min/Cutoff/Upgrade scores against TRaSH defaults
+- **Filter chips** — All / Only diffs / Wrong score / Missing / Extra / Matching to focus on what matters
+- **Golden Rule picker** — auto-selects HD or UHD variant based on what's in use, with cascade logic (inUse → default+required → default → first)
+- **Per-card Sync selected** — sync changes per section (Required CFs, each CF Group, Settings) instead of all-or-nothing
+- **Toggle all** link per card header for quick select/deselect
+- **Score override badges** — blue "OR" badge when a score difference is intentional (from your sync rule overrides)
+- **Score-0 extras via sync history** — CFs added via "Add Extra CFs" with score=0 now correctly appear in Compare instead of being silently dropped
+- **Exclusive group radio behavior** — "pick one" groups work correctly with proper counting
+
+### Sync History & Rollback — New
+
+- **History tab** between TRaSH Sync and Compare — dedicated change log for all synced profiles
+- **Ring-buffer storage** — last 10 change events per profile (no-change syncs only update the timestamp)
+- **CF set-diff tracking** — catches all CF changes including score-0 CFs from group enable/disable
+- **Detailed change log** — CFs added/removed, scores before→after, quality items toggled, settings changed
+- **Sortable columns** — TRaSH Profile, Arr Profile, Last Changed, Events
+- **Rollback** — restore a profile to any previous state with one click. Confirmation shows what will be reversed. Auto-disables auto-sync to prevent overwrite
+- **Auto-refresh** — History tab updates in real-time after sync operations
+
+### Profile Detail — Redesigned
+
+- **General + Quality cards** with blue/purple stripe design and per-section override toggles
+- **Inline Quality Items editor** — expands inside the Quality card (same as Builder) with drag-and-drop grouping
+- **Quality card spans full width** when editor is open (prevents CSS column overflow)
+- **Override summary bar** — shows active overrides with per-section and "Reset all" controls
+
+### Profile Builder — Redesigned
+
+- **Init card with tabs** — TRaSH template / Instance profile (replaces cluttered "Start from" row)
+- **General + Quality cards** matching the Edit view's visual language
+- **Golden Rule + Miscellaneous variants** as sub-section inside Quality card
+- **Collapsible Advanced Mode** behind devMode flag
+- **Shared Quality Items editor** — Builder and Edit view share the same drag-drop editor code (parameterized with target='edit'|'builder')
+- **Import from instance improved** — consults sync history for score-0 extras, resolves custom CFs, surfaces all CFs in Required CFs section
+- **Button label** — "Editing Items" → "Done" (describes action, not state)
+
+### Settings — Redesigned
+
+- **Sidebar + content panel** layout matching vpn-gateway and PurgeBot
+- Six sections: Instances, TRaSH Guides, Prowlarr, Notifications, Display, Advanced
+- **Prowlarr gets its own section** (split from Advanced) with custom search categories per app type
+- Green left-border active indicator, centered layout (1100px max-width)
+
+### Scoring Sandbox — Improved
+
+- **Custom Prowlarr search categories** — configurable Radarr/Sonarr category IDs for indexers that don't cascade root IDs
+- **Numeric release group fallback** — trailing numeric groups like `-126811` now parsed correctly when Arr returns empty
+- **Per-row selection + filter** — checkbox per row, "Filter to selected" toggle, "Reset filter"
+- **Drag reorder** — manual sorting with drag handles (disabled during filter to prevent confusion)
+- **Copy-box modal** — shareable plain-text summary per release (title, parsed metadata, matched CFs, scores)
+- **Language CFs stripped** — "Wrong Language" and "Language: *" CFs excluded from scoring (Parse API can't evaluate without TMDB context)
+- **Stable drag keys** — `_sid` identity tracking prevents DOM glitches during reorder
+
+### Browser Navigation — New
+
+- **Back/forward works** — `pushState` on every section/tab change, `popstate` listener restores state
+- **URL hash routing** — e.g. `#radarr/profiles/compare`, `#settings/prowlarr`, `#sonarr/advanced/scoring`
+- **Hash validation** — invalid hashes fall back to defaults (no blank page)
+- **Initial entry seeded** — `replaceState` ensures the first Back click has somewhere to go
+
+### Other Improvements
+
+- **Sonarr language** — language field hidden everywhere for Sonarr (removed in Sonarr v4, not in TRaSH Sonarr profiles)
+- **Sortable Sync Rules columns** — TRaSH Profile and Arr Profile headers clickable to sort A→Z / Z→A
+- **Sync Rules renamed** from "Sync Rules & History" (History has its own tab now)
+
+### Fixed
+
+- **GitHub #10** — "WEB 2160p not found in definitions" when syncing. Quality names not in definitions are now skipped with a log warning instead of failing the entire sync
+- **XSS sanitization** — all `x-html` bindings now wrapped in `sanitizeHTML()` (3 were missing)
+- **Path traversal** in custom CF create endpoint
+- **Shared quality editor state leak** — `qualityStructureEditMode` no longer leaks between Builder and Edit view
+- **`pb.qualityItems` identity tracking** — `$watch` auto-assigns stable `_id` on every reassignment
+- **Sonarr Language "Unknown" diff** — no longer shows false Language diff in Compare for Sonarr profiles
+- **`alert()` → toast** — all browser alerts replaced with toast notifications
+
+### Security
+
+- All `x-html` bindings sanitized via `sanitizeHTML()`
+- `GetLatestSyncEntry` returns defensive copy (not pointer into config slice)
+- Path traversal prevention in custom CF file operations
+- API key masking on all config responses
+
 ## v1.9.0
 
 ### Added
