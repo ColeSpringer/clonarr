@@ -266,6 +266,7 @@ func main() {
 
 	// Sync History
 	mux.HandleFunc("GET /api/instances/{id}/sync-history", app.handleSyncHistory)
+	mux.HandleFunc("GET /api/instances/{id}/sync-history/{arrProfileId}/changes", app.handleProfileChangeHistory)
 	mux.HandleFunc("DELETE /api/instances/{id}/sync-history/{arrProfileId}", app.handleDeleteSyncHistory)
 
 	// Auto-Sync

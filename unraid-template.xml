@@ -21,6 +21,15 @@
   <WebUI>http://[IP]:[PORT:6060]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/icon.png</Icon>
+  <Date>2026-04-17</Date>
+  <Changes>
+### 2026-04-17
+- v2.0.0: Compare redesign, Sync History and Rollback, Profile Builder overhaul, Settings sidebar, Scoring Sandbox improvements, browser navigation, Sonarr language fix, Profile Detail redesign.
+### 2026-04-12
+- v1.9.0: Clone profile, inline rename, dry-run preview, keep list fix, auto-sync fixes.
+### 2026-04-09
+- v1.8.6: Quality Group editor, multi-arch builds, memory leak fix, sync diff fixes.
+  </Changes>
   <ExtraParams/>
   <PostArgs/>
   <DonateText/>

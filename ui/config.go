@@ -26,10 +26,16 @@ type Config struct {
 }
 
 // ProwlarrConfig holds Prowlarr connection settings for the Scoring Sandbox.
+// RadarrCategories / SonarrCategories override the default [2000] / [5000]
+// Newznab category IDs — needed for indexers whose definitions don't cascade
+// the parent ID to sub-categories (private trackers often tag only sub-IDs
+// like 2040, 2045). Empty slice means "use default".
 type ProwlarrConfig struct {
-	URL     string `json:"url"`
-	APIKey  string `json:"apiKey"`
-	Enabled bool   `json:"enabled"`
+	URL              string `json:"url"`
+	APIKey           string `json:"apiKey"`
+	Enabled          bool   `json:"enabled"`
+	RadarrCategories []int  `json:"radarrCategories,omitempty"`
+	SonarrCategories []int  `json:"sonarrCategories,omitempty"`
 }
 
 // AutoSyncConfig holds global auto-sync settings and rules.
@@ -120,6 +126,23 @@ type QSOverride struct {
 	Max       float64 `json:"max"`
 }
 
+// SyncChanges captures the detailed changes made during a sync.
+// Stored only when the sync actually modified something (not on no-op syncs).
+// The string slices come directly from the sync result's *Details fields —
+// human-readable and display-ready (e.g. "BHDStudio: 1000 → 2240").
+type SyncChanges struct {
+	CFDetails       []string `json:"cfDetails,omitempty"`
+	ScoreDetails    []string `json:"scoreDetails,omitempty"`
+	QualityDetails  []string `json:"qualityDetails,omitempty"`
+	SettingsDetails []string `json:"settingsDetails,omitempty"`
+}
+
+// HasChanges returns true if any change category has entries.
+func (c *SyncChanges) HasChanges() bool {
+	return c != nil && (len(c.CFDetails) > 0 || len(c.ScoreDetails) > 0 ||
+		len(c.QualityDetails) > 0 || len(c.SettingsDetails) > 0)
+}
+
 // SyncHistoryEntry records a completed sync operation.
 type SyncHistoryEntry struct {
 	InstanceID        string            `json:"instanceId"`
@@ -140,6 +163,7 @@ type SyncHistoryEntry struct {
 	CFsUpdated     int               `json:"cfsUpdated"`
 	ScoresUpdated  int               `json:"scoresUpdated"`
 	LastSync       string            `json:"lastSync"`
+	Changes        *SyncChanges      `json:"changes,omitempty"`
 }
 
 // Instance represents a configured Radarr or Sonarr instance.
@@ -277,6 +301,26 @@ func (cs *configStore) Get() Config {
 		if sh.Behavior != nil {
 			b := *sh.Behavior
 			cfg.SyncHistory[i].Behavior = &b
+		}
+		if sh.Changes != nil {
+			c := *sh.Changes
+			if len(sh.Changes.CFDetails) > 0 {
+				c.CFDetails = make([]string, len(sh.Changes.CFDetails))
+				copy(c.CFDetails, sh.Changes.CFDetails)
+			}
+			if len(sh.Changes.ScoreDetails) > 0 {
+				c.ScoreDetails = make([]string, len(sh.Changes.ScoreDetails))
+				copy(c.ScoreDetails, sh.Changes.ScoreDetails)
+			}
+			if len(sh.Changes.QualityDetails) > 0 {
+				c.QualityDetails = make([]string, len(sh.Changes.QualityDetails))
+				copy(c.QualityDetails, sh.Changes.QualityDetails)
+			}
+			if len(sh.Changes.SettingsDetails) > 0 {
+				c.SettingsDetails = make([]string, len(sh.Changes.SettingsDetails))
+				copy(c.SettingsDetails, sh.Changes.SettingsDetails)
+			}
+			cfg.SyncHistory[i].Changes = &c
 		}
 	}
 	// Deep-copy QualitySizeOverrides (nested map)
@@ -490,28 +534,92 @@ func (cs *configStore) DeleteInstance(id string) error {
 	return cs.saveLocked()
 }
 
-// UpsertSyncHistory adds or updates a sync history entry (keyed by instanceId + arrProfileId).
-// This allows the same TRaSH profile to be synced to multiple Arr profiles on the same instance.
+// maxSyncHistoryPerProfile is the maximum number of change-bearing entries kept per
+// instance+arrProfile pair. Entries without changes (no-op syncs) only update the
+// timestamp on the most recent entry and don't consume a slot.
+const maxSyncHistoryPerProfile = 10
+
+// UpsertSyncHistory appends a sync history entry. When the entry carries actual
+// changes (entry.Changes.HasChanges()), it's prepended as a new entry and the list
+// is capped at maxSyncHistoryPerProfile. When there are no changes, only the
+// LastSync timestamp on the most recent entry for that profile is updated (no new
+// entry created). Entries are stored newest-first so existing code that iterates
+// and breaks on first match automatically gets the latest.
 func (cs *configStore) UpsertSyncHistory(entry SyncHistoryEntry) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	for i, sh := range cs.config.SyncHistory {
-		if sh.InstanceID == entry.InstanceID && sh.ArrProfileID == entry.ArrProfileID {
-			cs.config.SyncHistory[i] = entry
-			return cs.saveLocked()
+
+	hasChanges := entry.Changes.HasChanges()
+
+	if !hasChanges {
+		// No-op sync: just bump the timestamp on the newest entry for this profile.
+		for i, sh := range cs.config.SyncHistory {
+			if sh.InstanceID == entry.InstanceID && sh.ArrProfileID == entry.ArrProfileID {
+				cs.config.SyncHistory[i].LastSync = entry.LastSync
+				return cs.saveLocked()
+			}
 		}
+		// First sync for this profile — fall through to append even without changes
+		// so we have a baseline entry for future diffs.
 	}
-	cs.config.SyncHistory = append(cs.config.SyncHistory, entry)
+
+	// Prepend the new entry (newest-first).
+	cs.config.SyncHistory = append([]SyncHistoryEntry{entry}, cs.config.SyncHistory...)
+
+	// Cap: keep at most maxSyncHistoryPerProfile entries per instance+arrProfile.
+	count := 0
+	keep := make([]SyncHistoryEntry, 0, len(cs.config.SyncHistory))
+	for _, sh := range cs.config.SyncHistory {
+		if sh.InstanceID == entry.InstanceID && sh.ArrProfileID == entry.ArrProfileID {
+			count++
+			if count > maxSyncHistoryPerProfile {
+				continue // drop oldest
+			}
+		}
+		keep = append(keep, sh)
+	}
+	cs.config.SyncHistory = keep
+
 	return cs.saveLocked()
 }
 
-// GetSyncHistory returns all sync history entries for an instance.
+// GetSyncHistory returns all sync history entries for an instance (newest-first).
 func (cs *configStore) GetSyncHistory(instanceID string) []SyncHistoryEntry {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	var entries []SyncHistoryEntry
 	for _, sh := range cs.config.SyncHistory {
 		if sh.InstanceID == instanceID {
+			entries = append(entries, sh)
+		}
+	}
+	return entries
+}
+
+// GetLatestSyncEntry returns the most recent sync history entry for a specific
+// instance + arrProfile. Returns nil if no entry exists. Used by Compare, Builder
+// import, and other consumers that only need the current state.
+func (cs *configStore) GetLatestSyncEntry(instanceID string, arrProfileID int) *SyncHistoryEntry {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	for _, sh := range cs.config.SyncHistory {
+		if sh.InstanceID == instanceID && sh.ArrProfileID == arrProfileID {
+			entry := sh
+			return &entry
+		}
+	}
+	return nil
+}
+
+// GetProfileChangeHistory returns all history entries for a specific instance +
+// arrProfile pair, newest-first (includes the baseline no-change entry if present).
+// Used by the History tab.
+func (cs *configStore) GetProfileChangeHistory(instanceID string, arrProfileID int) []SyncHistoryEntry {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	var entries []SyncHistoryEntry
+	for _, sh := range cs.config.SyncHistory {
+		if sh.InstanceID == instanceID && sh.ArrProfileID == arrProfileID {
 			entries = append(entries, sh)
 		}
 	}

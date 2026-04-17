@@ -33,7 +33,7 @@ func TestFileStore_AddAndList(t *testing.T) {
 		{ID: "3", Name: "Gamma", AppType: "radarr", Value: "c"},
 	}
 
-	added, err := fs.Add(items)
+	added, _, err := fs.Add(items)
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestFileStore_AddSkipsDuplicates(t *testing.T) {
 	items := []testItem{
 		{ID: "1", Name: "Alpha", AppType: "radarr"},
 	}
-	added, err := fs.Add(items)
+	added, _, err := fs.Add(items)
 	if err != nil {
 		t.Fatalf("first Add failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestFileStore_AddSkipsDuplicates(t *testing.T) {
 	items2 := []testItem{
 		{ID: "2", Name: "Alpha", AppType: "radarr"},
 	}
-	added, err = fs.Add(items2)
+	added, _, err = fs.Add(items2)
 	if err != nil {
 		t.Fatalf("second Add failed: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestFileStore_AddSkipsDuplicates(t *testing.T) {
 func TestFileStore_GetFound(t *testing.T) {
 	fs := newTestStore(t)
 
-	fs.Add([]testItem{
+	_, _, _ = fs.Add([]testItem{
 		{ID: "abc", Name: "Test", AppType: "radarr", Value: "hello"},
 	})
 
@@ -114,7 +114,7 @@ func TestFileStore_GetNotFound(t *testing.T) {
 func TestFileStore_Delete(t *testing.T) {
 	fs := newTestStore(t)
 
-	fs.Add([]testItem{
+	_, _, _ = fs.Add([]testItem{
 		{ID: "1", Name: "Alpha", AppType: "radarr"},
 		{ID: "2", Name: "Beta", AppType: "radarr"},
 	})
@@ -148,7 +148,7 @@ func TestFileStore_DeleteNotFound(t *testing.T) {
 func TestFileStore_Update(t *testing.T) {
 	fs := newTestStore(t)
 
-	fs.Add([]testItem{
+	_, _, _ = fs.Add([]testItem{
 		{ID: "1", Name: "Alpha", AppType: "radarr", Value: "old"},
 	})
 
@@ -169,7 +169,7 @@ func TestFileStore_Update(t *testing.T) {
 func TestFileStore_UpdateRename(t *testing.T) {
 	fs := newTestStore(t)
 
-	fs.Add([]testItem{
+	_, _, _ = fs.Add([]testItem{
 		{ID: "1", Name: "OldName", AppType: "radarr", Value: "v1"},
 	})
 
