@@ -71,6 +71,15 @@ func (cs *CustomCFStore) storeFor(appType string) *FileStore[CustomCF, *CustomCF
 	return cs.stores[appType]
 }
 
+// MigrateFilenames renames ID-based filenames to sanitized name-based filenames on startup.
+func (cs *CustomCFStore) MigrateFilenames() {
+	for appType, store := range cs.stores {
+		if n := store.MigrateFilenames(); n > 0 {
+			log.Printf("custom-cf: migrated %d %s filenames to name-based", n, appType)
+		}
+	}
+}
+
 func GenerateCustomID() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {

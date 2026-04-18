@@ -45,6 +45,7 @@ func main() {
 	profilesStore := core.NewProfileStore(filepath.Join(configDir, "profiles"))
 	customCFsStore := core.NewCustomCFStore(filepath.Join(configDir, "custom", "json"))
 	customCFsStore.MigrateFromFlatDir(filepath.Join(configDir, "custom-cfs"))
+	customCFsStore.MigrateFilenames()
 
 	// Migrate any imported profiles from old config to per-file storage
 	core.MigrateImportedProfiles(cfgStore, profilesStore)
