@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.2
+
+### Added
+
+- **Pushover notifications** — Third notification provider alongside Discord and Gotify. Collapsible provider sections with status indicators and test buttons. Discord can now be toggled on/off. (Community contribution by @xFlawless11x, PR #12)
+
+### Fixed
+
+- **GHCR pull fails on older Docker clients (Synology, DSM)** — Multi-arch builds produced OCI image indexes that older Docker versions can't parse. Added `provenance: false` to CI workflow to force Docker manifest list v2 format.
+
 ## v2.0.1
 
 ### Fixed
