@@ -4,6 +4,7 @@ import (
 	"clonarr/internal/arr"
 	"clonarr/internal/core"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -482,14 +483,16 @@ func scanOrphanedScores(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 
 func applyDeleteCFs(client *arr.ArrClient, ids []int) (int, error) {
 	deleted := 0
+	var errs []error
 	for _, id := range ids {
 		if err := client.DeleteCustomFormat(id); err != nil {
 			log.Printf("CLEANUP: Failed to delete CF %d: %v", id, err)
+			errs = append(errs, err)
 			continue
 		}
 		deleted++
 	}
-	return deleted, nil
+	return deleted, errors.Join(errs...)
 }
 
 func applyResetScores(client *arr.ArrClient, cfIDs []int) (int, error) {
@@ -504,6 +507,7 @@ func applyResetScores(client *arr.ArrClient, cfIDs []int) (int, error) {
 	}
 
 	resetCount := 0
+	var errs []error
 	for i := range profiles {
 		changed := false
 		for j := range profiles[i].FormatItems {
@@ -516,9 +520,10 @@ func applyResetScores(client *arr.ArrClient, cfIDs []int) (int, error) {
 		if changed {
 			if err := client.UpdateProfile(&profiles[i]); err != nil {
 				log.Printf("CLEANUP: Failed to update profile %s: %v", profiles[i].Name, err)
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	return resetCount, nil
+	return resetCount, errors.Join(errs...)
 }
