@@ -10093,6 +10093,10 @@ function clonarr() {
           if (cf.trashId === tid) return cf.name;
         }
       }
+      // Fallback: extras and other CFs loaded via /all-cfs (Extra CFs picker list)
+      for (const cf of (this.extraCFAllCFs || [])) {
+        if (cf.trashId === tid) return cf.name;
+      }
       return tid.replace(/^custom:/, '').substring(0, 12);
     },
 
@@ -10105,6 +10109,13 @@ function clonarr() {
       for (const g of (detail.trashGroups || [])) {
         for (const cf of g.cfs) {
           if (cf.trashId === tid) return cf.score ?? 0;
+        }
+      }
+      // Fallback: extras — resolve default score from CF's trashScores map using current score set
+      const scoreSet = detail.scoreCtx || detail.profile?.trashScoreSet || 'default';
+      for (const cf of (this.extraCFAllCFs || [])) {
+        if (cf.trashId === tid) {
+          return cf.trashScores?.[scoreSet] ?? cf.trashScores?.default ?? 0;
         }
       }
       return '?';

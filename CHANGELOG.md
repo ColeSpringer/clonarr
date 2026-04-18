@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.5
+
+### Fixed
+
+- **Extra CFs showed hex IDs instead of names in Overridden Scores** — Score overrides on Extra CFs (CFs added to a profile but not part of the base TRaSH profile) displayed their trash ID (e.g. `82cc7396f79a`) instead of the CF name after Save & Sync. The display helpers only looked at CFs belonging to the base profile; they now fall back to the Extra CFs list so the correct name and default score are shown. Sort order in the panel also now uses real names. Same fix covers both TRaSH Extra CFs and user-created custom CFs added as extras.
+
 ## v2.0.4
 
 ### Fixed

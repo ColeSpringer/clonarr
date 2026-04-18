@@ -21,8 +21,10 @@
   <WebUI>http://[IP]:[PORT:6060]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/icon.png</Icon>
-  <Date>2026-04-18</Date>
+  <Date>2026-04-19</Date>
   <Changes>
+### 2026-04-19
+- v2.0.5: Fix Extra CFs showing hex IDs instead of names in Overridden Scores panel after Save &amp; Sync.
 ### 2026-04-18
 - v2.0.4: Quality size null fix, Sync All oscillation fix, CF editor dropdown fixes, Keep List redesign, score override UX improvements, per-webhook Discord test.
 ### 2026-04-17
