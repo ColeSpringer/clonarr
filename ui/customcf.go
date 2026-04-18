@@ -71,6 +71,15 @@ func (s *customCFStore) storeFor(appType string) *FileStore[CustomCF, *CustomCF]
 }
 
 // generateCustomID creates a synthetic ID like "custom:a1b2c3d4e5f6".
+// migrateFilenames renames ID-based filenames to sanitized name-based filenames on startup.
+func (s *customCFStore) migrateFilenames() {
+	for appType, store := range s.stores {
+		if n := store.MigrateFilenames(); n > 0 {
+			log.Printf("custom-cf: migrated %d %s filenames to name-based", n, appType)
+		}
+	}
+}
+
 func generateCustomID() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {

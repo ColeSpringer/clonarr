@@ -172,9 +172,9 @@ func (fs *FileStore[T, PT]) Update(item T) error {
 	defer fs.mu.Unlock()
 
 	p := PT(&item)
-	newFilename := p.GetID() + ".json"
+	newFilename := sanitizeFilename(p.GetName(), p.GetID()) + ".json"
 
-	// Find and remove old file if it exists under a different name (migration)
+	// Find and remove old file if it exists under a different name (migration/rename)
 	found := false
 	entries, err := os.ReadDir(fs.dir)
 	if err == nil {
@@ -210,14 +210,78 @@ func (fs *FileStore[T, PT]) Update(item T) error {
 	return fs.writeItem(&item)
 }
 
+// sanitizeFilename converts a name to a safe filesystem filename.
+// Strips path separators, .., and special characters. Falls back to ID if name is empty.
+func sanitizeFilename(name, id string) string {
+	if name == "" {
+		name = id
+	}
+	// Lowercase, replace spaces/special chars with hyphens
+	safe := strings.ToLower(name)
+	var b strings.Builder
+	for _, r := range safe {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else if r == ' ' || r == '.' {
+			b.WriteRune('-')
+		}
+	}
+	result := strings.Trim(b.String(), "-")
+	// Collapse multiple hyphens
+	for strings.Contains(result, "--") {
+		result = strings.ReplaceAll(result, "--", "-")
+	}
+	if result == "" {
+		result = id
+	}
+	return result
+}
+
+// MigrateFilenames renames files that use ID-based filenames (from the path
+// traversal fix) to sanitized name-based filenames. Safe to call on startup —
+// skips files that already have the correct name.
+func (fs *FileStore[T, PT]) MigrateFilenames() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	entries, err := os.ReadDir(fs.dir)
+	if err != nil {
+		return 0
+	}
+
+	migrated := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(fs.dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var item T
+		if err := json.Unmarshal(data, &item); err != nil {
+			continue
+		}
+		p := PT(&item)
+		expectedFilename := sanitizeFilename(p.GetName(), p.GetID()) + ".json"
+		if e.Name() != expectedFilename {
+			newPath := filepath.Join(fs.dir, expectedFilename)
+			if err := os.WriteFile(newPath, data, 0644); err == nil {
+				os.Remove(path)
+				migrated++
+			}
+		}
+	}
+	return migrated
+}
+
 // writeItem writes a single item to disk. Caller must hold mu.
 func (fs *FileStore[T, PT]) writeItem(item *T) error {
 	p := PT(item)
 	id := p.GetID()
 
 	// Guard against path traversal / invalid IDs ever reaching the filesystem.
-	// IDs are used directly as filenames ({dir}/{id}.json), so anything containing
-	// path separators or ".." could escape the store directory.
 	if id == "" || strings.ContainsAny(id, `/\`) || strings.Contains(id, "..") {
 		return fmt.Errorf("invalid ID for filesystem storage: %q", id)
 	}
@@ -227,8 +291,9 @@ func (fs *FileStore[T, PT]) writeItem(item *T) error {
 		return fmt.Errorf("marshal item: %w", err)
 	}
 
-	// Use ID as filename — unique per item, no collisions possible
-	filename := id + ".json"
+	// Use sanitized name as filename for readability. Falls back to ID if name is empty.
+	// The file contains the full item JSON (including ID), so the filename is purely cosmetic.
+	filename := sanitizeFilename(p.GetName(), id) + ".json"
 	path := filepath.Join(fs.dir, filename)
 
 	tmp := path + ".tmp"

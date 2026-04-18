@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.0.4
+
+### Fixed
+
+- **Quality Definitions null values** — Sonarr/Radarr "Unlimited" (null) for preferred/max size showed as 0.0. Now uses `*float64` to distinguish null from explicit zero.
+- **Sync All score oscillation** — Ring-buffer entries with different selectedCFs caused scores to flip-flop on every Sync All. Now deduplicates to latest entry per profile.
+- **CF Editor dropdowns lost on edit** — Language, Resolution, and other select-type specs showed raw numeric values instead of dropdown. Three-part fix: schema matching, string coercion, and programmatic option population (replaces `<template x-for>` inside `<select>`).
+- **Cutoff dropdown showing deleted group** — When quality structure override removed the TRaSH default cutoff group, dropdown showed the deleted name. Now auto-picks first allowed quality. Also fixed same `x-for`-in-`select` timing bug.
+- **Language dropdown in Edit view** — Same programmatic population fix applied.
+- **Custom CF filenames** — Regression from path traversal fix: files saved as `custom:hex.json` instead of readable names. Now uses sanitized CF name. Auto-migrates on startup.
+- **GitHub #10** — Unknown quality names (group names without sub-items, cross-type names) now skipped with log warning instead of failing entire sync.
+- **pprof debug endpoints removed** — `/debug/pprof/*` endpoints removed from release builds.
+
+### Improved
+
+- **Score Override UX** — Summary panel shows all overridden CFs when toggle is active, editable inline with per-CF ↻ reset button. Override count badge per CF group header.
+- **Toggle labels** — "Override" → "Hide Overrides" when active (General, Quality, CF Scores, Extra CFs).
+- **Extra CFs layout** — Fixed-width columns (toggle | name 180px | score 65px), sorted A→Z.
+- **Keep List redesign** — Side-by-side layout: search + Add/Add all on left, 3-column CF list on right. Batch "Add all (N)" matching, "Remove all" button.
+- **Sync Rules default sort** — A→Z by Arr Profile name instead of ring-buffer insertion order.
+- **Per-webhook Discord test** — Sync and Updates webhooks each have independent Test buttons.
+
 ## v2.0.3
 
 ### Added

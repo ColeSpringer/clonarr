@@ -238,16 +238,29 @@ func (c *ArrClient) UpdateProfile(profile *ArrQualityProfile) error {
 // --- Quality Definitions ---
 
 // ArrQualityDefinition represents a quality size definition.
-// Note: Radarr omits maxSize/preferredSize from API responses when they
-// haven't been explicitly set. Go unmarshals these as 0. The frontend
-// treats 0 as "not explicitly set" and marks them as needing sync.
+// Sonarr/Radarr return null for maxSize/preferredSize when set to "Unlimited"
+// (slider all the way right). Using *float64 lets us distinguish null (Unlimited)
+// from 0.0 (explicit zero). The frontend shows "Unlimited" for nil values.
 type ArrQualityDefinition struct {
 	ID            int              `json:"id"`
 	Quality       ArrQualityRef    `json:"quality"`
 	Title         string           `json:"title"`
-	MinSize       float64          `json:"minSize"`
-	MaxSize       float64          `json:"maxSize"`
-	PreferredSize float64          `json:"preferredSize"`
+	MinSize       *float64         `json:"minSize"`
+	MaxSize       *float64         `json:"maxSize"`
+	PreferredSize *float64         `json:"preferredSize"`
+}
+
+// floatVal safely dereferences a *float64, returning 0 if nil.
+func floatVal(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// floatPtr returns a pointer to a float64 value.
+func floatPtr(v float64) *float64 {
+	return &v
 }
 
 type ArrQualityRef struct {

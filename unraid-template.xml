@@ -21,8 +21,10 @@
   <WebUI>http://[IP]:[PORT:6060]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/icon.png</Icon>
-  <Date>2026-04-17</Date>
+  <Date>2026-04-18</Date>
   <Changes>
+### 2026-04-18
+- v2.0.4: Quality size null fix, Sync All oscillation fix, CF editor dropdown fixes, Keep List redesign, score override UX improvements, per-webhook Discord test.
 ### 2026-04-17
 - v2.0.1: Fix dry-run Apply button showing wrong instance when multiple instances configured.
 - v2.0.0: Compare redesign, Sync History and Rollback, Profile Builder overhaul, Settings sidebar, Scoring Sandbox improvements, browser navigation, Sonarr language fix, Profile Detail redesign.

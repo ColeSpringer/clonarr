@@ -2109,36 +2109,55 @@
 
                     <!-- Keep list (shared by both delete actions) -->
                     <div class="card" style="padding:16px;border-color:#30363d;overflow:visible">
-                      <div style="font-size:13px;font-weight:600;color:#e1e4e8;margin-bottom:8px">Keep List</div>
-                      <div style="font-size:12px;color:#aaa;margin-bottom:10px">Custom formats on this list will be excluded from delete operations. Case-insensitive, saved per instance.</div>
-                      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" x-show="cleanupKeepList.length > 0">
-                        <template x-for="(name, idx) in cleanupKeepList" :key="idx">
-                          <span style="display:inline-flex;align-items:center;gap:4px;background:#1f3a5f;color:#58a6ff;padding:3px 8px;border-radius:12px;font-size:12px">
-                            <span x-text="name"></span>
-                            <span style="cursor:pointer;opacity:0.7;font-size:14px" @click="removeCleanupKeep(idx)" title="Remove">&times;</span>
-                          </span>
-                        </template>
-                      </div>
-                      <div style="display:flex;gap:6px;position:relative">
-                        <div style="flex:1;position:relative">
-                          <input type="text" x-model="cleanupKeepInput" placeholder="Type to search CFs..."
-                                 @input="cleanupKeepSuggestions = cleanupKeepInput.trim() ? cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10) : []"
-                                 @focus="cleanupKeepFocused = true; if (cleanupKeepInput.trim()) cleanupKeepSuggestions = cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10)"
-                                 @keydown.enter.prevent="cleanupKeepSuggestions.length > 0 ? addCleanupKeepName(cleanupKeepSuggestions[0]) : addCleanupKeep()"
-                                 @keydown.escape="cleanupKeepSuggestions = []; cleanupKeepFocused = false"
-                                 @blur="setTimeout(() => { cleanupKeepFocused = false; cleanupKeepSuggestions = [] }, 150)"
-                                 style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:6px 8px;color:#e1e4e8;font-size:12px">
-                          <div x-show="cleanupKeepFocused && cleanupKeepSuggestions.length > 0" @mousedown.prevent
-                               style="position:absolute;top:100%;left:0;right:0;z-index:50;background:#161b22;border:1px solid #30363d;border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.4)">
-                            <template x-for="(suggestion, si) in cleanupKeepSuggestions" :key="si">
-                              <div @click="addCleanupKeepName(suggestion)"
-                                   style="padding:6px 10px;font-size:12px;color:#c9d1d9;cursor:pointer;border-bottom:1px solid #21262d"
-                                   @mouseenter="$el.style.background='#1f6feb33'" @mouseleave="$el.style.background='transparent'"
-                                   x-text="suggestion"></div>
-                            </template>
+                      <div style="display:flex;gap:16px">
+                        <!-- Left: title, description, search -->
+                        <div style="flex-shrink:0;width:380px">
+                          <div style="font-size:14px;font-weight:600;color:#e1e4e8;margin-bottom:4px">Keep List</div>
+                          <div style="font-size:12px;color:#aaa;margin-bottom:10px;line-height:1.5">Custom formats on this list will be excluded from delete operations. Case-insensitive, saved per instance.</div>
+                          <div style="display:flex;gap:6px;position:relative">
+                            <div style="width:250px;position:relative">
+                              <input type="text" x-model="cleanupKeepInput" placeholder="Type to search CFs..."
+                                     @input="cleanupKeepSuggestions = cleanupKeepInput.trim() ? cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10) : []"
+                                     @focus="cleanupKeepFocused = true; if (cleanupKeepInput.trim()) cleanupKeepSuggestions = cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10)"
+                                     @keydown.enter.prevent="cleanupKeepSuggestions.length > 0 ? addCleanupKeepName(cleanupKeepSuggestions[0]) : addCleanupKeep()"
+                                     @keydown.escape="cleanupKeepSuggestions = []; cleanupKeepFocused = false"
+                                     @blur="setTimeout(() => { cleanupKeepFocused = false; cleanupKeepSuggestions = [] }, 150)"
+                                     style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:6px 8px;color:#e1e4e8;font-size:12px">
+                              <div x-show="cleanupKeepFocused && cleanupKeepSuggestions.length > 0" @mousedown.prevent
+                                   style="position:absolute;top:100%;left:0;right:0;z-index:50;background:#161b22;border:1px solid #30363d;border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.4)">
+                                <template x-for="(suggestion, si) in cleanupKeepSuggestions" :key="si">
+                                  <div @click="addCleanupKeepName(suggestion)"
+                                       style="padding:6px 10px;font-size:12px;color:#c9d1d9;cursor:pointer;border-bottom:1px solid #21262d"
+                                       @mouseenter="$el.style.background='#1f6feb33'" @mouseleave="$el.style.background='transparent'"
+                                       x-text="suggestion"></div>
+                                </template>
+                              </div>
+                            </div>
+                            <button class="btn btn-sm" @click="addCleanupKeep()" style="white-space:nowrap">Add</button>
+                            <button class="btn btn-sm" style="white-space:nowrap;border-color:#d29922;color:#d29922"
+                                    x-show="cleanupKeepInput.trim()"
+                                    @click="addAllMatchingKeep()"
+                                    :disabled="cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length === 0"
+                                    x-text="'Add all (' + cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length + ')'"></button>
                           </div>
                         </div>
-                        <button class="btn btn-sm" @click="addCleanupKeep()" style="white-space:nowrap">Add</button>
+                        <!-- Right: keep list entries as compact column -->
+                        <div style="flex:1;min-width:0" x-show="cleanupKeepList.length > 0">
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                            <span style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px" x-text="cleanupKeepList.length + ' kept'"></span>
+                            <button class="btn" style="font-size:11px;padding:1px 8px;border-color:#f85149;color:#f85149" @click="cleanupKeepList = []; saveCleanupKeep()" title="Remove all from Keep List">Remove all</button>
+                          </div>
+                          <div style="max-height:160px;overflow-y:auto;overflow-x:hidden">
+                            <div style="column-count:3;column-gap:8px">
+                              <template x-for="(name, idx) in [...cleanupKeepList].sort((a,b) => a.localeCompare(b))" :key="'kl-'+idx">
+                                <div style="break-inside:avoid;display:flex;align-items:center;padding:1px 0;font-size:12px">
+                                  <span style="color:#58a6ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="name"></span>
+                                  <span style="color:#8b949e;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:4px" @click="removeCleanupKeep(cleanupKeepList.indexOf(name))" title="Remove">&times;</span>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -3353,7 +3372,7 @@
                     <input type="checkbox" :checked="pdGeneralActive" @change="pdSetGeneralActive($event.target.checked)">
                     <span class="slider"></span>
                   </label>
-                  <span style="font-size:12px;color:#aaa">Override</span>
+                  <span style="font-size:12px;color:#aaa" x-text="pdGeneralActive ? 'Hide Overrides' : 'Override'"></span>
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;gap:4px">
@@ -3361,11 +3380,10 @@
                 <div class="pd-row" x-show="activeAppType === 'radarr'">
                   <span class="pd-label">Language</span>
                   <template x-if="pdGeneralActive">
-                    <select class="pb-input pd-input" x-model="pdOverrides.language.value"
-                            :style="pdOverrides.language.value !== (profileDetail?.detail?.profile?.language || 'Original') ? 'border-color:#d29922' : ''">
-                      <template x-for="lang in (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}])" :key="lang.name">
-                        <option :value="lang.name" x-text="lang.name"></option>
-                      </template>
+                    <select class="pb-input pd-input"
+                            :style="pdOverrides.language.value !== (profileDetail?.detail?.profile?.language || 'Original') ? 'border-color:#d29922' : ''"
+                            x-effect="populateSelectField($el, (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}]).map(l => ({value: l.name, name: l.name})), pdOverrides.language.value)"
+                            @change="pdOverrides.language.value = $el.value">
                     </select>
                   </template>
                   <template x-if="!pdGeneralActive">
@@ -3442,7 +3460,7 @@
                     <input type="checkbox" :checked="pdQualityActive" @change="pdSetQualityActive($event.target.checked)">
                     <span class="slider"></span>
                   </label>
-                  <span style="font-size:12px;color:#aaa">Override</span>
+                  <span style="font-size:12px;color:#aaa" x-text="pdQualityActive ? 'Hide Overrides' : 'Override'"></span>
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;gap:4px">
@@ -3450,15 +3468,10 @@
                 <div class="pd-row">
                   <span class="pd-label">Cutoff</span>
                   <template x-if="pdQualityActive">
-                    <select class="pb-input pd-input" x-model="pdOverrides.cutoffQuality"
-                            :style="pdOverrides.cutoffQuality !== (profileDetail?.detail?.profile?.cutoff || '') && pdOverrides.cutoffQuality !== '' ? 'border-color:#d29922' : ''">
-                      <option :value="profileDetail?.detail?.profile?.cutoff || ''"
-                              :disabled="!qsTrashDefaultCutoffValid()"
-                              x-text="(profileDetail?.detail?.profile?.cutoff || '—') + (qsTrashDefaultCutoffValid() ? ' (TRaSH default)' : ' (TRaSH default — not in structure)')"></option>
-                      <template x-for="item in (qualityStructure.length > 0 ? qualityStructure : (profileDetail?.detail?.profile?.items || [])).filter(i => i.allowed !== false && i.name !== (profileDetail?.detail?.profile?.cutoff || ''))" :key="item.name + (item._id || '')">
-                        <option :value="item.name" x-text="item.name"></option>
-                      </template>
-                      <option value="__skip__">— Don't sync cutoff —</option>
+                    <select class="pb-input pd-input"
+                            :style="pdOverrides.cutoffQuality !== (profileDetail?.detail?.profile?.cutoff || '') && pdOverrides.cutoffQuality !== '' ? 'border-color:#d29922' : ''"
+                            x-effect="populateCutoffSelect($el, qualityStructure, profileDetail?.detail?.profile, pdOverrides.cutoffQuality)"
+                            @change="pdOverrides.cutoffQuality = $el.value">
                     </select>
                   </template>
                   <template x-if="!pdQualityActive">
@@ -3629,13 +3642,14 @@
           <!-- Sub-toggles for CF scores / Extra CFs -->
           <div style="margin-top:18px;background:#161b22;border:1px solid #444c56;border-radius:8px;padding:12px 18px;display:flex;align-items:center;gap:28px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,0.5)">
             <div style="display:flex;align-items:center;gap:8px">
-              <label class="toggle toggle-sm" title="Override individual CF scores on the profile's required CFs" style="flex-shrink:0">
+              <label class="toggle toggle-sm" title="Show/edit CF score overrides" style="flex-shrink:0">
                 <input type="checkbox" x-model="cfScoreOverrideActive">
                 <span class="slider"></span>
               </label>
-              <span style="font-size:13px;color:#e1e4e8">Override CF Scores</span>
+              <span style="font-size:13px;color:#e1e4e8" x-text="cfScoreOverrideActive ? 'Hide CF Scores' : 'Override CF Scores'"></span>
               <template x-if="Object.keys(cfScoreOverrides).length > 0">
-                <span style="font-size:11px;color:#d29922;background:#3d2e0a;padding:1px 6px;border-radius:8px" x-text="Object.keys(cfScoreOverrides).length + ' edited'"></span>
+                <span style="font-size:11px;color:#d29922;background:#3d2e0a;padding:1px 6px;border-radius:8px"
+                      x-text="Object.keys(cfScoreOverrides).length + ' edited'"></span>
               </template>
               <template x-if="Object.keys(cfScoreOverrides).length > 0">
                 <button class="btn" style="font-size:11px;padding:1px 8px;border-color:#d29922;color:#d29922" title="Reset all CF score overrides" @click="cfScoreOverrides = {}">&#8634; Reset</button>
@@ -3646,7 +3660,7 @@
                 <input type="checkbox" x-model="extraCFsActive" @change="if ($event.target.checked) loadExtraCFList()">
                 <span class="slider"></span>
               </label>
-              <span style="font-size:13px;color:#e1e4e8">Add Extra CFs</span>
+              <span style="font-size:13px;color:#e1e4e8" x-text="extraCFsActive ? 'Hide Extra CFs' : 'Add Extra CFs'"></span>
               <template x-if="Object.keys(extraCFs).length > 0">
                 <span style="font-size:11px;color:#d29922;background:#3d2e0a;padding:1px 6px;border-radius:8px" x-text="Object.keys(extraCFs).length + ' added'"></span>
               </template>
@@ -3655,6 +3669,27 @@
               </template>
             </div>
           </div>
+
+          <!-- Score Override Summary — shown when toggle is active and overrides exist -->
+          <template x-if="cfScoreOverrideActive && Object.keys(cfScoreOverrides).length > 0">
+            <div style="margin-top:8px;background:#161b22;border:1px solid #d29922;border-radius:6px;padding:10px 14px">
+              <div style="font-size:12px;font-weight:600;color:#d29922;margin-bottom:8px">Overridden Scores</div>
+              <div :style="'column-count:' + (Object.keys(cfScoreOverrides).length > 8 ? 2 : 1) + ';column-gap:24px'">
+                <template x-for="tid in Object.keys(cfScoreOverrides).sort((a,b) => (resolveCFName(a)).localeCompare(resolveCFName(b)))" :key="'so-'+tid">
+                  <div style="break-inside:avoid;display:flex;align-items:center;padding:3px 0;font-size:12px;gap:4px">
+                    <span style="color:#e1e4e8;width:180px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="resolveCFName(tid)"></span>
+                    <span style="color:#aaa;width:55px;flex-shrink:0;text-align:right;font-family:monospace" x-text="resolveCFDefaultScore(tid)"></span>
+                    <span style="color:#aaa;flex-shrink:0;margin:0 2px">→</span>
+                    <input type="number" class="pb-score-input overridden" style="width:65px;flex-shrink:0"
+                           :value="cfScoreOverrides[tid]"
+                           @change="const v = parseInt($event.target.value) || 0; const def = resolveCFDefaultScore(tid); if (v === def) { const {[tid]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [tid]: v}; }">
+                    <span @click="const {[tid]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest"
+                          style="color:#d29922;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:2px" title="Reset to TRaSH default">&#8634;</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- Extra CFs -->
@@ -3676,15 +3711,15 @@
             <template x-if="Object.keys(extraCFs).length > 0">
               <div style="margin-bottom:8px;padding:6px 8px;background:#0d1117;border-radius:4px">
                 <div style="font-size:12px;color:#d29922;margin-bottom:4px;font-weight:600">Added (<span x-text="Object.keys(extraCFs).length"></span>)</div>
-                <div :style="'column-count:' + (Object.keys(extraCFs).length > 20 ? 3 : Object.keys(extraCFs).length > 10 ? 2 : 1) + ';column-gap:24px'">
-                <template x-for="tid in Object.keys(extraCFs)" :key="'xs-'+tid">
-                  <div style="break-inside:avoid;padding:3px 0;line-height:18px;white-space:nowrap;overflow:hidden">
-                    <label class="toggle toggle-sm" style="vertical-align:middle;margin-right:6px">
+                <div :style="'column-count:' + (Object.keys(extraCFs).length > 8 ? 2 : 1) + ';column-gap:24px'">
+                <template x-for="tid in Object.keys(extraCFs).sort((a,b) => ((extraCFAllCFs.find(c => c.trashId === a)?.name || a).localeCompare(extraCFAllCFs.find(c => c.trashId === b)?.name || b)))" :key="'xs-'+tid">
+                  <div style="break-inside:avoid;display:flex;align-items:center;padding:3px 0;gap:4px">
+                    <label class="toggle toggle-sm" style="flex-shrink:0">
                       <input type="checkbox" :checked="extraCFs[tid] !== undefined" @change="const {[tid]: _, ...rest} = extraCFs; extraCFs = rest">
                       <span class="slider"></span>
                     </label>
-                    <span style="font-size:13px;color:#d29922;vertical-align:middle;overflow:hidden;text-overflow:ellipsis" x-text="extraCFAllCFs.find(c => c.trashId === tid)?.name || tid.substring(0,12)"></span>
-                    <input type="number" class="pb-score-input overridden" :value="extraCFs[tid]" @change="extraCFs = {...extraCFs, [tid]: parseInt($event.target.value)||0}" style="width:60px;vertical-align:middle;margin-left:6px">
+                    <span style="font-size:13px;color:#d29922;width:180px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="extraCFAllCFs.find(c => c.trashId === tid)?.name || resolveExtraCFName(tid)"></span>
+                    <input type="number" class="pb-score-input overridden" :value="extraCFs[tid]" @change="extraCFs = {...extraCFs, [tid]: parseInt($event.target.value)||0}" style="width:65px;flex-shrink:0">
                   </div>
                 </template>
                 </div>
@@ -3747,6 +3782,8 @@
                                      :value="cfScoreOverrides[cf.trashId] ?? cf.score ?? 0"
                                      @change="const v = parseInt($event.target.value) || 0; if (v === (cf.score ?? 0)) { const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [cf.trashId]: v}; }"
                                      style="width:65px">
+                              <span x-show="cfScoreOverrides[cf.trashId] !== undefined" @click="const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest"
+                                    style="color:#d29922;font-size:12px;cursor:pointer;margin-left:2px;vertical-align:middle" title="Reset to TRaSH default">&#8634;</span>
                             </div>
                           </template>
                           <template x-if="!cfScoreOverrideActive">
@@ -3875,6 +3912,8 @@
                                  :value="cfScoreOverrides[fi.trashId] ?? fi.score ?? 0"
                                  @change="const v = parseInt($event.target.value) || 0; if (v === (fi.score ?? 0)) { const {[fi.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [fi.trashId]: v}; }"
                                  style="width:65px">
+                          <span x-show="cfScoreOverrides[fi.trashId] !== undefined" @click="const {[fi.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest"
+                                style="color:#d29922;font-size:12px;cursor:pointer;margin-left:2px;vertical-align:middle" title="Reset to TRaSH default">&#8634;</span>
                         </div>
                       </template>
                       <template x-if="!cfScoreOverrideActive">
@@ -3902,8 +3941,15 @@
                   <div style="font-size:13px;font-weight:500" x-text="group.name"></div>
                   <span x-show="group.exclusive" style="font-size:11px;color:#d29922;background:#3d2e0a;padding:1px 5px;border-radius:3px">pick one</span>
                   <span x-show="group.defaultEnabled" style="font-size:11px;color:#3fb950;background:#0d2f1a;padding:1px 5px;border-radius:3px">default</span>
-                  <div style="font-size:13px;color:#aaa;margin-right:auto;margin-left:8px"
+                  <div style="font-size:13px;color:#aaa;margin-left:8px"
                        x-text="(() => { const on = selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled; if (!on) return '0/' + group.cfs.length; return group.cfs.filter(cf => cf.required || selectedOptionalCFs[cf.trashId]).length + '/' + group.cfs.length; })()"></div>
+                  <template x-if="group.cfs.some(cf => cfScoreOverrides[cf.trashId] !== undefined)">
+                    <span style="font-size:11px;color:#d29922;background:#3d2e0a;padding:1px 5px;border-radius:3px;margin-right:auto"
+                          x-text="group.cfs.filter(cf => cfScoreOverrides[cf.trashId] !== undefined).length + ' override' + (group.cfs.filter(cf => cfScoreOverrides[cf.trashId] !== undefined).length !== 1 ? 's' : '')"></span>
+                  </template>
+                  <template x-if="!group.cfs.some(cf => cfScoreOverrides[cf.trashId] !== undefined)">
+                    <span style="margin-right:auto"></span>
+                  </template>
                   <!-- Group toggle (not for exclusive/pick-one groups) -->
                   <label class="toggle toggle-sm" @click.stop x-show="!group.exclusive">
                     <input type="checkbox"
@@ -3958,6 +4004,8 @@
                                  :value="cfScoreOverrides[cf.trashId] ?? cf.score ?? 0"
                                  @change="const v = parseInt($event.target.value) || 0; if (v === (cf.score ?? 0)) { const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest; } else { cfScoreOverrides = {...cfScoreOverrides, [cf.trashId]: v}; }"
                                  style="width:65px">
+                          <span x-show="cfScoreOverrides[cf.trashId] !== undefined" @click="const {[cf.trashId]: _, ...rest} = cfScoreOverrides; cfScoreOverrides = rest"
+                                style="color:#d29922;font-size:12px;cursor:pointer;margin-left:2px;vertical-align:middle" title="Reset to TRaSH default">&#8634;</span>
                         </div>
                       </template>
                       <template x-if="!(cfScoreOverrideActive && (cf.required ? (selectedOptionalCFs['__grp_' + group.name] !== undefined ? selectedOptionalCFs['__grp_' + group.name] : group.defaultEnabled) : selectedOptionalCFs[cf.trashId]))">
@@ -5391,10 +5439,9 @@
                     </template>
                     <!-- Select dropdown -->
                     <template x-if="field.type === 'select'">
-                      <select class="input" x-model="field.value" style="font-size:12px;padding:4px 8px">
-                        <template x-for="opt in (field.selectOptions || [])" :key="opt.value ?? opt">
-                          <option :value="opt.value ?? opt" x-text="opt.name ?? opt"></option>
-                        </template>
+                      <select class="input" style="font-size:12px;padding:4px 8px"
+                              x-effect="populateSelectField($el, field.selectOptions || [], String(field.value))"
+                              @change="field.value = $el.value">
                       </select>
                     </template>
                     <!-- Checkbox (exceptLanguage, etc.) -->
@@ -8600,33 +8647,44 @@ function clonarr() {
       this.showCFEditor = true;
     },
 
-    // Convert Arr API specification to editor format
+    // Convert Arr API specification to editor format.
+    // Matches fields against the loaded schema to restore dropdowns, checkboxes, etc.
+    // Without this, Language specs show "value: 3" instead of a dropdown on edit.
     arrSpecToEditorSpec(arrSpec) {
       let fields = [];
+      // Parse raw fields from the stored spec
+      let rawFields = {};
       if (arrSpec.fields) {
-        // Arr format: [{name, value}, ...] or raw JSON
         let parsed = arrSpec.fields;
         if (typeof parsed === 'string') {
           try { parsed = JSON.parse(parsed); } catch(e) { parsed = []; }
         }
         if (Array.isArray(parsed)) {
-          fields = parsed.map(f => ({
-            name: f.name,
-            value: f.value,
-            label: f.name,
-            type: this.guessFieldType(f.name, f.value),
-            selectOptions: [],
-          }));
+          for (const f of parsed) rawFields[f.name] = f.value;
         } else if (typeof parsed === 'object') {
-          // TRaSH format: {value: X} or {value: X, exceptLanguage: Y}
-          fields = Object.entries(parsed).map(([k, v]) => ({
-            name: k,
-            value: v,
-            label: k,
-            type: this.guessFieldType(k, v),
-            selectOptions: [],
-          }));
+          rawFields = { ...parsed };
         }
+      }
+      // Try to match against schema for this implementation type
+      const schema = (this.cfEditorSchema[this.cfEditorForm.appType] || [])
+        .find(s => s.implementation === arrSpec.implementation);
+      if (schema) {
+        fields = schema.fields.map(f => {
+          let val = rawFields[f.name] !== undefined ? rawFields[f.name] : (f.defaultValue !== undefined ? f.defaultValue : '');
+          // Select fields: keep as string to match HTML select behavior (x-model always returns strings).
+          // Number coercion happens at save time, not at load time.
+          if (f.type === 'select') val = String(val);
+          return { name: f.name, value: val, label: f.label, type: f.type, selectOptions: f.selectOptions || [], placeholder: f.placeholder || '' };
+        });
+      } else {
+        // No schema match — fallback to guessing
+        fields = Object.entries(rawFields).map(([k, v]) => ({
+          name: k,
+          value: v,
+          label: k,
+          type: this.guessFieldType(k, v),
+          selectOptions: [],
+        }));
       }
       return {
         _key: ++this.cfEditorSpecCounter,
@@ -8692,6 +8750,48 @@ function clonarr() {
 
     getAvailableImplementations() {
       return this.cfEditorSchema[this.cfEditorForm.appType] || [];
+    },
+
+    populateCutoffSelect(el, qualityStructure, profile, selectedValue) {
+      const items = (qualityStructure.length > 0 ? qualityStructure : (profile?.items || [])).filter(i => i.allowed !== false);
+      const trashDefault = profile?.cutoff || '';
+      const trashValid = !trashDefault || items.some(i => i.name === trashDefault);
+      const options = [];
+      // TRaSH default option (first)
+      if (trashDefault) {
+        options.push({ value: trashDefault, name: trashDefault + (trashValid ? ' (TRaSH default)' : ' (TRaSH default — not in structure)'), disabled: !trashValid });
+      }
+      // All allowed items except TRaSH default (avoid duplicate)
+      for (const item of items) {
+        if (item.name !== trashDefault) options.push({ value: item.name, name: item.name });
+      }
+      // Skip option
+      options.push({ value: '__skip__', name: '— Don\'t sync cutoff —' });
+      // Rebuild options
+      el.innerHTML = '';
+      for (const opt of options) {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.name;
+        if (opt.disabled) o.disabled = true;
+        el.appendChild(o);
+      }
+      if (el.value !== (selectedValue || trashDefault)) el.value = selectedValue || trashDefault;
+    },
+
+    populateSelectField(el, options, selectedValue) {
+      const currentCount = el.options.length;
+      const needsRebuild = currentCount !== options.length;
+      if (needsRebuild) {
+        el.innerHTML = '';
+        for (const opt of options) {
+          const o = document.createElement('option');
+          o.value = String(opt.value ?? opt);
+          o.textContent = opt.name ?? String(opt.value ?? opt);
+          el.appendChild(o);
+        }
+      }
+      if (el.value !== selectedValue) el.value = selectedValue;
     },
 
     populateImplSelect(el, selectedImpl) {
@@ -8797,12 +8897,20 @@ function clonarr() {
       }
 
       // Build payload in Arr field format: [{name, value}]
+      // Coerce select field string values to numbers where appropriate (HTML select always returns strings)
       const specifications = f.specifications.map(s => ({
         name: s.name,
         implementation: s.implementation,
         negate: s.negate,
         required: s.required,
-        fields: JSON.parse(JSON.stringify(s.fields.map(fld => ({ name: fld.name, value: fld.value })))),
+        fields: JSON.parse(JSON.stringify(s.fields.map(fld => {
+          let val = fld.value;
+          if (fld.type === 'select' && typeof val === 'string' && val !== '') {
+            const n = Number(val);
+            if (!isNaN(n)) val = n;
+          }
+          return { name: fld.name, value: val };
+        }))),
       }));
 
       // Build trash_scores as object
@@ -9485,6 +9593,20 @@ function clonarr() {
       this.cleanupKeepInput = '';
       await this.saveCleanupKeep();
     },
+    async addAllMatchingKeep() {
+      const query = this.cleanupKeepInput.trim().toLowerCase();
+      if (!query) return;
+      const matching = this.cleanupCFNames.filter(n =>
+        n.toLowerCase().includes(query) && !this.cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())
+      );
+      if (matching.length === 0) return;
+      this.cleanupKeepList.push(...matching);
+      this.cleanupKeepInput = '';
+      this.cleanupKeepSuggestions = [];
+      await this.saveCleanupKeep();
+      this.showToast(`Added ${matching.length} CFs to Keep List`, 'info', 3000);
+    },
+
     async removeCleanupKeep(idx) {
       this.cleanupKeepList.splice(idx, 1);
       await this.saveCleanupKeep();
@@ -9958,6 +10080,46 @@ function clonarr() {
       const ids = this.getSelectedCFIds();
       const extraIds = Object.keys(this.extraCFs);
       return extraIds.length > 0 ? [...ids, ...extraIds] : ids;
+    },
+
+    resolveCFName(tid) {
+      const detail = this.profileDetail?.detail;
+      if (!detail) return tid.substring(0, 12);
+      for (const fi of (detail.formatItemNames || [])) {
+        if (fi.trashId === tid) return fi.name;
+      }
+      for (const g of (detail.trashGroups || [])) {
+        for (const cf of g.cfs) {
+          if (cf.trashId === tid) return cf.name;
+        }
+      }
+      return tid.replace(/^custom:/, '').substring(0, 12);
+    },
+
+    resolveCFDefaultScore(tid) {
+      const detail = this.profileDetail?.detail;
+      if (!detail) return '?';
+      for (const fi of (detail.formatItemNames || [])) {
+        if (fi.trashId === tid) return fi.score ?? 0;
+      }
+      for (const g of (detail.trashGroups || [])) {
+        for (const cf of g.cfs) {
+          if (cf.trashId === tid) return cf.score ?? 0;
+        }
+      }
+      return '?';
+    },
+
+    resolveExtraCFName(tid) {
+      // Fallback name resolver for extra CFs not found in extraCFAllCFs.
+      // Checks instance CF names (for CFs synced to Arr but not in TRaSH groups).
+      if (this._extraCFNameCache?.[tid]) return this._extraCFNameCache[tid];
+      const instCFs = this.cleanupCFNames || [];
+      // Custom CFs: try to find by partial ID match in extraCFAllCFs or instance
+      for (const cf of (this.extraCFAllCFs || [])) {
+        if (cf.trashId === tid) { return cf.name; }
+      }
+      return tid.replace(/^custom:/, '').substring(0, 12);
     },
 
     async loadExtraCFList() {
@@ -11719,7 +11881,11 @@ function clonarr() {
     },
 
     async syncAllForInstance(inst, builderOnly = false) {
-      const all = this.syncHistory[inst.id] || [];
+      // Use sortedSyncRules which deduplicates to latest entry per arrProfileId.
+      // Before the ring-buffer, syncHistory had one entry per profile. Now it can
+      // have up to 10 — iterating all would sync older entries with different
+      // selectedCFs, causing score oscillation (each old entry undoes the next).
+      const all = this.sortedSyncRules(inst.id);
       const entries = (builderOnly ? all.filter(sh => sh.importedProfileId) : all.filter(sh => !sh.importedProfileId))
         .filter(sh => {
           const rule = this.autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId);
@@ -11841,6 +12007,15 @@ function clonarr() {
         });
         this.qualityOverrideActive = true;
         this.pdQualityActive = true;
+        // If TRaSH default cutoff is not in the overridden structure, pick first allowed
+        const defaultCutoff = this.profileDetail?.detail?.profile?.cutoff || '';
+        if (!this.pdOverrides.cutoffQuality && defaultCutoff) {
+          const inStructure = this.qualityStructure.some(it => it.name === defaultCutoff && it.allowed !== false);
+          if (!inStructure) {
+            const firstAllowed = this.qualityStructure.find(it => it.allowed !== false);
+            if (firstAllowed) this.pdOverrides.cutoffQuality = firstAllowed.name;
+          }
+        }
       } else if (sh.qualityOverrides && Object.keys(sh.qualityOverrides).length > 0) {
         this.qualityOverrides = { ...sh.qualityOverrides };
         this.qualityOverrideActive = true;
@@ -11903,9 +12078,8 @@ function clonarr() {
           rules.push(sh);
         }
       }
-      const col = this.syncRulesSort.col;
-      if (!col) return rules;
-      const dir = this.syncRulesSort.dir === 'asc' ? 1 : -1;
+      const col = this.syncRulesSort.col || 'arr';
+      const dir = this.syncRulesSort.dir === 'desc' ? -1 : 1;
       return [...rules].sort((a, b) => {
         const av = col === 'trash' ? (a.profileName || '') : (a.arrProfileName || '');
         const bv = col === 'trash' ? (b.profileName || '') : (b.arrProfileName || '');
