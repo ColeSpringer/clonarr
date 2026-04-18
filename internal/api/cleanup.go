@@ -382,11 +382,7 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 		syncedCFNames[strings.ToLower(ccf.Name)] = true
 	}
 
-	// Build CF name→ID map
-	cfNameToID := make(map[string]int)
-	for _, cf := range cfs {
-		cfNameToID[cf.Name] = cf.ID
-	}
+
 
 	// Find CFs with non-zero scores that aren't in any synced profile
 	// Collect all profiles where each CF has a non-zero score

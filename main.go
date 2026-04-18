@@ -59,6 +59,7 @@ func main() {
 		Profiles:     profilesStore,
 		CustomCFs:    customCFsStore,
 		DebugLog:     debugLogStore,
+		Version:      Version,
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		NotifyClient: &http.Client{Timeout: 10 * time.Second},
 		PullUpdateCh: make(chan string, 1),

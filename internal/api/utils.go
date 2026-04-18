@@ -67,7 +67,7 @@ func maskKey(key string) string {
 
 // isMasked detects if a key was produced by maskKey.
 func isMasked(key string) bool {
-	if key == "" || key == maskSentinel {
+	if key == maskSentinel {
 		return true
 	}
 	// maskKey produces: 4 chars + N asterisks + 4 chars (len >= 9)
