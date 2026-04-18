@@ -59,8 +59,8 @@ func TestMaskKey_ExactlyNineChars(t *testing.T) {
 }
 
 func TestIsMasked_Empty(t *testing.T) {
-	if !isMasked("") {
-		t.Error("empty string should be detected as masked")
+	if isMasked("") {
+		t.Error("empty string should NOT be detected as masked (allow clearing keys)")
 	}
 }
 
