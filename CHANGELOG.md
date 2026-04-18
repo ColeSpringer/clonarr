@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.3
+
+### Added
+
+- **Docker Hub mirror** — Image now published to both GHCR (`ghcr.io/prophetse7en/clonarr`) and Docker Hub (`prophetse7en/clonarr`). Use Docker Hub if your platform can't pull from GHCR (e.g. Synology DSM with older Docker).
+- **Per-webhook Discord test buttons** — Sync webhook and Updates webhook each have their own Test button.
+
 ## v2.0.2
 
 ### Added
