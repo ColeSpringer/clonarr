@@ -1087,16 +1087,16 @@ func (s *Server) buildQualitySizeDefs(inst core.Instance, qsType string) ([]arr.
 		if def == nil {
 			continue
 		}
-		if math.Abs(def.MinSize-qs.Min) >= 0.05 ||
-			math.Abs(def.PreferredSize-qs.Preferred) >= 0.05 ||
-			math.Abs(def.MaxSize-qs.Max) >= 0.05 {
+		if math.Abs(arr.FloatVal(def.MinSize)-qs.Min) >= 0.05 ||
+			math.Abs(arr.FloatVal(def.PreferredSize)-qs.Preferred) >= 0.05 ||
+			math.Abs(arr.FloatVal(def.MaxSize)-qs.Max) >= 0.05 {
 			updated = append(updated, arr.ArrQualityDefinition{
 				ID:            def.ID,
 				Quality:       def.Quality,
 				Title:         def.Title,
-				MinSize:       qs.Min,
-				PreferredSize: qs.Preferred,
-				MaxSize:       qs.Max,
+				MinSize:       arr.FloatPtr(qs.Min),
+				PreferredSize: arr.FloatPtr(qs.Preferred),
+				MaxSize:       arr.FloatPtr(qs.Max),
 			})
 		}
 	}
@@ -1257,16 +1257,16 @@ func (s *Server) AutoSyncQualitySizes() {
 				continue
 			}
 
-			if math.Abs(def.MinSize-qs.Min) >= 0.05 ||
-				math.Abs(def.PreferredSize-qs.Preferred) >= 0.05 ||
-				math.Abs(def.MaxSize-qs.Max) >= 0.05 {
+			if math.Abs(arr.FloatVal(def.MinSize)-qs.Min) >= 0.05 ||
+				math.Abs(arr.FloatVal(def.PreferredSize)-qs.Preferred) >= 0.05 ||
+				math.Abs(arr.FloatVal(def.MaxSize)-qs.Max) >= 0.05 {
 				updated = append(updated, arr.ArrQualityDefinition{
 					ID:            def.ID,
 					Quality:       def.Quality,
 					Title:         def.Title,
-					MinSize:       qs.Min,
-					PreferredSize: qs.Preferred,
-					MaxSize:       qs.Max,
+					MinSize:       arr.FloatPtr(qs.Min),
+					PreferredSize: arr.FloatPtr(qs.Preferred),
+					MaxSize:       arr.FloatPtr(qs.Max),
 				})
 			}
 		}
