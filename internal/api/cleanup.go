@@ -266,11 +266,10 @@ func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanRe
 	}
 	groups := make(map[string][]cfEntry)
 	for _, cf := range cfs {
-		// Build fingerprint from sorted spec names + values
+		// Build fingerprint from sorted spec names + implementation + ALL fields
 		var parts []string
 		for _, spec := range cf.Specifications {
-			val := core.ExtractFieldValue(spec.Fields)
-			parts = append(parts, spec.Name+":"+spec.Implementation+":"+stringify(val))
+			parts = append(parts, spec.Name+":"+spec.Implementation+":"+fingerprintFields(spec.Fields))
 		}
 		sort.Strings(parts)
 		key := strings.Join(parts, "|")
@@ -293,13 +292,46 @@ func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanRe
 	}
 
 	return &CleanupScanResult{
-		Action:        "duplicates",
-		InstanceID:    inst.ID,
-		Instance: inst.Name,
-		TotalCount:    len(cfs),
-		AffectCount:   len(items),
-		Items:         items,
+		Action:      "duplicates",
+		InstanceID:  inst.ID,
+		Instance:    inst.Name,
+		TotalCount:  len(cfs),
+		AffectCount: len(items),
+		Items:       items,
 	}, nil
+}
+
+// fingerprintFields builds a deterministic string from all fields in a specification.
+func fingerprintFields(fields any) string {
+	m, ok := fields.(map[string]any)
+	if !ok {
+		// Try slice of maps (sometimes used for complex fields)
+		if slice, ok := fields.([]any); ok {
+			var parts []string
+			for _, item := range slice {
+				parts = append(parts, fingerprintFields(item))
+			}
+			return "[" + strings.Join(parts, ",") + "]"
+		}
+		return stringify(fields)
+	}
+
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, k := range keys {
+		if b.Len() > 0 {
+			b.WriteRune(',')
+		}
+		b.WriteString(k)
+		b.WriteRune(':')
+		b.WriteString(stringify(m[k]))
+	}
+	return "{" + b.String() + "}"
 }
 
 func scanAllCFs(client *arr.ArrClient, inst core.Instance, action string, keep []string) (*CleanupScanResult, error) {

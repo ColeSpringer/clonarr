@@ -10,7 +10,7 @@ type Server struct {
 	Core *core.App
 }
 
-// NewServer creates a new API server instance and registers all routes.
+// NewServer creates a new API server instance.
 func NewServer(app *core.App) *Server {
 	s := &Server{
 		Core: app,
