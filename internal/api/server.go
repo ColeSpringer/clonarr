@@ -1,13 +1,15 @@
 package api
 
 import (
+	"clonarr/internal/auth"
 	"clonarr/internal/core"
 	"net/http"
 )
 
 // Server wraps the core application and provides HTTP handlers.
 type Server struct {
-	Core *core.App
+	Core      *core.App
+	AuthStore *auth.Store
 }
 
 // NewServer creates a new API server instance.

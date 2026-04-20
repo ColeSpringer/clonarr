@@ -2,6 +2,7 @@ package api
 
 import (
 	"clonarr/internal/core"
+	"clonarr/internal/utils"
 	"log"
 	"net/http"
 	"sort"
@@ -15,7 +16,7 @@ func (s *Server) handleTrashStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleTrashPull(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
-	go func() {
+	utils.SafeGo("manual-trash-pull", func() {
 		prevCommit := s.Core.Trash.CurrentCommit()
 		if err := s.Core.Trash.CloneOrPull(cfg.TrashRepo.URL, cfg.TrashRepo.Branch); err != nil {
 			log.Printf("TRaSH pull failed: %v", err)
@@ -30,7 +31,7 @@ func (s *Server) handleTrashPull(w http.ResponseWriter, r *http.Request) {
 			s.AutoSyncQualitySizes()
 			s.Core.AutoSyncAfterPull()
 		}
-	}()
+	})
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]string{"status": "pulling"})
 }

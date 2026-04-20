@@ -1,5 +1,98 @@
 # Changelog
 
+## v2.0.8
+
+### Changed
+
+- **Architecture Improvements**: Complete refactoring of backend packages from the root `ui/` directory to standard Go layout `internal/api/`, `internal/core/`, `internal/auth/`, and `internal/netsec/`.
+- **Background Panic Recovery**: Standardized asynchronous routines using `utils.SafeGo` to prevent complete application crashes from unexpected panics.
+
+## v2.0.7
+
+### Fixed
+
+- **Golden Rule (and other exclusive CF groups) can now be disabled at the group level.** Previously, groups that TRaSH marks with a "pick one" exclusivity hint in their description (like `[Required] Golden Rule UHD`) had their group-level toggle hidden in the profile detail / TRaSH-sync view — users had no way to say "I don't want this group at all", only "enable / disable each CF individually". That was inconsistent with how equivalent optional groups (HDR Formats, Optional Movie Versions, Audio Formats) behave, and stricter than what TRaSH's own schema supports (both Golden Rule CFs are `required: false`). The group toggle is now shown for every group including exclusive ones. Behavior:
+  - Group ON + not exclusive → all non-required CFs auto-enabled (unchanged).
+  - Group ON + exclusive → no CFs auto-enabled; user picks one via pick-one logic.
+  - Group OFF → all CFs in the group cleared regardless.
+  - The "only enable one" warning still shows when the group is expanded.
+
+## v2.0.6
+
+**⚠️ Breaking change:** Authentication is now enabled by default (Forms + "Disabled for Trusted Networks", matching the Radarr/Sonarr pattern). On first run after upgrade, Clonarr will redirect to `/setup` to create an admin username and password. Existing sessions are invalidated (cookie name changed from `constat_session` to `clonarr_session` as part of branding cleanup). Homepage widgets and external scripts hitting `/api/*` now need the API key (Settings → Security) — send as `X-Api-Key` header.
+
+### Added
+
+- **Authentication (Radarr/Sonarr pattern)** — `/config/auth.json` stores the bcrypt-hashed password + API key. Three modes:
+  - `forms` (default): login page + session cookie, 30-day TTL.
+  - `basic`: HTTP Basic behind a reverse proxy.
+  - `none`: auth disabled (requires password-confirm to enable — catastrophic blast radius).
+- **Authentication Required** — `enabled` (every request needs auth) or `disabled_for_local_addresses` (default — LAN bypasses).
+- **Trusted Networks** — user-configurable CIDR list of what counts as "local". Empty = Radarr-parity defaults (10/8, 172.16/12, 192.168/16, link-local, IPv6 ULA, loopback). Narrow the list (`192.168.0.0/24`, `192.168.0.5/32`) for tighter control.
+- **Trusted Proxies** — required when Clonarr sits behind a reverse proxy (SWAG, Authelia, etc.) so `X-Forwarded-For` is trusted.
+- **Env-var override for trust-boundary config** — set `TRUSTED_NETWORKS` and/or `TRUSTED_PROXIES` in the Unraid template or `docker-compose.yml` to pin the values at host level. When set, the UI shows the field as locked and rejects edits — the trust boundary can only be changed by editing the template and restarting.
+- **API key** — auto-generated on first setup, rotatable from the Security panel. Send as `X-Api-Key: <key>` header (preferred) or `?apikey=<key>` query param (legacy — leaks to access logs and browser history). For Homepage widgets, scripts, Uptime Kuma.
+- **Change password** — from the Security panel. Requires current password. Invalidates all other sessions.
+- **CSRF protection** — double-submit cookie pattern on all state-mutating requests. Transparent to browser users; scripts using the API key bypass (verified key required, not just presence).
+- **Security headers** — `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`. Radarr-parity scope.
+- **SSRF-safe notification client** — Discord and Pushover (both always external) now use a blocklisted HTTP client that refuses RFC1918/loopback/link-local/ULA/NAT64/CGN/doc-range targets with per-request IP revalidation (defeats DNS rebinding). Gotify stays on a plain client (LAN targets are legitimate for self-hosted Gotify).
+- **Webhook and notification secret masking** — Discord webhook URLs, Gotify token, Pushover user key + app token, and Arr instance API keys are masked in API responses. Empty-on-unchanged-edit preserves the stored value on save (so editing unrelated fields doesn't clobber secrets).
+
+### Fixed
+
+- **T64 — live-reload no longer clobbers env-locked trust-boundary fields.** Previously any unrelated config save (session TTL, auth mode) could silently empty the env-derived trusted-networks slice. Now guarded at every call site.
+- **T65 — `UpdateConfig` preserves all deployment-level fields.** Previously only `AuthFilePath` was preserved; `SessionsFilePath`, `MaxSessions`, and env-lock state could be silently dropped by a future caller building config from scratch. Defense-in-depth: also force-restores locked values from the internal state.
+- **T66 — data races eliminated from `Middleware` / `TrustedProxies()` / `IsRequestFromTrustedProxy()`.** Config snapshot taken via `RLock` at the top; all downstream reads use the local value. Passes `go test -race`.
+
+### Changed
+
+- **Cookie rename** — `constat_csrf` → `clonarr_csrf`, `constat_session` → `clonarr_session`. Avoids browser-scope collision when both apps sit behind the same parent domain. Existing sessions won't survive the upgrade.
+- **Basic realm** — `WWW-Authenticate: Basic realm="Clonarr"` (was `"Constat"` from initial port).
+- **Setup page footer** — GitHub link points to `prophetse7en/clonarr` (was `/constat`).
+
+### Security
+
+- First-run forces the `/setup` wizard — no default credentials.
+- bcrypt cost 12; password verify is timing-equalized (prevents user-enumeration via response timing).
+- Session persistence via atomic write to `/config/sessions.json` (survives container restart).
+- CIDR min-mask enforced (`/8` IPv4, `/16` IPv6) to reject mis-typed host bits masking as subnets.
+- See `docs/security-implementation-baseline.md` in the repo for the full trap catalogue (T1–T66) behind the implementation.
+
+### Notes for upgraders
+
+- First boot redirects to `/setup`. Choose a strong password (≥10 chars, 2+ of upper/lower/digit/symbol).
+- If you access Clonarr from the same LAN the host is on, the default "Disabled for Trusted Networks" mode will skip login for you — no change in day-to-day UX.
+- Homepage / Uptime Kuma: use the API key from Security panel, send as `X-Api-Key` header.
+- Lost your password: stop the container, delete `/config/auth.json` (credentials only — no profile data), restart. The setup wizard will run again.
+
+## v2.0.5
+
+### Fixed
+
+- **Extra CFs showed hex IDs instead of names in Overridden Scores** — Score overrides on Extra CFs (CFs added to a profile but not part of the base TRaSH profile) displayed their trash ID (e.g. `82cc7396f79a`) instead of the CF name after Save & Sync. The display helpers only looked at CFs belonging to the base profile; they now fall back to the Extra CFs list so the correct name and default score are shown. Sort order in the panel also now uses real names. Same fix covers both TRaSH Extra CFs and user-created custom CFs added as extras.
+
+## v2.0.4
+
+### Fixed
+
+- **Quality Definitions null values** — Sonarr/Radarr "Unlimited" (null) for preferred/max size showed as 0.0. Now uses `*float64` to distinguish null from explicit zero.
+- **Sync All score oscillation** — Ring-buffer entries with different selectedCFs caused scores to flip-flop on every Sync All. Now deduplicates to latest entry per profile.
+- **CF Editor dropdowns lost on edit** — Language, Resolution, and other select-type specs showed raw numeric values instead of dropdown. Three-part fix: schema matching, string coercion, and programmatic option population (replaces `<template x-for>` inside `<select>`).
+- **Cutoff dropdown showing deleted group** — When quality structure override removed the TRaSH default cutoff group, dropdown showed the deleted name. Now auto-picks first allowed quality. Also fixed same `x-for`-in-`select` timing bug.
+- **Language dropdown in Edit view** — Same programmatic population fix applied.
+- **Custom CF filenames** — Regression from path traversal fix: files saved as `custom:hex.json` instead of readable names. Now uses sanitized CF name. Auto-migrates on startup.
+- **GitHub #10** — Unknown quality names (group names without sub-items, cross-type names) now skipped with log warning instead of failing entire sync.
+- **pprof debug endpoints removed** — `/debug/pprof/*` endpoints removed from release builds.
+
+### Improved
+
+- **Score Override UX** — Summary panel shows all overridden CFs when toggle is active, editable inline with per-CF ↻ reset button. Override count badge per CF group header.
+- **Toggle labels** — "Override" → "Hide Overrides" when active (General, Quality, CF Scores, Extra CFs).
+- **Extra CFs layout** — Fixed-width columns (toggle | name 180px | score 65px), sorted A→Z.
+- **Keep List redesign** — Side-by-side layout: search + Add/Add all on left, 3-column CF list on right. Batch "Add all (N)" matching, "Remove all" button.
+- **Sync Rules default sort** — A→Z by Arr Profile name instead of ring-buffer insertion order.
+- **Per-webhook Discord test** — Sync and Updates webhooks each have independent Test buttons.
+
 ## v2.0.3
 
 ### Added

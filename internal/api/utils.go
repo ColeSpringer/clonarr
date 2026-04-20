@@ -19,14 +19,53 @@ var numericReleaseGroupRE = regexp.MustCompile(`-(\d+)$`)
 // writeJSON encodes v as JSON and writes it to w.
 func writeJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
+	// No-store prevents shared browser caches + reverse-proxy caches from
+	// retaining /api/* responses. Even with masking, a 4+4 API-key reveal
+	// or config blob shouldn't live on a kiosk browser after logout.
+	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		log.Printf("writeJSON: encode error: %v", err)
 	}
 }
 
+// ==== Credential masking =====================================================
+// Discord webhook URLs and Gotify/Pushover tokens are bearer credentials —
+// whoever holds them can post messages as Clonarr. They must not appear in
+// plaintext in responses so a compromised session, local-bypass peer, or
+// leaked API call log cannot exfiltrate them. Masking pattern:
+//   - GET responses return a placeholder form
+//   - SAVE handlers detect the placeholder on input and preserve the stored
+//     value instead of overwriting with the placeholder (so "Save" without
+//     edits is a no-op for secrets).
+
+const (
+	maskedDiscordWebhook = "https://discord.com/api/webhooks/[MASKED]/[MASKED]"
+	maskedToken          = "••••••••••••••••" // 16 bullets — looks different from any real token
+)
+
+// maskSecret returns the placeholder if s is non-empty; otherwise empty.
+// Empty stays empty so the UI can distinguish "not set" from "set but hidden".
+func maskSecret(s, placeholder string) string {
+	if s == "" {
+		return ""
+	}
+	return placeholder
+}
+
+// preserveIfMasked returns existing when incoming equals the placeholder —
+// i.e. the UI returned the masked value unchanged. Otherwise returns incoming
+// (including empty string, which represents explicit deletion).
+func preserveIfMasked(incoming, existing, placeholder string) string {
+	if incoming == placeholder {
+		return existing
+	}
+	return incoming
+}
+
 // writeError writes a JSON error response.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

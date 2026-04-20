@@ -41,6 +41,7 @@ type App struct {
 	Version        string
 	HTTPClient     *http.Client // shared HTTP client for Arr/Prowlarr API calls
 	NotifyClient   *http.Client // shared HTTP client for Discord/Gotify notifications
+	SafeClient     *http.Client // shared HTTP client with SSRF blocklist (Pushover, Discord)
 	PullUpdateCh   chan string  // send new interval string to reschedule pull
 	CleanupEvents  []CleanupEvent
 	CleanupMu      sync.Mutex

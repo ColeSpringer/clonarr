@@ -21,8 +21,13 @@ type Config struct {
 	QualitySizeAutoSync  map[string]QSAutoSync            `json:"qualitySizeAutoSync,omitempty"`  // instanceID → auto-sync settings
 	SyncHistory          []SyncHistoryEntry               `json:"syncHistory,omitempty"`
 	CleanupKeep          map[string][]string              `json:"cleanupKeep,omitempty"` // instanceID → CF names to keep during delete-all
-	AutoSync             AutoSyncConfig                   `json:"autoSync,omitempty"`
-	Prowlarr             ProwlarrConfig                   `json:"prowlarr,omitempty"`
+	AutoSync               AutoSyncConfig                   `json:"autoSync,omitempty"`
+	Prowlarr               ProwlarrConfig                   `json:"prowlarr,omitempty"`
+	Authentication         string                           `json:"authentication,omitempty"`
+	AuthenticationRequired string                           `json:"authenticationRequired,omitempty"`
+	SessionTTLDays         int                              `json:"sessionTtlDays,omitempty"`
+	TrustedNetworks        string                           `json:"trustedNetworks,omitempty"`
+	TrustedProxies         string                           `json:"trustedProxies,omitempty"`
 }
 
 // ProwlarrConfig holds Prowlarr connection settings for the Scoring Sandbox.

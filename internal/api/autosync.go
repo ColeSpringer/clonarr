@@ -23,11 +23,11 @@ func (s *Server) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Reques
 		"notifyOnFailure":        cfg.AutoSync.NotifyOnFailure,
 		"notifyOnRepoUpdate":     cfg.AutoSync.NotifyOnRepoUpdate,
 		"discordEnabled":         cfg.AutoSync.DiscordEnabled,
-		"discordWebhook":         cfg.AutoSync.DiscordWebhook,
-		"discordWebhookUpdates":  cfg.AutoSync.DiscordWebhookUpdates,
+		"discordWebhook":         maskSecret(cfg.AutoSync.DiscordWebhook, maskedDiscordWebhook),
+		"discordWebhookUpdates":  maskSecret(cfg.AutoSync.DiscordWebhookUpdates, maskedDiscordWebhook),
 		"gotifyEnabled":          cfg.AutoSync.GotifyEnabled,
 		"gotifyUrl":              cfg.AutoSync.GotifyURL,
-		"gotifyToken":            cfg.AutoSync.GotifyToken,
+		"gotifyToken":            maskSecret(cfg.AutoSync.GotifyToken, maskedToken),
 		"gotifyPriorityCritical": cfg.AutoSync.GotifyPriorityCritical,
 		"gotifyPriorityWarning":  cfg.AutoSync.GotifyPriorityWarning,
 		"gotifyPriorityInfo":     cfg.AutoSync.GotifyPriorityInfo,
@@ -35,8 +35,8 @@ func (s *Server) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Reques
 		"gotifyWarningValue":     cfg.AutoSync.GotifyWarningValue,
 		"gotifyInfoValue":        cfg.AutoSync.GotifyInfoValue,
 		"pushoverEnabled":        cfg.AutoSync.PushoverEnabled,
-		"pushoverUserKey":        cfg.AutoSync.PushoverUserKey,
-		"pushoverAppToken":       cfg.AutoSync.PushoverAppToken,
+		"pushoverUserKey":        maskSecret(cfg.AutoSync.PushoverUserKey, maskedToken),
+		"pushoverAppToken":       maskSecret(cfg.AutoSync.PushoverAppToken, maskedToken),
 	})
 }
 
@@ -69,14 +69,20 @@ func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	webhook := strings.TrimSpace(req.DiscordWebhook)
+	existing := s.Core.Config.Get().AutoSync
+
+	webhook := preserveIfMasked(strings.TrimSpace(req.DiscordWebhook), existing.DiscordWebhook, maskedDiscordWebhook)
+	webhookUpdates := preserveIfMasked(strings.TrimSpace(req.DiscordWebhookUpdates), existing.DiscordWebhookUpdates, maskedDiscordWebhook)
+	gotifyToken := preserveIfMasked(strings.TrimSpace(req.GotifyToken), existing.GotifyToken, maskedToken)
+	pushoverUserKey := preserveIfMasked(strings.TrimSpace(req.PushoverUserKey), existing.PushoverUserKey, maskedToken)
+	pushoverAppToken := preserveIfMasked(strings.TrimSpace(req.PushoverAppToken), existing.PushoverAppToken, maskedToken)
+
 	if webhook != "" &&
 		!strings.HasPrefix(webhook, "https://discord.com/api/webhooks/") &&
 		!strings.HasPrefix(webhook, "https://discordapp.com/api/webhooks/") {
 		writeError(w, 400, "Discord webhook must start with https://discord.com/api/webhooks/")
 		return
 	}
-	webhookUpdates := strings.TrimSpace(req.DiscordWebhookUpdates)
 	if webhookUpdates != "" &&
 		!strings.HasPrefix(webhookUpdates, "https://discord.com/api/webhooks/") &&
 		!strings.HasPrefix(webhookUpdates, "https://discordapp.com/api/webhooks/") {
@@ -100,7 +106,7 @@ func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reque
 		cfg.AutoSync.DiscordWebhookUpdates = webhookUpdates
 		cfg.AutoSync.GotifyEnabled = req.GotifyEnabled
 		cfg.AutoSync.GotifyURL = gotifyURL
-		cfg.AutoSync.GotifyToken = strings.TrimSpace(req.GotifyToken)
+		cfg.AutoSync.GotifyToken = gotifyToken
 		cfg.AutoSync.GotifyPriorityCritical = req.GotifyPriorityCritical
 		cfg.AutoSync.GotifyPriorityWarning = req.GotifyPriorityWarning
 		cfg.AutoSync.GotifyPriorityInfo = req.GotifyPriorityInfo
@@ -109,8 +115,8 @@ func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reque
 		cfg.AutoSync.GotifyWarningValue = &wv
 		cfg.AutoSync.GotifyInfoValue = &iv
 		cfg.AutoSync.PushoverEnabled = req.PushoverEnabled
-		cfg.AutoSync.PushoverUserKey = strings.TrimSpace(req.PushoverUserKey)
-		cfg.AutoSync.PushoverAppToken = strings.TrimSpace(req.PushoverAppToken)
+		cfg.AutoSync.PushoverUserKey = pushoverUserKey
+		cfg.AutoSync.PushoverAppToken = pushoverAppToken
 	}); err != nil {
 		writeError(w, 500, "Failed to save settings")
 		return
@@ -176,7 +182,7 @@ func (s *Server) handleTestDiscord(w http.ResponseWriter, r *http.Request) {
 		"footer":      map[string]string{"text": "Clonarr " + s.Core.Version + " by ProphetSe7en"},
 	}
 	payload, _ := json.Marshal(map[string]any{"embeds": []any{embed}})
-	resp, err := s.Core.NotifyClient.Post(webhook, "application/json", bytes.NewReader(payload))
+	resp, err := s.Core.SafeClient.Post(webhook, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		writeError(w, 502, fmt.Sprintf("Failed to reach Discord: %v", err))
 		return
@@ -207,7 +213,7 @@ func (s *Server) handleTestPushover(w http.ResponseWriter, r *http.Request) {
 		"priority": 0,
 	}
 	body, _ := json.Marshal(payload)
-	resp, err := s.Core.NotifyClient.Post("https://api.pushover.net/1/messages.json", "application/json", bytes.NewReader(body))
+	resp, err := s.Core.SafeClient.Post("https://api.pushover.net/1/messages.json", "application/json", bytes.NewReader(body))
 	if err != nil {
 		writeError(w, 502, fmt.Sprintf("Failed to reach Pushover: %v", err))
 		return

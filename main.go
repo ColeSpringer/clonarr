@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"clonarr/internal/api"
+	"clonarr/internal/auth"
 	"clonarr/internal/core"
+	"clonarr/internal/netsec"
+	"clonarr/internal/utils"
 	"clonarr/ui"
 )
 
@@ -62,6 +65,7 @@ func main() {
 		Version:      Version,
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		NotifyClient: &http.Client{Timeout: 10 * time.Second},
+		SafeClient:   netsec.NewSafeHTTPClient(10*time.Second, nil),
 		PullUpdateCh: make(chan string, 1),
 	}
 
@@ -94,7 +98,7 @@ func main() {
 	server.RegisterRoutes(mux)
 
 	// Background: clone/pull TRaSH repo on startup
-	go func() {
+	utils.SafeGo("startup-trash-pull", func() {
 		cfg := cfgStore.Get()
 		if err := trashStore.CloneOrPull(cfg.TrashRepo.URL, cfg.TrashRepo.Branch); err != nil {
 			log.Printf("Startup TRaSH clone/pull failed: %v", err)
@@ -102,10 +106,10 @@ func main() {
 			server.AutoSyncQualitySizes()
 			app.AutoSyncAfterPull()
 		}
-	}()
+	})
 
 	// Scheduled TRaSH pull
-	go func() {
+	utils.SafeGo("trash-pull-scheduler", func() {
 		cfg := cfgStore.Get()
 		interval := core.ParsePullInterval(cfg.PullInterval)
 		var ticker *time.Ticker
@@ -155,7 +159,11 @@ func main() {
 				return
 			}
 		}
-	}()
+	})
+
+	// ==== Authentication =====================================================
+	authStore := api.InitAuth(ctx, cfgStore, Version, mux)
+	server.AuthStore = authStore
 
 	// Static files
 	staticFS, err := fs.Sub(ui.StaticFiles, "static")
@@ -164,9 +172,29 @@ func main() {
 	}
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 
+	// Background: reap expired sessions every 5 min
+	utils.SafeGo("session-cleanup", func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				authStore.CleanupExpiredSessions()
+			}
+		}
+	})
+
+	// Middleware chain — outermost first:
+	//   SecurityHeaders → CSRF → Auth → mux
+	var handler http.Handler = authStore.Middleware(mux)
+	handler = authStore.CSRFMiddleware(handler)
+	handler = auth.SecurityHeadersMiddleware(handler)
+
 	serverHTTP := &http.Server{
 		Addr:         ":" + port,
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,

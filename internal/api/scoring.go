@@ -479,6 +479,11 @@ func (s *Server) handleScoringProfileScores(w http.ResponseWriter, r *http.Reque
 }
 
 // handleDebugLog receives frontend log messages.
+// Category + Message reach /config/debug.log, which admins download via
+// handleDebugDownload after incidents. An authenticated caller who can
+// inject control characters (newlines, escape sequences) could forge
+// `[TIMESTAMP] [CATEGORY] …` lines to pollute the forensic trail. We
+// whitelist Category and sanitize Message before logging.
 func (s *Server) handleDebugLog(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Category string `json:"category"`
@@ -489,11 +494,41 @@ func (s *Server) handleDebugLog(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		return
 	}
-	if req.Category == "" {
+	if !isValidLogCategory(req.Category) {
 		req.Category = "UI"
 	}
-	s.Core.DebugLog.Log(req.Category, req.Message)
+	s.Core.DebugLog.Log(req.Category, sanitizeLogField(req.Message))
 	w.WriteHeader(204)
+}
+
+// isValidLogCategory rejects Category values not in the app's known set.
+func isValidLogCategory(c string) bool {
+	switch c {
+	case core.LogSync, core.LogCompare, core.LogAutoSync, core.LogTrash, core.LogError, core.LogUI, core.LogConfig:
+		return true
+	}
+	return false
+}
+
+// sanitizeLogField strips control characters (CR, LF, NUL, other < 0x20)
+// and caps length to 1024 bytes for debug-log context. Prevents log
+// forgery: an authenticated caller submitting Message with embedded \n
+// must not be able to inject fake `[TIMESTAMP] [CATEGORY] …` lines.
+func sanitizeLogField(st string) string {
+	const maxLen = 1024
+	if len(st) > maxLen {
+		st = st[:maxLen]
+	}
+	b := make([]byte, 0, len(st))
+	for i := 0; i < len(st); i++ {
+		c := st[i]
+		if c < 0x20 || c == 0x7f {
+			b = append(b, ' ')
+			continue
+		}
+		b = append(b, c)
+	}
+	return string(b)
 }
 
 // handleDebugDownload serves the debug log file for download.
