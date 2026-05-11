@@ -291,7 +291,7 @@ export default {
               message: `Sync rule removed from ${instanceName}.`,
               type: 'warning',
               duration: 6000,
-              key: `cleanup:${instanceName}:${names[0]}`,
+              key: this.toastKey('cleanup', instanceName, names[0]),
             });
           } else {
             this.showToast({
@@ -300,7 +300,9 @@ export default {
               details: names.map(n => `"${n}"`),
               type: 'warning',
               duration: 8000,
-              key: `cleanup:${instanceName}:${names.join('|')}`,
+              key: this.toastKey(
+                'cleanup', instanceName, names.length, names[0], names[names.length - 1], names
+              ),
             });
           }
         }
@@ -329,16 +331,26 @@ export default {
                 message: `${profileLabel(ev)}: ${ev.error}`,
                 type: 'error',
                 duration: 8000,
-                key: `autosync:error:${group.instanceName}:${ev.profileName}:${ev.timestamp || ev.error}`,
+                key: this.toastKey(
+                  'autosync', 'error', group.instanceName, ev.profileName, ev.timestamp || ev.error
+                ),
               });
             } else {
+              const latestTimestamp = group.events.reduce((latest, ev) => ev.timestamp && ev.timestamp > latest ? ev.timestamp : latest, '');
               this.showToast({
                 title: `Auto-sync failed: ${group.instanceName}`,
                 message: `${group.events.length} profiles failed.`,
                 details: group.events.map(ev => `${profileLabel(ev)}: ${ev.error}`),
                 type: 'error',
                 duration: 10000,
-                key: `autosync:error:${group.instanceName}:${group.events.map(ev => ev.timestamp || ev.profileName).join('|')}`,
+                key: this.toastKey(
+                  'autosync',
+                  'error',
+                  group.instanceName,
+                  group.events.length,
+                  latestTimestamp,
+                  group.events.map(ev => [ev.profileName, ev.error])
+                ),
               });
             }
           } else if (group.events.length === 1) {
@@ -349,9 +361,12 @@ export default {
               details: ev.details || [],
               type: 'info',
               duration: 8000,
-              key: `autosync:info:${group.instanceName}:${ev.profileName}:${ev.timestamp || ''}`,
+              key: this.toastKey(
+                'autosync', 'info', group.instanceName, ev.profileName, ev.timestamp || ''
+              ),
             });
           } else {
+            const latestTimestamp = group.events.reduce((latest, ev) => ev.timestamp && ev.timestamp > latest ? ev.timestamp : latest, '');
             const details = group.events.flatMap(ev => [
               `"${profileLabel(ev)}"`,
               ...((ev.details || []).map(detail => `  ${detail}`)),
@@ -362,7 +377,14 @@ export default {
               details,
               type: 'info',
               duration: 10000,
-              key: `autosync:info:${group.instanceName}:${group.events.map(ev => ev.timestamp || ev.profileName).join('|')}`,
+              key: this.toastKey(
+                'autosync',
+                'info',
+                group.instanceName,
+                group.events.length,
+                latestTimestamp,
+                group.events.map(ev => ev.profileName)
+              ),
             });
           }
         }
@@ -1594,7 +1616,9 @@ export default {
               details,
               type: 'info',
               duration: details.length > 0 ? 8000 : 4000,
-              key: `sync-imported:${this.syncForm.instanceId}:${this.syncForm.profileName}:${details.join('|') || 'none'}`,
+              key: this.toastKey(
+                'sync-imported', this.syncForm.instanceId, this.syncForm.profileName, details.length, details
+              ),
             });
           }
         }
@@ -1744,7 +1768,7 @@ export default {
             details,
             type: 'info',
             duration: details.length > 0 ? 8000 : 4000,
-            key: `sync:${inst.id}:${sh.arrProfileId}:${details.join('|') || 'none'}`,
+            key: this.toastKey('sync', inst.id, sh.arrProfileId, details.length, details),
           });
         }
         this.setRuleSyncError(inst.id, sh.arrProfileId, '');
@@ -1903,7 +1927,13 @@ export default {
         details,
         type: toastType,
         duration: 10000,
-        key: `sync-all:${inst.id}:${results.map(r => `${r.name}:${r.ok}:${r.error || r.summary || ''}`).join('|')}`,
+        key: this.toastKey(
+          'sync-all',
+          inst.id,
+          results.length,
+          errors,
+          results.map(r => [r.name, r.ok, r.error || r.summary || ''])
+        ),
       });
     },
 
@@ -2307,7 +2337,9 @@ export default {
           details: result.details || [],
           type: 'info',
           duration: 8000,
-          key: `rollback:${inst.id}:${entry.arrProfileId}:${prevDate}`,
+          key: this.toastKey(
+            'rollback', inst.id, entry.arrProfileId, prevEntry.appliedAt || prevEntry.lastSync || entry.arrProfileId
+          ),
         });
         await this.loadProfileHistory(inst.id, entry.arrProfileId);
         await this.loadSyncHistory(inst.id);

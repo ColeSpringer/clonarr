@@ -3,6 +3,8 @@ const TOAST_MAX_QUEUED = 20;
 const TOAST_DEDUPE_WINDOW_MS = 15000;
 const TOAST_PREVIEW_MAX_LINES = 4;
 const TOAST_PREVIEW_MAX_CHARS = 240;
+const TOAST_KEY_MAX_CHARS = 180;
+const TOAST_KEY_PREFIX_CHARS = 120;
 const DEFAULT_TOAST_DURATION = 9000;
 const MIN_TOAST_DURATION = 5000;
 
@@ -44,6 +46,60 @@ function previewText(text) {
   return { text: preview, truncated };
 }
 
+function hashString(hash, value) {
+  const text = String(value ?? '');
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash;
+}
+
+function hashPart(hash, part, seen = new WeakSet()) {
+  if (part === null || part === undefined) return hashString(hash, '');
+  if (Array.isArray(part)) {
+    hash = hashString(hash, `[${part.length}:`);
+    for (const item of part) hash = hashPart(hashString(hash, '|'), item, seen);
+    return hashString(hash, ']');
+  }
+  if (typeof part === 'object') {
+    if (seen.has(part)) return hashString(hash, '[circular]');
+    seen.add(part);
+    const keys = Object.keys(part).sort();
+    hash = hashString(hash, `{${keys.length}:`);
+    for (const key of keys) {
+      hash = hashString(hash, key);
+      hash = hashPart(hashString(hash, '='), part[key], seen);
+    }
+    seen.delete(part);
+    return hashString(hash, '}');
+  }
+  return hashString(hash, part);
+}
+
+function keyPreview(part) {
+  if (part === null || part === undefined) return '';
+  if (Array.isArray(part)) return `list:${part.length}`;
+  if (typeof part === 'object') return `object:${Object.keys(part).length}`;
+  return String(part).trim().replace(/\s+/g, ' ').slice(0, 48);
+}
+
+function normalizeToastKey(parts) {
+  let hash = 2166136261;
+  let prefix = '';
+  for (const part of parts) {
+    hash = hashPart(hashString(hash, '\u001f'), part);
+    const preview = keyPreview(part);
+    if (!preview) continue;
+    const next = prefix ? `${prefix}:${preview}` : preview;
+    prefix = next.length > TOAST_KEY_PREFIX_CHARS ? next.slice(0, TOAST_KEY_PREFIX_CHARS) : next;
+  }
+
+  const suffix = `#${hash.toString(36).padStart(7, '0')}`;
+  const base = prefix || 'toast';
+  return `${base.slice(0, TOAST_KEY_MAX_CHARS - suffix.length)}${suffix}`;
+}
+
 export default {
   state: {
     toasts: [],
@@ -71,6 +127,10 @@ export default {
       }
 
       return toast.id;
+    },
+
+    toastKey(...parts) {
+      return normalizeToastKey(parts);
     },
 
     dismissToast(id) {
@@ -129,8 +189,8 @@ export default {
 
     toastClass(toast) {
       const type = normalizeType(toast?.type);
-      const compactText = `${toast?.title || ''} ${toast?.fullText || ''}`.trim();
-      const compact = !toast?.expandable && compactText.length <= 110;
+      const compactBody = `${toast?.title || ''} ${toast?.fullText || ''}`.trim();
+      const compact = !toast?.expandable && compactBody.length <= 110;
       return [
         'toast',
         `toast-${type}`,
@@ -177,6 +237,10 @@ export default {
       const parsedDuration = Number(raw.duration ?? duration ?? DEFAULT_TOAST_DURATION);
       const rawDuration = Number.isFinite(parsedDuration) ? parsedDuration : DEFAULT_TOAST_DURATION;
       const toastDuration = rawDuration > 0 ? Math.max(MIN_TOAST_DURATION, rawDuration) : 0;
+      const keySource = raw.key ?? options.key;
+      const key = keySource === undefined
+        ? this.toastKey(toastType, title, fullText || title)
+        : this.toastKey(keySource);
       const now = Date.now();
 
       this._toastSequence = (this._toastSequence || 0) + 1;
@@ -194,7 +258,7 @@ export default {
         duration: Math.max(0, toastDuration),
         remainingMs: Math.max(0, toastDuration),
         repeatCount: 1,
-        key: raw.key || options.key || `${toastType}:${title}:${fullText || title}`.slice(0, 700),
+        key,
         createdAt: now,
         lastSeenAt: now,
         startedAt: 0,

@@ -1141,7 +1141,7 @@ export default {
             details: data.unmapped,
             type: 'error',
             duration: 8000,
-            key: `profile-builder-unmapped:${data.unmapped.join('|')}`,
+            key: this.toastKey('profile-builder-unmapped', data.unmapped.length, data.unmapped),
           });
         }
       } catch (e) {
