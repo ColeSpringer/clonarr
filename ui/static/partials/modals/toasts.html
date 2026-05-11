@@ -24,7 +24,14 @@
           <div class="toast-message" :class="toast.expanded ? 'toast-message-expanded' : ''" x-text="toastDisplayText(toast)"></div>
           <div class="toast-more" x-show="toast.expandable" x-text="toast.expanded ? 'Show less' : 'Show more'"></div>
         </div>
-        <div class="toast-progress" :key="toast.id + '-' + toast.animationNonce" :style="toastProgressStyle(toast)"></div>
+        <div class="toast-progress"
+             :style="toastProgressStyle(toast)"
+             x-effect="
+               toast.animationNonce;
+               $el.style.animation = 'none';
+               $el.offsetWidth;
+               $el.style.animation = '';
+             "></div>
       </div>
     </template>
     <div class="toast-queue-footer" x-show="toastPendingCount() > 0" x-text="toastPendingLabel()"></div>

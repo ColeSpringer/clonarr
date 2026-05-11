@@ -234,9 +234,12 @@ export default {
       const message = String(structured ? (raw.message ?? raw.text ?? '') : (input ?? '')).trim();
       const fullText = compactText([message, ...details]);
       const preview = previewText(fullText || title);
-      const parsedDuration = Number(raw.duration ?? duration ?? DEFAULT_TOAST_DURATION);
+      const hasExplicitDuration = structured ? raw.duration !== undefined : duration !== undefined;
+      const parsedDuration = Number(hasExplicitDuration ? (raw.duration ?? duration) : DEFAULT_TOAST_DURATION);
       const rawDuration = Number.isFinite(parsedDuration) ? parsedDuration : DEFAULT_TOAST_DURATION;
-      const toastDuration = rawDuration > 0 ? Math.max(MIN_TOAST_DURATION, rawDuration) : 0;
+      const toastDuration = rawDuration > 0 && !hasExplicitDuration
+        ? Math.max(MIN_TOAST_DURATION, rawDuration)
+        : Math.max(0, rawDuration);
       const keySource = raw.key ?? options.key;
       const key = keySource === undefined
         ? this.toastKey(toastType, title, fullText || title)
