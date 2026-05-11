@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +17,10 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrTrashBusy indicates a TRaSH pull, load, or reset operation already holds
+// the store operation lock.
+var ErrTrashBusy = errors.New("TRaSH pull/reset already in progress")
 
 // --- TRaSH Data Types ---
 
@@ -272,6 +277,35 @@ func (ts *TrashStore) CurrentCommit() string {
 // DataDir returns the path to the TRaSH repo clone directory.
 func (ts *TrashStore) DataDir() string {
 	return ts.dataDir
+}
+
+// Reset clears the local TRaSH Guides clone and pull metadata, then replaces
+// the in-memory snapshot with an empty dataset. User configuration and locally
+// saved profiles/CFs live outside this store and are intentionally untouched.
+func (ts *TrashStore) Reset() error {
+	if !ts.pullMu.TryLock() {
+		return ErrTrashBusy
+	}
+	defer ts.pullMu.Unlock()
+
+	dataRoot := filepath.Dir(ts.dataDir)
+	paths := []string{
+		ts.dataDir,
+		filepath.Join(dataRoot, "last-pull.txt"),
+		filepath.Join(dataRoot, "last-pull-diff.json"),
+	}
+	for _, path := range paths {
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+	}
+
+	ts.mu.Lock()
+	ts.data = &TrashData{}
+	ts.pullError = ""
+	ts.lastChangelogDate = ""
+	ts.mu.Unlock()
+	return nil
 }
 
 // DiffChangedFiles returns a human-readable summary of files changed between two commits.
