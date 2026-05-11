@@ -532,7 +532,19 @@ export default {
 
       this._sandboxCFCache = {};
       this._trashScoreContextCache = {};
-      this.sandboxCFBrowser = { ...this.sandboxCFBrowser, categories: [] };
+      this.profileDetail = null;
+      this.showProfileInfo = false;
+      this.profileBuilder = false;
+      this.sandboxCFBrowser = {
+        open: false,
+        appType: '',
+        categories: [],
+        customCFs: [],
+        selected: {},
+        scores: {},
+        expanded: {},
+        filter: '',
+      };
       this.showChangelog = false;
     },
 
