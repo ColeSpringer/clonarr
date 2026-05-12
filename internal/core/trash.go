@@ -647,17 +647,25 @@ type CommitGroupInfo struct {
 	Includes       []string // profile trash_ids in quality_profiles.include
 }
 
-// GroupsAtCommit returns cf-group trash_ids and their state at the given
-// git commit. Walks both radarr/cf-groups/ and sonarr/cf-groups/ and
-// reads each .json via `git show <commit>:<path>`. Errors are absorbed
-// (specific commit may not exist after shallow-clone re-init) — caller
-// treats empty result as "no info, leave migration entry empty".
-func (ts *TrashStore) GroupsAtCommit(commit string) map[string]CommitGroupInfo {
+// GroupsAtCommit returns cf-group trash_ids and their state at the given git
+// commit, plus whether the commit lookup succeeded. Walks both
+// radarr/cf-groups/ and sonarr/cf-groups/ and reads each .json via
+// `git show <commit>:<path>`.
+//
+// ok=false means the repo/commit could not be read, so callers should not
+// persist an empty snapshot. ok=true with an empty map is a valid lookup that
+// found no groups.
+func (ts *TrashStore) GroupsAtCommit(commit string) (map[string]CommitGroupInfo, bool) {
 	if commit == "" || ts.dataDir == "" {
-		return nil
+		return nil, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	commitCmd := exec.CommandContext(ctx, "git", "-C", ts.dataDir, "cat-file", "-e", commit+"^{commit}")
+	if err := commitCmd.Run(); err != nil {
+		return nil, false
+	}
 
 	result := make(map[string]CommitGroupInfo)
 	for _, app := range []string{"radarr", "sonarr"} {
@@ -665,7 +673,7 @@ func (ts *TrashStore) GroupsAtCommit(commit string) map[string]CommitGroupInfo {
 		listCmd := exec.CommandContext(ctx, "git", "-C", ts.dataDir, "ls-tree", "--name-only", commit, dir)
 		listOut, err := listCmd.Output()
 		if err != nil {
-			continue
+			return nil, false
 		}
 		for _, path := range strings.Split(strings.TrimSpace(string(listOut)), "\n") {
 			if !strings.HasSuffix(path, ".json") {
@@ -699,7 +707,7 @@ func (ts *TrashStore) GroupsAtCommit(commit string) map[string]CommitGroupInfo {
 			}
 		}
 	}
-	return result
+	return result, true
 }
 
 // DiffPull runs `git diff --name-status <prev>..<new> -- docs/json/` and

@@ -125,6 +125,13 @@ func (s *Server) handleTrashPull(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTrashReset(w http.ResponseWriter, r *http.Request) {
+	unlockSyncs, busy := s.Core.TryLockConfiguredSyncs()
+	if busy {
+		writeError(w, http.StatusConflict, "Sync already in progress; try again after it finishes")
+		return
+	}
+	defer unlockSyncs()
+
 	if err := s.Core.Trash.Reset(); err != nil {
 		if errors.Is(err, core.ErrTrashBusy) {
 			writeError(w, http.StatusConflict, "TRaSH pull/reset already in progress")

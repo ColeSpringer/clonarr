@@ -145,6 +145,45 @@ func TestTrashAPIResetBusyReturnsConflict(t *testing.T) {
 	waitForNotPulling(t, server)
 }
 
+func TestTrashAPIResetSyncInProgressReturnsConflict(t *testing.T) {
+	server, dir := setupTrashAPIServerWithCachedData(t)
+	if err := server.Core.Config.Update(func(cfg *core.Config) {
+		cfg.Instances = append(cfg.Instances, core.Instance{
+			ID:     "inst-reset-busy",
+			Name:   "Reset Busy",
+			Type:   "radarr",
+			URL:    "http://127.0.0.1:7878",
+			APIKey: "test",
+		})
+	}); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+
+	mu := server.Core.GetSyncMutex("inst-reset-busy")
+	mu.Lock()
+	defer mu.Unlock()
+
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+	resetReq := httptest.NewRequest(http.MethodPost, "/api/trash/reset", nil)
+	resetW := httptest.NewRecorder()
+	mux.ServeHTTP(resetW, resetReq)
+	if resetW.Code != http.StatusConflict {
+		t.Fatalf("reset status = %d, want %d: %s", resetW.Code, http.StatusConflict, resetW.Body.String())
+	}
+	if !strings.Contains(resetW.Body.String(), "Sync already in progress; try again after it finishes") {
+		t.Fatalf("reset body missing sync-busy error: %s", resetW.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "trash-guides")); err != nil {
+		t.Fatalf("trash-guides was changed while sync was busy: %v", err)
+	}
+
+	st := server.Core.Trash.Status()
+	if !st.Cloned || st.CommitHash == "" || st.LastDiff == nil {
+		t.Fatalf("status was unexpectedly cleared while sync was busy: %+v", st)
+	}
+}
+
 func waitForFile(t *testing.T, path string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

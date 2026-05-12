@@ -468,11 +468,11 @@ export default {
     },
 
     resetTrashData() {
-      if (this.trashResetting || this.trashStatus?.pulling || this.pulling) return;
+      if (this.trashResetting || this.trashStatus?.pulling || this.pulling || this.syncing) return;
       this.confirmModal = {
         show: true,
         title: 'Reset TRaSH Data',
-        message: 'Delete the local TRaSH Guides cache and pull metadata?\n\nUser settings, instances, sync rules, custom profiles, and custom CFs are not deleted.\n\nClonarr will show TRaSH as not cloned until you use Pull, or until the next scheduled pull runs if scheduled pulls are enabled.',
+        message: 'Delete the local TRaSH Guides cache and pull metadata?\n\nUser settings, instances, sync rules, custom profiles, and custom CFs are not deleted.\n\nAfter reset, Pull downloads a fresh TRaSH cache. If it lands on the same TRaSH commit your rules already synced, Pull will not force Arr profiles to resync. Use Sync All after Pull if you want to force an Arr refresh.',
         confirmLabel: 'Reset data',
         onConfirm: () => this._resetTrashDataConfirmed(),
       };
@@ -494,7 +494,7 @@ export default {
         }
         await this.loadTrashStatus();
         this.clearTrashDerivedCaches();
-        this.showToast('TRaSH data reset. Use Pull to download fresh data.', 'info', 5000);
+        this.showToast('TRaSH data reset. Pull downloads fresh data; use Sync All after Pull for a forced Arr refresh.', 'info', 7000);
       } catch (e) {
         this.showToast('Failed to reset TRaSH data: ' + e.message, 'error', 6000);
       } finally {
