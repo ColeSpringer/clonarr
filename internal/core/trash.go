@@ -224,6 +224,7 @@ type TrashData struct {
 type TrashStore struct {
 	mu                sync.RWMutex // protects data
 	pullMu            sync.Mutex   // serializes clone/pull operations (C4)
+	repoMu            sync.RWMutex // protects dataDir git/filesystem access against reset/delete
 	data              *TrashData
 	dataDir           string                         // path to TRaSH repo clone
 	pullError         string                         // last pull error (empty = OK)
@@ -288,6 +289,9 @@ func (ts *TrashStore) Reset() error {
 	}
 	defer ts.pullMu.Unlock()
 
+	ts.repoMu.Lock()
+	defer ts.repoMu.Unlock()
+
 	dataRoot := filepath.Dir(ts.dataDir)
 	paths := []string{
 		ts.dataDir,
@@ -312,6 +316,14 @@ func (ts *TrashStore) Reset() error {
 // Groups changes by app type (Radarr/Sonarr) and category (CFs, Profiles, Groups, etc).
 // Uses git diff --name-status to show Added/Modified/Deleted per file.
 func (ts *TrashStore) DiffChangedFiles(prevCommit, newCommit string) string {
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+	return ts.diffChangedFilesLocked(prevCommit, newCommit)
+}
+
+// diffChangedFilesLocked is DiffChangedFiles without locking. Caller must hold
+// repoMu for read or write.
+func (ts *TrashStore) diffChangedFilesLocked(prevCommit, newCommit string) string {
 	cmd := exec.Command("git", "-C", ts.dataDir, "diff", "--name-status", prevCommit, newCommit)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -659,6 +671,9 @@ func (ts *TrashStore) GroupsAtCommit(commit string) (map[string]CommitGroupInfo,
 	if commit == "" || ts.dataDir == "" {
 		return nil, false
 	}
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -719,6 +734,9 @@ func (ts *TrashStore) DiffPull(prevCommit, newCommit string) (*PullChangeSet, er
 	if prevCommit == "" || newCommit == "" || prevCommit == newCommit {
 		return &PullChangeSet{}, nil
 	}
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+
 	// 10s timeout — `git diff --name-status` on the sparse-checkout repo is
 	// normally a milliseconds operation, but a wedged filesystem (NFS drop,
 	// disk failure) could otherwise hang the goroutine forever. Failing the
@@ -934,6 +952,9 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 	}
 	defer ts.pullMu.Unlock()
 
+	ts.repoMu.Lock()
+	defer ts.repoMu.Unlock()
+
 	if err := os.MkdirAll(filepath.Dir(ts.dataDir), 0755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
@@ -1045,6 +1066,9 @@ func (ts *TrashStore) LoadFromDisk() error {
 	}
 	defer ts.pullMu.Unlock()
 
+	ts.repoMu.Lock()
+	defer ts.repoMu.Unlock()
+
 	if _, err := os.Stat(filepath.Join(ts.dataDir, ".git")); err != nil {
 		return fmt.Errorf("TRaSH repo not cloned at %s", ts.dataDir)
 	}
@@ -1054,7 +1078,7 @@ func (ts *TrashStore) LoadFromDisk() error {
 
 // loadAndSwap reads commit metadata + parses CF/profile JSON from the on-disk
 // repo and atomically swaps a new snapshot into the store. Caller must hold
-// pullMu.
+// pullMu and repoMu.
 //
 // On failure, records the error in ts.pullError so TrashStatus / the UI can
 // surface a "pull failing" state instead of silently showing a stale snapshot.
@@ -1101,7 +1125,7 @@ func (ts *TrashStore) loadAndSwap() error {
 	ts.mu.RUnlock()
 
 	if prevCommit != "" && data.CommitHash != prevCommit {
-		if diff := ts.DiffChangedFiles(prevCommit, data.CommitHash); diff != "" {
+		if diff := ts.diffChangedFilesLocked(prevCommit, data.CommitHash); diff != "" {
 			data.LastDiff = &PullDiff{
 				PrevCommit: prevCommit,
 				NewCommit:  data.CommitHash,

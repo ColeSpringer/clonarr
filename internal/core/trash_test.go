@@ -139,6 +139,52 @@ func TestTrashStoreResetBusyLeavesFilesIntact(t *testing.T) {
 	}
 }
 
+func TestTrashStoreResetWaitsForRepoReaders(t *testing.T) {
+	ts, dir := seedTrashStoreForReset(t)
+
+	ts.repoMu.RLock()
+	done := make(chan error, 1)
+	go func() {
+		done <- ts.Reset()
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if ts.Status().Pulling {
+			break
+		}
+		if time.Now().After(deadline) {
+			ts.repoMu.RUnlock()
+			t.Fatalf("timed out waiting for Reset to acquire pull lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	select {
+	case err := <-done:
+		ts.repoMu.RUnlock()
+		t.Fatalf("Reset completed while repo read lock was held: %v", err)
+	default:
+	}
+	assertPathExists(t, filepath.Join(dir, "trash-guides"))
+	assertPathExists(t, filepath.Join(dir, "last-pull.txt"))
+	assertPathExists(t, filepath.Join(dir, "last-pull-diff.json"))
+
+	ts.repoMu.RUnlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Reset after repo read lock released: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for Reset after repo read lock released")
+	}
+
+	assertPathMissing(t, filepath.Join(dir, "trash-guides"))
+	assertPathMissing(t, filepath.Join(dir, "last-pull.txt"))
+	assertPathMissing(t, filepath.Join(dir, "last-pull-diff.json"))
+}
+
 // CompareCFCategories drives the unified group-sort across both backend and
 // frontend (the JS _compareCFCategories mirrors this). The contract:
 //   - Tier 0: regular TRaSH categories (alphabetical within tier)
