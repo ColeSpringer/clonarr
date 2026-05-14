@@ -13,17 +13,31 @@
 .sidebar[data-app="sonarr"] { --app-color: var(--sonarr-color); --app-glow: var(--sonarr-glow); }
 
 /* Make the root layout a sidebar+main grid. When the v3 sidebar is in the
-   DOM, the body's top-level child stack (sidebar + main + footer) flows as
-   a CSS grid. Classic top-nav users see no change since they don't render
-   the sidebar partial. */
+   DOM, the body's top-level child stack (sidebar + main) flows as a CSS
+   grid. Classic top-nav users see no change since they don't render the
+   sidebar partial. Modals + overlays (other direct children) use
+   position:fixed so they're not affected by grid placement. */
 body:has(.sidebar) [x-data="clonarr"] {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: auto 1fr;
   min-height: 100vh;
   transition: grid-template-columns 0.22s ease;
 }
 body:has(.sidebar) [x-data="clonarr"]:has(.sidebar.collapsed) {
   grid-template-columns: var(--sidebar-w-collapsed) 1fr;
+}
+body:has(.sidebar) [x-data="clonarr"] > .noauth-banner {
+  grid-row: 1;
+  grid-column: 1 / -1;
+}
+body:has(.sidebar) [x-data="clonarr"] > .sidebar {
+  grid-row: 2;
+  grid-column: 1;
+}
+body:has(.sidebar) [x-data="clonarr"] > main {
+  grid-row: 2;
+  grid-column: 2;
 }
 
 .sidebar {
@@ -219,22 +233,294 @@ body:has(.sidebar) [x-data="clonarr"]:has(.sidebar.collapsed) {
   transform: translateY(-50%);
 }
 
-/* User menu + foot placeholders */
-.sidebar-user.placeholder,
-.sidebar-foot.placeholder {
+/* ------------------------------------------------------------------
+   User menu
+   ------------------------------------------------------------------ */
+.sidebar-user {
   border-top: 1px solid var(--border-muted);
   padding: 10px 14px;
   background: var(--bg-card);
 }
-.sidebar.collapsed .sidebar-foot.placeholder {
+.sidebar.collapsed .sidebar-user { padding: 10px 0; }
+
+.sidebar-user-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar.collapsed .sidebar-user-row { justify-content: center; }
+
+.sidebar-user-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--app-color);
+  color: var(--text-body);
+  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-user-info {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 0;
+}
+.sidebar-user-name {
+  font-size: 12.5px; color: var(--text-body);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidebar-user-logout-form { margin: 0; flex-shrink: 0; }
+.sidebar-user-logout {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.sidebar-user-logout:hover {
+  color: var(--app-color);
+  border-color: var(--app-color);
+}
+
+/* Local-bypass badge */
+.sidebar-user-local { gap: 8px; }
+.sidebar-user-localdot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  flex-shrink: 0;
+}
+.sidebar-user-locallabel {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--accent-blue);
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------
+   TRaSH sync footer
+   ------------------------------------------------------------------ */
+.sidebar-foot {
+  border-top: 1px solid var(--border-muted);
+  padding: 10px 14px;
+  background: var(--bg-card);
+  display: flex; flex-direction: column;
+  gap: 8px;
+}
+.sidebar.collapsed .sidebar-foot {
   padding: 10px 0;
+  align-items: center;
+}
+
+.sidebar-trash-status {
+  display: flex; align-items: flex-start; gap: 8px;
+  min-width: 0;
+}
+.sidebar.collapsed .sidebar-trash-status { gap: 0; }
+
+.sidebar-trash-dot {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.sidebar-trash-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; flex-direction: column;
+  gap: 1px;
+  flex: 1; min-width: 0;
+  transition: color 0.1s;
+}
+.sidebar-trash-button:hover { color: var(--text-body); }
+
+.sidebar-trash-notsynced {
+  display: flex; flex-direction: column;
+  gap: 1px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sidebar-trash-line1 {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  font-weight: 500;
+}
+.sidebar-trash-label { font-weight: 500; }
+.sidebar-trash-time { font-weight: 400; color: var(--text-secondary); }
+.sidebar-trash-chev {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.sidebar-trash-chev.flip { transform: rotate(180deg); }
+
+.sidebar-trash-line2 {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sidebar-trash-commit { font-family: var(--font-mono, ui-monospace, monospace); }
+.sidebar-trash-next { color: var(--text-muted); }
+
+.sidebar-trash-pull {
+  /* Inherit .btn .btn-sm; just constrain to footer width when expanded
+     and shrink to icon size when collapsed. */
+  width: 100%;
+  justify-content: center;
+}
+.sidebar.collapsed .sidebar-trash-pull {
+  width: 36px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------
+   Changelog popover — teleported to <body>, anchored to the right of
+   the sidebar's bottom-left corner.
+   ------------------------------------------------------------------ */
+.sidebar-trash-popover {
+  position: fixed;
+  left: calc(var(--sidebar-w) + 8px);
+  bottom: 16px;
+  width: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  font-size: 12px;
+  color: var(--text-body);
+}
+body:has(.sidebar.collapsed) .sidebar-trash-popover {
+  left: calc(var(--sidebar-w-collapsed) + 8px);
+}
+
+.sidebar-trash-popover-header {
+  padding: 10px 16px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-muted);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-trash-popover-header .dim {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.sidebar-trash-popover-header .commit-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+}
+.sidebar-trash-popover-header .arrow { margin: 0 4px; }
+
+.sidebar-trash-popover-diff {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-body);
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.sidebar-trash-popover-empty {
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
   text-align: center;
 }
-.sidebar-placeholder-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--accent-green);
-  display: inline-block;
+
+.sidebar-trash-popover-section {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-muted);
+}
+.sidebar-trash-popover-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex; justify-content: space-between;
+}
+.sidebar-trash-popover-date .dim {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sidebar-trash-popover-entry {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.sidebar-trash-popover-entry .entry-type {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.sidebar-trash-popover-entry .entry-type.is-feat {
+  background: var(--badge-feat-bg, color-mix(in srgb, var(--accent-green) 18%, transparent));
+  color: var(--accent-green);
+}
+.sidebar-trash-popover-entry .entry-type.is-fix {
+  background: var(--accent-orange-bg, color-mix(in srgb, var(--accent-orange) 18%, transparent));
+  color: var(--accent-orange);
+}
+.sidebar-trash-popover-entry .entry-type.is-other {
+  background: var(--bg-panel);
+  color: var(--accent-blue);
+}
+.sidebar-trash-popover-entry .entry-scope { color: var(--text-muted); }
+.sidebar-trash-popover-entry .entry-msg { color: var(--text-body); }
+.sidebar-trash-popover-entry .entry-pr {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: none;
+  margin-left: 4px;
+  transition: color 0.1s;
+}
+.sidebar-trash-popover-entry .entry-pr:hover { color: var(--accent-blue); }
+
+/* ------------------------------------------------------------------
+   No-auth banner (full-width, lives outside the sidebar)
+   ------------------------------------------------------------------ */
+.noauth-banner {
+  background: var(--banner-warn-bg);
+  border-bottom: 2px solid var(--banner-warn-border);
+  color: var(--banner-warn-text);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  grid-column: 1 / -1;
+}
+.noauth-banner-msg { flex: 1; text-align: center; }
+.noauth-banner-dismiss {
+  background: color-mix(in srgb, var(--banner-warn-text) 12%, transparent);
+  color: var(--banner-warn-text);
+  border: 1px solid color-mix(in srgb, var(--banner-warn-text) 30%, transparent);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
 }
 
 /* Hide the top-nav when the sidebar is in the DOM (defensive — index.html

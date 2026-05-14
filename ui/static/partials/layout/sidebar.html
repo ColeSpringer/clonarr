@@ -152,15 +152,150 @@
       </a>
     </nav>
 
-    <!-- User menu placeholder -->
-    <div class="sidebar-user placeholder" x-show="!sidebarCollapsed">
-      <div class="sidebar-placeholder-label">User menu</div>
+    <!-- User menu — username + logout when authenticated, "Local" badge when
+         reaching via Trusted-Networks bypass, hidden when auth=none. -->
+    <div class="sidebar-user" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
+      <template x-if="authStatus.authenticated">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar"
+               x-text="(authStatus.username || '?').charAt(0).toUpperCase()"
+               x-tt="sidebarCollapsed ? ('Logged in as ' + authStatus.username) : null"></div>
+          <div class="sidebar-user-info" x-show="!sidebarCollapsed">
+            <span class="sidebar-user-name" x-text="authStatus.username"
+                  x-tt="'Logged in as ' + authStatus.username"></span>
+            <form method="POST" action="logout" class="sidebar-user-logout-form">
+              <input type="hidden" name="csrf_token" :value="csrfToken()">
+              <button type="submit" class="sidebar-user-logout" x-tt="'Log out'">Logout</button>
+            </form>
+          </div>
+        </div>
+      </template>
+      <template x-if="!authStatus.authenticated && authStatus.localBypass">
+        <div class="sidebar-user-row sidebar-user-local"
+             x-tt="'Local network — authentication bypassed for this network'">
+          <div class="sidebar-user-localdot"></div>
+          <span class="sidebar-user-locallabel" x-show="!sidebarCollapsed">Local network</span>
+        </div>
+      </template>
     </div>
 
-    <!-- TRaSH sync footer placeholder -->
-    <div class="sidebar-foot placeholder">
-      <div class="sidebar-placeholder-label" x-show="!sidebarCollapsed">TRaSH sync status</div>
-      <div class="sidebar-placeholder-dot" x-show="sidebarCollapsed" title="TRaSH sync"></div>
+    <!-- TRaSH sync footer — status dot + Pull button always visible. When
+         expanded: full status line + click-to-expand changelog dropdown. -->
+    <div class="sidebar-foot"
+         @keydown.escape.window="if (showChangelog) { showChangelog = false; $nextTick(() => $refs.trashChangelogButton?.focus()) }">
+      <div class="sidebar-trash-status">
+        <span class="dot sidebar-trash-dot"
+              :class="{ stale: !trashStatus.cloned, none: !trashStatus.commitHash }"
+              x-tt="sidebarCollapsed ? (trashStatus.cloned ? 'TRaSH synced ' + formatSyncTime(trashStatus.lastPull) : 'TRaSH not synced') : null"></span>
+
+        <template x-if="trashStatus.cloned">
+          <button type="button" class="sidebar-trash-button"
+                  x-show="!sidebarCollapsed"
+                  @click="showChangelog = !showChangelog"
+                  x-ref="trashChangelogButton"
+                  :aria-expanded="showChangelog"
+                  aria-controls="trash-changelog-dropdown"
+                  x-tt="'Click for changelog'">
+            <span class="sidebar-trash-line1">
+              <span class="sidebar-trash-label">TRaSH synced</span>
+              <span class="sidebar-trash-time" x-text="formatSyncTime(trashStatus.lastPull)"></span>
+              <span class="sidebar-trash-chev" :class="{ flip: showChangelog }">&#9662;</span>
+            </span>
+            <span class="sidebar-trash-line2">
+              <span class="sidebar-trash-commit" x-show="trashStatus.commitHash" x-text="trashStatus.commitHash"></span>
+              <span class="sidebar-trash-next" x-show="trashStatus.nextPull" x-text="'· ' + nextPullLabel()"></span>
+            </span>
+          </button>
+        </template>
+        <template x-if="!trashStatus.cloned">
+          <div class="sidebar-trash-notsynced" x-show="!sidebarCollapsed">
+            <span class="sidebar-trash-line1">TRaSH not synced</span>
+            <span class="sidebar-trash-line2" x-show="trashStatus.nextPull"
+                  x-text="nextPullLabel()"></span>
+          </div>
+        </template>
+      </div>
+
+      <button class="sidebar-trash-pull btn btn-sm" @click="pullTrash()" :disabled="pulling"
+              x-tt="sidebarCollapsed ? 'Pull TRaSH guides' : null">
+        <span x-show="pulling" class="spinner"></span>
+        <span x-show="!pulling && !sidebarCollapsed">Pull</span>
+        <span x-show="!pulling && sidebarCollapsed" aria-hidden="true">↓</span>
+      </button>
+
+      <!-- Changelog popover — teleported to <body> so it escapes the sidebar
+           overflow:hidden, anchored just to the right of the sidebar. -->
+      <template x-if="showChangelog && !sidebarCollapsed">
+        <div x-teleport="body" id="trash-changelog-dropdown"
+             @click.outside="showChangelog = false"
+             class="sidebar-trash-popover">
+
+          <!-- Last pull diff -->
+          <template x-if="trashStatus.lastDiff">
+            <div>
+              <div class="sidebar-trash-popover-header">
+                <span>Latest Update <span class="dim" x-text="trashStatus.lastDiff.time ? formatSyncTime(trashStatus.lastDiff.time) : ''"></span></span>
+                <span class="dim">
+                  <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.prevCommit"
+                     target="_blank" rel="noopener" class="commit-link"
+                     x-tt="'View commit on GitHub'"
+                     x-text="trashStatus.lastDiff.prevCommit"></a>
+                  <span class="arrow">→</span>
+                  <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.newCommit"
+                     target="_blank" rel="noopener" class="commit-link"
+                     x-tt="'View commit on GitHub'"
+                     x-text="trashStatus.lastDiff.newCommit"></a>
+                </span>
+              </div>
+              <div class="sidebar-trash-popover-diff"
+                   x-text="trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '')"></div>
+            </div>
+          </template>
+
+          <div class="sidebar-trash-popover-header">
+            TRaSH Changelog
+            <span class="dim">from updates.txt</span>
+          </div>
+          <template x-if="!trashStatus.changelog || trashStatus.changelog.length === 0">
+            <div class="sidebar-trash-popover-empty">No changelog available</div>
+          </template>
+          <template x-for="section in (trashStatus.changelog || [])" :key="section.date">
+            <div class="sidebar-trash-popover-section">
+              <div class="sidebar-trash-popover-date">
+                <span x-text="formatChangelogDate(section.date)"></span>
+                <span class="dim" x-text="section.entries.length + (section.entries.length === 1 ? ' change' : ' changes')"></span>
+              </div>
+              <template x-for="entry in section.entries" :key="entry.pr || entry.msg">
+                <div class="sidebar-trash-popover-entry">
+                  <span class="entry-type"
+                        :class="entry.type === 'feat' ? 'is-feat' : entry.type === 'fix' ? 'is-fix' : 'is-other'"
+                        x-text="entry.type"></span>
+                  <span class="entry-body">
+                    <span class="entry-scope" x-text="entry.scope + ':'"></span>
+                    <span class="entry-msg" x-text="entry.msg"></span>
+                    <a x-show="entry.pr" :href="'https://github.com/TRaSH-Guides/Guides/pull/' + entry.pr"
+                       target="_blank" rel="noopener" class="entry-pr"
+                       x-text="'#' + entry.pr"></a>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
   </aside>
+
+  <!-- No-auth banner — same warning as Classic, lives outside the sidebar
+       so it spans the full viewport width. Server logs every 60s regardless
+       of dismissal. -->
+  <div x-show="authStatus.authentication === 'none' && !noAuthBannerDismissed" x-cloak
+       class="noauth-banner">
+    <span class="noauth-banner-msg">
+      ⚠️ Authentication is disabled — anyone who reaches this URL is admin. Set Authentication to Forms or Basic in <strong>Settings → Security</strong>, or make sure another auth layer (reverse proxy, firewall) is in front.
+    </span>
+    <button @click="dismissNoAuthBanner()" x-tt="'Hide on this device'" class="noauth-banner-dismiss">
+      Dismiss
+    </button>
+  </div>
 {{end}}
