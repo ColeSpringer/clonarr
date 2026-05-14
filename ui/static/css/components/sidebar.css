@@ -81,24 +81,6 @@ body:has(.sidebar) [x-data="clonarr"] > main {
   margin-left: auto;
 }
 
-/* "Built by ProphetSe7en" attribution — replaces the old page-footer
-   that lived below main content. Lives inside the sidebar header block
-   so the version + author info appears in exactly one place. */
-.sidebar-tagline {
-  padding: 0 14px 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-muted);
-}
-.sidebar-tagline a {
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.sidebar-tagline a:hover {
-  color: var(--app-color);
-}
-.sidebar.collapsed .sidebar-tagline { display: none; }
-
 /* Collapse toggle — own row below brand */
 .sidebar-collapse-toggle {
   display: flex; align-items: center; justify-content: center;

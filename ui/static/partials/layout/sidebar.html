@@ -14,10 +14,6 @@
             x-text="config.version ? 'v' + config.version : ''"></span>
     </div>
 
-    <div class="sidebar-tagline" x-show="!sidebarCollapsed">
-      Built by <a href="https://github.com/ProphetSe7en" target="_blank" rel="noopener">ProphetSe7en</a>
-    </div>
-
     <!-- User row: avatar + username + logout icon. When auth=none and no
          local bypass, this whole row is hidden. -->
     <div class="sidebar-user-top" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
