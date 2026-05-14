@@ -13,6 +13,34 @@
       <span class="sidebar-version" x-show="!sidebarCollapsed">v3</span>
     </div>
 
+    <!-- User row (under brand): avatar + username + logout icon. When
+         auth=none and no local bypass, this whole row is hidden. -->
+    <div class="sidebar-user-top" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
+      <template x-if="authStatus.authenticated">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar"
+               x-text="(authStatus.username || '?').charAt(0).toUpperCase()"
+               x-tt="sidebarCollapsed ? ('Logged in as ' + authStatus.username) : null"></div>
+          <span class="sidebar-user-name" x-show="!sidebarCollapsed"
+                x-text="authStatus.username"
+                x-tt="'Logged in as ' + authStatus.username"></span>
+          <form method="POST" action="logout" class="sidebar-user-logout-form" x-show="!sidebarCollapsed">
+            <input type="hidden" name="csrf_token" :value="csrfToken()">
+            <button type="submit" class="sidebar-user-logout" x-tt="'Log out'" aria-label="Log out">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            </button>
+          </form>
+        </div>
+      </template>
+      <template x-if="!authStatus.authenticated && authStatus.localBypass">
+        <div class="sidebar-user-row sidebar-user-local"
+             x-tt="'Local network — authentication bypassed for this network'">
+          <div class="sidebar-user-localdot"></div>
+          <span class="sidebar-user-locallabel" x-show="!sidebarCollapsed">Local network</span>
+        </div>
+      </template>
+    </div>
+
     <!-- Collapse toggle -->
     <button type="button" class="sidebar-collapse-toggle" @click="toggleSidebar()"
             :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
@@ -152,33 +180,6 @@
       </a>
     </nav>
 
-    <!-- User menu — username + logout when authenticated, "Local" badge when
-         reaching via Trusted-Networks bypass, hidden when auth=none. -->
-    <div class="sidebar-user" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
-      <template x-if="authStatus.authenticated">
-        <div class="sidebar-user-row">
-          <div class="sidebar-user-avatar"
-               x-text="(authStatus.username || '?').charAt(0).toUpperCase()"
-               x-tt="sidebarCollapsed ? ('Logged in as ' + authStatus.username) : null"></div>
-          <div class="sidebar-user-info" x-show="!sidebarCollapsed">
-            <span class="sidebar-user-name" x-text="authStatus.username"
-                  x-tt="'Logged in as ' + authStatus.username"></span>
-            <form method="POST" action="logout" class="sidebar-user-logout-form">
-              <input type="hidden" name="csrf_token" :value="csrfToken()">
-              <button type="submit" class="sidebar-user-logout" x-tt="'Log out'">Logout</button>
-            </form>
-          </div>
-        </div>
-      </template>
-      <template x-if="!authStatus.authenticated && authStatus.localBypass">
-        <div class="sidebar-user-row sidebar-user-local"
-             x-tt="'Local network — authentication bypassed for this network'">
-          <div class="sidebar-user-localdot"></div>
-          <span class="sidebar-user-locallabel" x-show="!sidebarCollapsed">Local network</span>
-        </div>
-      </template>
-    </div>
-
     <!-- TRaSH sync footer — status dot + Pull button always visible. When
          expanded: full status line + click-to-expand changelog dropdown. -->
     <div class="sidebar-foot"
@@ -256,9 +257,10 @@
             TRaSH Changelog
             <span class="dim">from updates.txt</span>
           </div>
-          <template x-if="!trashStatus.changelog || trashStatus.changelog.length === 0">
-            <div class="sidebar-trash-popover-empty">No changelog available</div>
-          </template>
+          <div class="sidebar-trash-popover-empty"
+               x-show="!trashStatus.changelog || !trashStatus.changelog.length">
+            No changelog available
+          </div>
           <template x-for="section in (trashStatus.changelog || [])" :key="section.date">
             <div class="sidebar-trash-popover-section">
               <div class="sidebar-trash-popover-date">
