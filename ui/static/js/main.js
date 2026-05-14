@@ -952,11 +952,31 @@ Object.assign(window, {
 //   - Suspenders: if a future HTML edit reorders the tags, the
 //     `if (window.Alpine)` branch catches the case where Alpine
 //     already loaded — we just register directly.
+// Ctrl/Cmd+B toggles the v3 sidebar collapsed state. Pattern lifted from
+// VS Code / Linear / Notion. Skips when a typeable element is focused so we
+// don't steal "select to bold" inside text inputs.
+function registerSidebarToggleShortcut() {
+  document.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() !== 'b') return;
+    const target = event.target;
+    const tag = (target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+    event.preventDefault();
+    // Find the active clonarr Alpine root via the body's $data and call
+    // toggleSidebar(). Falls back silently if Alpine isn't ready yet.
+    const root = document.querySelector('[x-data="clonarr"]');
+    const data = root && window.Alpine ? window.Alpine.$data(root) : null;
+    if (data && typeof data.toggleSidebar === 'function') data.toggleSidebar();
+  });
+}
+
 function registerClonarr() {
   window.Alpine.data('clonarr', clonarr);
   registerModalTrapDirective(window.Alpine);
   registerTooltipEscapeListener();
   registerSkipLinkHandler();
+  registerSidebarToggleShortcut();
   // x-tt="'tooltip text'" — viewport-aware custom tooltip directive.
   // Replaces native title="" for elements where the OS tooltip would overflow
   // the viewport (right-edge buttons, long messages). Wires hover, focus, and

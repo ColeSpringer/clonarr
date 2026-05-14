@@ -114,6 +114,13 @@
   --banner-warn-bg: #5a1f1f;
   --banner-warn-border: #8b2d2d;
   --banner-warn-text: #ffdada;
+
+  /* v3 app brand colors — official Radarr/Sonarr hex from their source repos.
+     Used by sidebar app switcher + banner accent + active-nav border. */
+  --radarr-color: #ffc230;
+  --radarr-glow: rgba(255, 194, 48, 0.18);
+  --sonarr-color: #35c5f4;
+  --sonarr-glow: rgba(53, 197, 244, 0.18);
 }
 
 :root[data-theme="light"] {
@@ -207,4 +214,10 @@
   --banner-warn-bg: #ffebe9;
   --banner-warn-border: #ffcecb;
   --banner-warn-text: #82071e;
+
+  /* v3 app brand colors (light-mode override — same hex, softer glow) */
+  --radarr-color: #ffc230;
+  --radarr-glow: rgba(255, 194, 48, 0.22);
+  --sonarr-color: #35c5f4;
+  --sonarr-glow: rgba(53, 197, 244, 0.22);
 }

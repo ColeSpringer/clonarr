@@ -365,6 +365,8 @@ export default function baseState() {
     settingsSection: 'instances',
     uiScale: localStorage.getItem('clonarr-ui-scale') || '1',
     theme: localStorage.getItem('clonarr-theme') || 'system',
+    // v3 sidebar collapse state — persists per-browser. Default expanded.
+    sidebarCollapsed: localStorage.getItem('clonarr-sidebar-collapsed') === '1',
 
     // Scoring Sandbox (per app-type state)
     sandbox: {

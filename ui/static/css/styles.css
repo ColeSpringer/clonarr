@@ -2,6 +2,7 @@
 @import url('./base.css');
 @import url('./layout.css');
 @import url('./components.css');
+@import url('./components/sidebar.css');
 @import url('./features/profiles.css');
 @import url('./features/cf-detail.css');
 @import url('./features/quality.css');

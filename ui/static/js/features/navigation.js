@@ -85,6 +85,14 @@ export default {
       }
     },
 
+    // --- v3 sidebar collapse ---
+    // localStorage-backed boolean; flipped by the Collapse button in the
+    // sidebar header and by Ctrl/Cmd+B keyboard shortcut.
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed;
+      localStorage.setItem('clonarr-sidebar-collapsed', this.sidebarCollapsed ? '1' : '0');
+    },
+
     // --- Hash routing (back/forward, bookmarks, copyable nav links) ---
     // Hash format: #appType/section[/subtab] — e.g. #radarr/profiles/compare, #settings/prowlarr, #about
     buildNavHash() {

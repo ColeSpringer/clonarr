@@ -1,0 +1,77 @@
+{{define "layout/sidebar"}}
+  <!-- v3 Sidebar — built incrementally. App switcher functional from day 1;
+       other sections filled in over subsequent commits. -->
+  <aside class="sidebar" :class="{ 'collapsed': sidebarCollapsed }" :data-app="activeAppType || 'radarr'" aria-label="Main navigation">
+
+    <!-- Top accent stripe — color reflects active app -->
+    <div class="sidebar-strip"></div>
+
+    <!-- Brand -->
+    <div class="sidebar-brand">
+      <img class="sidebar-logo" src="icons/clonarr.png" alt="">
+      <span class="sidebar-name" x-show="!sidebarCollapsed">Clonarr</span>
+      <span class="sidebar-version" x-show="!sidebarCollapsed">v3</span>
+    </div>
+
+    <!-- Collapse toggle -->
+    <button type="button" class="sidebar-collapse-toggle" @click="toggleSidebar()"
+            :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            x-tt="sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'">
+      <span class="sidebar-collapse-chev" :class="{ flip: sidebarCollapsed }">&lsaquo;</span>
+      <span class="sidebar-collapse-label" x-show="!sidebarCollapsed">Collapse sidebar</span>
+    </button>
+
+    <!-- App switcher — Radarr / Sonarr toggle with color theming -->
+    <div class="sidebar-app-switcher">
+      <div class="sidebar-app-label" x-show="!sidebarCollapsed">
+        <span>App</span>
+        <span class="sidebar-app-now" x-text="'● ' + (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr')"></span>
+      </div>
+      <div class="sidebar-app-pill">
+        <button type="button" class="sidebar-app-btn"
+                :class="{ active: activeAppType !== 'sonarr' }"
+                data-app="radarr"
+                @click="switchAppType('radarr')"
+                x-tt="'Switch to Radarr'">
+          <span class="sidebar-app-swatch"></span>
+          <span class="sidebar-app-full" x-show="!sidebarCollapsed">Radarr</span>
+          <span class="sidebar-app-short" x-show="sidebarCollapsed">R</span>
+          <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('radarr').length"></span>
+        </button>
+        <button type="button" class="sidebar-app-btn"
+                :class="{ active: activeAppType === 'sonarr' }"
+                data-app="sonarr"
+                @click="switchAppType('sonarr')"
+                x-tt="'Switch to Sonarr'">
+          <span class="sidebar-app-swatch"></span>
+          <span class="sidebar-app-full" x-show="!sidebarCollapsed">Sonarr</span>
+          <span class="sidebar-app-short" x-show="sidebarCollapsed">S</span>
+          <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('sonarr').length"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main nav placeholder — filled in next commit -->
+    <nav class="sidebar-nav" aria-label="Sections">
+      <div class="sidebar-section-label" x-show="!sidebarCollapsed">Library</div>
+      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+
+      <div class="sidebar-section-label" x-show="!sidebarCollapsed">Tools</div>
+      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+
+      <div class="sidebar-section-label" x-show="!sidebarCollapsed">App</div>
+      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+    </nav>
+
+    <!-- User menu placeholder -->
+    <div class="sidebar-user placeholder" x-show="!sidebarCollapsed">
+      <div class="sidebar-placeholder-label">User menu</div>
+    </div>
+
+    <!-- TRaSH sync footer placeholder -->
+    <div class="sidebar-foot placeholder">
+      <div class="sidebar-placeholder-label" x-show="!sidebarCollapsed">TRaSH sync status</div>
+      <div class="sidebar-placeholder-dot" x-show="sidebarCollapsed" title="TRaSH sync"></div>
+    </div>
+  </aside>
+{{end}}
