@@ -125,16 +125,17 @@ body:has(.sidebar) [x-data="clonarr"]:has(.sidebar.collapsed) {
   border-radius: 6px;
   transition: all 0.15s;
 }
-.sidebar.collapsed .sidebar-app-btn { padding: 6px 0; flex-direction: column; gap: 2px; font-size: 11px; }
+.sidebar.collapsed .sidebar-app-btn { padding: 6px 0; gap: 0; font-size: 11px; }
 .sidebar-app-btn:hover { background: var(--bg-elevated); color: var(--text-body); }
-.sidebar-app-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.sidebar.collapsed .sidebar-app-swatch { width: 8px; height: 8px; }
-.sidebar-app-btn[data-app="radarr"] .sidebar-app-swatch { background: var(--radarr-color); }
-.sidebar-app-btn[data-app="sonarr"] .sidebar-app-swatch { background: var(--sonarr-color); }
-.sidebar-app-full, .sidebar-app-short { font-weight: 600; }
-.sidebar-app-short { font-size: 12px; font-weight: 700; }
+.sidebar-app-logo {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.sidebar.collapsed .sidebar-app-logo { width: 20px; height: 20px; }
+.sidebar-app-full { font-weight: 600; }
 .sidebar-app-num { font-size: 11px; color: var(--text-muted); font-weight: 400; }
-.sidebar.collapsed .sidebar-app-num { font-size: 10px; }
 .sidebar-app-btn.active {
   background: var(--bg-elevated);
   color: var(--text-body);

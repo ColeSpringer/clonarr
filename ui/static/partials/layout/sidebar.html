@@ -33,9 +33,8 @@
                 data-app="radarr"
                 @click="switchAppType('radarr')"
                 x-tt="'Switch to Radarr'">
-          <span class="sidebar-app-swatch"></span>
+          <img class="sidebar-app-logo" src="icons/radarrNew.png" alt="">
           <span class="sidebar-app-full" x-show="!sidebarCollapsed">Radarr</span>
-          <span class="sidebar-app-short" x-show="sidebarCollapsed">R</span>
           <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('radarr').length"></span>
         </button>
         <button type="button" class="sidebar-app-btn"
@@ -43,9 +42,8 @@
                 data-app="sonarr"
                 @click="switchAppType('sonarr')"
                 x-tt="'Switch to Sonarr'">
-          <span class="sidebar-app-swatch"></span>
+          <img class="sidebar-app-logo" src="icons/sonarr.png" alt="">
           <span class="sidebar-app-full" x-show="!sidebarCollapsed">Sonarr</span>
-          <span class="sidebar-app-short" x-show="sidebarCollapsed">S</span>
           <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('sonarr').length"></span>
         </button>
       </div>
