@@ -49,16 +49,107 @@
       </div>
     </div>
 
-    <!-- Main nav placeholder — filled in next commit -->
+    <!-- Main nav -->
     <nav class="sidebar-nav" aria-label="Sections">
+
       <div class="sidebar-section-label" x-show="!sidebarCollapsed">Library</div>
-      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+
+      <!-- Profiles -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'profiles' }"
+         :href="navHref('profiles')"
+         :aria-current="currentSection === 'profiles' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'Profiles' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Profiles</span>
+      </a>
+
+      <!-- Sub-nav under Profiles, only when active -->
+      <div class="sidebar-subnav" x-show="!sidebarCollapsed && currentSection === 'profiles'">
+        <a class="sidebar-subnav-item" :class="{ active: getProfileTab(activeAppType) === 'trash-sync' }"
+           :href="navHref('profiles', { profileTab: 'trash-sync' })">TRaSH Sync</a>
+        <a class="sidebar-subnav-item" :class="{ active: getProfileTab(activeAppType) === 'history' }"
+           :href="navHref('profiles', { profileTab: 'history' })">History</a>
+        <a class="sidebar-subnav-item" :class="{ active: getProfileTab(activeAppType) === 'compare' }"
+           :href="navHref('profiles', { profileTab: 'compare' })">Compare</a>
+      </div>
+
+      <!-- Custom Formats -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'custom-formats' }"
+         :href="navHref('custom-formats')"
+         :aria-current="currentSection === 'custom-formats' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'Custom Formats' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Custom Formats</span>
+      </a>
+
+      <!-- Quality Definitions -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'quality-size' }"
+         :href="navHref('quality-size')"
+         :aria-current="currentSection === 'quality-size' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'Quality Definitions' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Quality Definitions</span>
+      </a>
+
+      <!-- File Naming -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'naming' }"
+         :href="navHref('naming')"
+         :aria-current="currentSection === 'naming' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'File Naming' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">File Naming</span>
+      </a>
 
       <div class="sidebar-section-label" x-show="!sidebarCollapsed">Tools</div>
-      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+
+      <!-- Maintenance -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'maintenance' }"
+         :href="navHref('maintenance')"
+         :aria-current="currentSection === 'maintenance' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'Maintenance' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Maintenance</span>
+      </a>
+
+      <!-- Advanced (dev-mode gated) -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'advanced' }"
+         :href="navHref('advanced')"
+         :aria-current="currentSection === 'advanced' ? 'page' : null"
+         x-show="config.devMode"
+         x-tt="sidebarCollapsed ? 'Advanced' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Advanced</span>
+      </a>
+
+      <!-- Sub-nav under Advanced when active -->
+      <div class="sidebar-subnav" x-show="!sidebarCollapsed && currentSection === 'advanced'">
+        <a class="sidebar-subnav-item" :class="{ active: advancedTab === 'builder' }"
+           :href="navHref('advanced', { advancedTab: 'builder' })">Profile Builder</a>
+        <a class="sidebar-subnav-item" :class="{ active: advancedTab === 'scoring' }"
+           :href="navHref('advanced', { advancedTab: 'scoring' })">Scoring Sandbox</a>
+        <a class="sidebar-subnav-item" :class="{ active: advancedTab === 'group-builder' }"
+           :href="navHref('advanced', { advancedTab: 'group-builder' })">CF Group Builder</a>
+      </div>
 
       <div class="sidebar-section-label" x-show="!sidebarCollapsed">App</div>
-      <div class="sidebar-placeholder-block" x-show="!sidebarCollapsed">nav items</div>
+
+      <!-- Settings -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'settings' }"
+         :href="navHref('settings')"
+         :aria-current="currentSection === 'settings' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'Settings' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Settings</span>
+      </a>
+
+      <!-- About -->
+      <a class="sidebar-nav-item" :class="{ active: currentSection === 'about' }"
+         :href="navHref('about')"
+         :aria-current="currentSection === 'about' ? 'page' : null"
+         x-tt="sidebarCollapsed ? 'About' : null">
+        <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
+        <span class="sidebar-nav-label" x-show="!sidebarCollapsed">About</span>
+      </a>
     </nav>
 
     <!-- User menu placeholder -->
