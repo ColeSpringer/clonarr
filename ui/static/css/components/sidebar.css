@@ -168,7 +168,9 @@ body:has(.sidebar) [x-data="clonarr"] > main {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 0;
+  /* padding-bottom leaves room for the fixed-position .sidebar-foot so
+     the last nav items aren't hidden behind it when scrolled to. */
+  padding: 8px 0 130px;
 }
 .sidebar-section-label {
   font-size: 10px;
@@ -313,14 +315,28 @@ body:has(.sidebar) [x-data="clonarr"] > main {
 /* ------------------------------------------------------------------
    TRaSH sync footer
    ------------------------------------------------------------------ */
+/* Pinned to the bottom of the viewport via position:fixed so it's always
+   visible regardless of whether the sidebar's sticky layout is working.
+   Width tracks the sidebar (244px expanded / 60px collapsed) with the
+   same transition, so the foot stays visually attached to the sidebar
+   even though it's an independent fixed element. */
 .sidebar-foot {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  z-index: 51;
   border-top: 1px solid var(--border-muted);
+  border-right: 1px solid var(--border-subtle);
   padding: 10px 14px;
   background: var(--bg-card);
   display: flex; flex-direction: column;
   gap: 8px;
+  box-sizing: border-box;
+  transition: width 0.22s ease, padding 0.22s ease;
 }
 .sidebar.collapsed .sidebar-foot {
+  width: var(--sidebar-w-collapsed);
   padding: 10px 0;
   align-items: center;
 }
