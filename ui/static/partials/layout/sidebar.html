@@ -229,12 +229,16 @@
         <span x-show="!pulling && sidebarCollapsed" aria-hidden="true">↓</span>
       </button>
 
-      <!-- Changelog popover — teleported to <body> so it escapes the sidebar
-           overflow:hidden, anchored just to the right of the sidebar. -->
-      <template x-if="showChangelog && !sidebarCollapsed">
-        <div x-teleport="body" id="trash-changelog-dropdown"
-             @click.outside="showChangelog = false"
-             class="sidebar-trash-popover">
+      <!-- Changelog popover — position:fixed escapes the sidebar overflow
+           on its own (no teleport needed). x-show keeps directives in DOM
+           so x-for / x-text bindings always reflect current state. The
+           click-outside check ignores clicks on the trigger button so the
+           button's own @click toggle isn't immediately undone. -->
+      <div id="trash-changelog-dropdown"
+           x-show="showChangelog && !sidebarCollapsed"
+           @click.outside="if (!$refs.trashChangelogButton?.contains($event.target)) showChangelog = false"
+           class="sidebar-trash-popover"
+           x-cloak>
 
           <!-- Last pull diff -->
           <template x-if="trashStatus.lastDiff">
@@ -289,7 +293,6 @@
             </div>
           </template>
         </div>
-      </template>
     </div>
   </aside>
 
