@@ -62,11 +62,11 @@ body:has(.sidebar) [x-data="clonarr"] > main {
   background: linear-gradient(90deg, var(--app-color), transparent 100%);
 }
 
-/* Brand */
+/* Brand row — first thing in the sidebar, no top border so it sits
+   flush with the viewport. Border-bottom moves to the tagline below. */
 .sidebar-brand {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-muted);
+  padding: 12px 14px 6px;
 }
 .sidebar.collapsed .sidebar-brand { justify-content: center; }
 .sidebar-logo {
@@ -75,12 +75,29 @@ body:has(.sidebar) [x-data="clonarr"] > main {
 }
 .sidebar-name { font-size: 16px; font-weight: 600; color: var(--text-primary); }
 .sidebar-version {
-  font-size: 11px; color: var(--text-muted);
-  background: var(--bg-elevated);
-  padding: 1px 7px; border-radius: 9px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
   margin-left: auto;
-  border: 1px solid var(--border-muted);
 }
+
+/* "Built by ProphetSe7en" attribution — replaces the old page-footer
+   that lived below main content. Lives inside the sidebar header block
+   so the version + author info appears in exactly one place. */
+.sidebar-tagline {
+  padding: 0 14px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-muted);
+}
+.sidebar-tagline a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.sidebar-tagline a:hover {
+  color: var(--app-color);
+}
+.sidebar.collapsed .sidebar-tagline { display: none; }
 
 /* Collapse toggle — own row below brand */
 .sidebar-collapse-toggle {
@@ -250,8 +267,9 @@ body:has(.sidebar) [x-data="clonarr"] > main {
    ------------------------------------------------------------------ */
 .sidebar-user-top {
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border-muted);
   background: var(--bg-card);
+  /* No border-bottom: the accent stripe immediately below is the
+     visual separator between header block and the rest. */
 }
 .sidebar.collapsed .sidebar-user-top { padding: 8px 0; }
 

@@ -3,18 +3,23 @@
        other sections filled in over subsequent commits. -->
   <aside class="sidebar" :class="{ 'collapsed': sidebarCollapsed }" :data-app="activeAppType || 'radarr'" aria-label="Main navigation">
 
-    <!-- Top accent stripe — color reflects active app -->
-    <div class="sidebar-strip"></div>
-
-    <!-- Brand -->
+    <!-- Header block (above the accent stripe):
+         Logo + Clonarr + version | Built by ProphetSe7en | Admin + Logout.
+         Consolidates the old page-footer attribution into the sidebar so
+         the version number lives in exactly one place. -->
     <div class="sidebar-brand">
       <img class="sidebar-logo" src="icons/clonarr.png" alt="">
       <span class="sidebar-name" x-show="!sidebarCollapsed">Clonarr</span>
-      <span class="sidebar-version" x-show="!sidebarCollapsed">v3</span>
+      <span class="sidebar-version" x-show="!sidebarCollapsed"
+            x-text="config.version ? 'v' + config.version : ''"></span>
     </div>
 
-    <!-- User row (under brand): avatar + username + logout icon. When
-         auth=none and no local bypass, this whole row is hidden. -->
+    <div class="sidebar-tagline" x-show="!sidebarCollapsed">
+      Built by <a href="https://github.com/ProphetSe7en" target="_blank" rel="noopener">ProphetSe7en</a>
+    </div>
+
+    <!-- User row: avatar + username + logout icon. When auth=none and no
+         local bypass, this whole row is hidden. -->
     <div class="sidebar-user-top" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
       <template x-if="authStatus.authenticated">
         <div class="sidebar-user-row">
@@ -40,6 +45,10 @@
         </div>
       </template>
     </div>
+
+    <!-- Accent stripe — color reflects active app. Separates the header
+         block (brand + version + user) from the navigation. -->
+    <div class="sidebar-strip"></div>
 
     <!-- Collapse toggle -->
     <button type="button" class="sidebar-collapse-toggle" @click="toggleSidebar()"
