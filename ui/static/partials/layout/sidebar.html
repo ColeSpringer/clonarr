@@ -14,36 +14,9 @@
             x-text="config.version ? 'v' + config.version : ''"></span>
     </div>
 
-    <!-- User row: avatar + username + logout icon. When auth=none and no
-         local bypass, this whole row is hidden. -->
-    <div class="sidebar-user-top" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
-      <template x-if="authStatus.authenticated">
-        <div class="sidebar-user-row">
-          <div class="sidebar-user-avatar"
-               x-text="(authStatus.username || '?').charAt(0).toUpperCase()"
-               x-tt="sidebarCollapsed ? ('Logged in as ' + authStatus.username) : null"></div>
-          <span class="sidebar-user-name" x-show="!sidebarCollapsed"
-                x-text="authStatus.username"
-                x-tt="'Logged in as ' + authStatus.username"></span>
-          <form method="POST" action="logout" class="sidebar-user-logout-form" x-show="!sidebarCollapsed">
-            <input type="hidden" name="csrf_token" :value="csrfToken()">
-            <button type="submit" class="sidebar-user-logout" x-tt="'Log out'" aria-label="Log out">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </button>
-          </form>
-        </div>
-      </template>
-      <template x-if="!authStatus.authenticated && authStatus.localBypass">
-        <div class="sidebar-user-row sidebar-user-local"
-             x-tt="'Local network — authentication bypassed for this network'">
-          <div class="sidebar-user-localdot"></div>
-          <span class="sidebar-user-locallabel" x-show="!sidebarCollapsed">Local network</span>
-        </div>
-      </template>
-    </div>
-
-    <!-- Accent stripe — color reflects active app. Separates the header
-         block (brand + version + user) from the navigation. -->
+    <!-- Accent stripe — color reflects active app. Separates the brand
+         block from the navigation. (User row was relocated to the app
+         banner top-right per Sprint 2 design.) -->
     <div class="sidebar-strip"></div>
 
     <!-- Collapse toggle -->

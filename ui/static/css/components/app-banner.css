@@ -76,6 +76,105 @@
   flex: 0 0 auto;
 }
 
+/* User chip — relocated from sidebar in Sprint 2 slice 2. Avatar circle
+   in --app-color tint + username + chevron. Clicking opens a small
+   popover with a single Logout button (POST + CSRF, same flow as the
+   sidebar form it replaced). Local-network-bypass users see a non-
+   interactive variant ("● Local network") with no popover. */
+.app-banner-user {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.app-banner-user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.app-banner-user-trigger:hover,
+.app-banner-user.open .app-banner-user-trigger {
+  border-color: var(--app-color);
+  background: var(--bg-elevated-hover);
+}
+.app-banner-user-icon {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+.app-banner-user-trigger:hover .app-banner-user-icon,
+.app-banner-user.open .app-banner-user-icon {
+  color: var(--app-color);
+}
+.app-banner-user-name {
+  font-weight: 500;
+}
+.app-banner-user-chev {
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  margin-left: 1px;
+}
+.app-banner-user-chev.flip { transform: rotate(180deg); }
+
+.app-banner-user-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  z-index: 60;
+}
+.app-banner-user-logout-form { margin: 0; padding: 0; }
+.app-banner-user-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-body);
+  cursor: pointer;
+  text-align: left;
+}
+.app-banner-user-logout:hover {
+  background: var(--bg-elevated-hover);
+  color: var(--accent-red);
+}
+.app-banner-user-logout svg { flex: 0 0 auto; }
+
+/* Local-network bypass variant — flat chip with a green dot, no popover. */
+.app-banner-user-local {
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  font-size: 12.5px;
+}
+.app-banner-user-localdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+}
+
 /* Global mode — Settings, About. Same gradient + border-fade design
    as app-scoped pages, just anchored to Clonarr's own brand identity
    (green) instead of Radarr/Sonarr. Overrides the --app-color cascade

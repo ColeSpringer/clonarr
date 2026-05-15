@@ -245,71 +245,8 @@ body:has(.sidebar) [x-data="clonarr"] > main {
   transform: translateY(-50%);
 }
 
-/* ------------------------------------------------------------------
-   User row (under brand)
-   ------------------------------------------------------------------ */
-.sidebar-user-top {
-  padding: 8px 14px;
-  background: var(--bg-card);
-  /* No border-bottom: the accent stripe immediately below is the
-     visual separator between header block and the rest. */
-}
-.sidebar.collapsed .sidebar-user-top { padding: 8px 0; }
-
-.sidebar-user-row {
-  display: flex; align-items: center; gap: 10px;
-}
-.sidebar.collapsed .sidebar-user-row { justify-content: center; }
-
-.sidebar-user-avatar {
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1.5px solid var(--app-color);
-  color: var(--text-body);
-  font-size: 12px; font-weight: 600;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-
-.sidebar-user-name {
-  font-size: 12.5px;
-  color: var(--text-body);
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sidebar-user-logout-form { margin: 0; flex-shrink: 0; }
-.sidebar-user-logout {
-  background: transparent;
-  color: var(--text-muted);
-  border: none;
-  padding: 5px 6px;
-  border-radius: 4px;
-  font-family: inherit;
-  cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: color 0.1s, background 0.1s;
-}
-.sidebar-user-logout:hover {
-  color: var(--app-color);
-  background: var(--bg-elevated);
-}
-
-/* Local-bypass badge */
-.sidebar-user-local { gap: 8px; }
-.sidebar-user-localdot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--accent-blue);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 20%, transparent);
-  flex-shrink: 0;
-}
-.sidebar-user-locallabel {
-  font-size: 11px; font-weight: 500;
-  letter-spacing: 0.3px;
-  color: var(--accent-blue);
-  text-transform: uppercase;
-}
+/* User row was relocated to the app banner top-right in Sprint 2.
+   See css/components/app-banner.css for the .app-banner-user* rules. */
 
 /* ------------------------------------------------------------------
    TRaSH sync footer

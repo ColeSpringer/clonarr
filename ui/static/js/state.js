@@ -330,6 +330,7 @@ export default function baseState() {
 
     // Sync
     showChangelog: false,
+    userMenuOpen: false,            // v3 banner: user-chip click toggles logout popover
     sandboxCFBrowser: { open: false, appType: '', categories: [], customCFs: [], selected: {}, scores: {}, expanded: {}, filter: '' },
     showSyncModal: false,
     syncMode: 'create',

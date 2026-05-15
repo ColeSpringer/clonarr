@@ -25,8 +25,49 @@
       <span x-text="currentBreadcrumb()"></span>
     </span>
 
-    <!-- RIGHT: filled in by later Sprint 2 commits (auto-sync chip + user chip).
-         is-global hides the auto-sync chip since it isn't app-scoped. -->
-    <span class="app-banner-right"></span>
+    <!-- RIGHT: chips. Auto-sync chip (added in a later slice) sits to the
+         left of the user chip and is hidden on global sections.
+         User chip shows the logged-in username with a click-to-open
+         popover containing a Logout button (POST + CSRF, same flow as
+         the previous sidebar form). For local-network bypass users
+         (auth required disabled for their network), shows "Local network"
+         as a non-interactive chip. -->
+    <span class="app-banner-right"
+          @keydown.escape.window="userMenuOpen = false">
+      <!-- Authenticated user chip -->
+      <template x-if="authStatus.authenticated">
+        <span class="app-banner-user" :class="{ open: userMenuOpen }">
+          <button type="button" class="app-banner-user-trigger"
+                  @click="userMenuOpen = !userMenuOpen"
+                  :aria-expanded="userMenuOpen"
+                  aria-haspopup="menu">
+            <svg class="app-banner-user-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span class="app-banner-user-name" x-text="authStatus.username"></span>
+            <span class="app-banner-user-chev" :class="{ flip: userMenuOpen }">&#9662;</span>
+          </button>
+          <!-- Logout popover -->
+          <div class="app-banner-user-menu"
+               x-show="userMenuOpen" x-cloak
+               @click.outside="userMenuOpen = false"
+               role="menu">
+            <form method="POST" action="logout" class="app-banner-user-logout-form">
+              <input type="hidden" name="csrf_token" :value="csrfToken()">
+              <button type="submit" class="app-banner-user-logout" role="menuitem">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                <span>Log out</span>
+              </button>
+            </form>
+          </div>
+        </span>
+      </template>
+      <!-- Local-network bypass chip — non-interactive, just signals "no login needed" -->
+      <template x-if="!authStatus.authenticated && authStatus.localBypass">
+        <span class="app-banner-user app-banner-user-local"
+              x-tt="'Local network — authentication bypassed for this network'">
+          <span class="app-banner-user-localdot" aria-hidden="true"></span>
+          <span class="app-banner-user-locallabel">Local network</span>
+        </span>
+      </template>
+    </span>
   </header>
 {{end}}
