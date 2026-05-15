@@ -15,7 +15,10 @@
   .topnav .sync-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
   .topnav .sync-status .dot.stale { background: var(--accent-orange); }
   .topnav .sync-status .dot.none { background: var(--text-secondary); }
-  .topnav .trash-sync-button { gap: 4px; }
+  /* .topnav .trash-sync-button removed in v3 Sprint 3 slice 1 — the
+     button wrapper no longer exists. The rest of the .topnav rules in
+     this file are still referenced from Classic top-nav.html (kept on
+     this branch until v3.0.0 merge to main retires Classic entirely). */
 
   /* Changelog dropdown */
   .changelog-dropdown { position: absolute; top: calc(100% + 6px); right: 0; width: 500px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: 0 8px 24px var(--alpha-shadow); z-index: 200; max-height: 420px; overflow-y: auto; }

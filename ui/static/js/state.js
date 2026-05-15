@@ -78,7 +78,6 @@ export default function baseState() {
     cfgbSavingMsg: '',                       // transient save/delete feedback
     cfgbSavingOk: false,                     // whether cfgbSavingMsg is success (green) or error (red)
     cfgbDeleting: false,                     // guard against double-fire on Delete → Confirm (modal's onConfirm could run twice under fast clicks)
-    profileTab: 'trash-sync',    // NEW — simple variable replacing per-app profileTabs: 'trash-sync', 'compare'
     config: { trashRepo: { url: '', branch: '' }, pullInterval: '24h', pullSchedule: { mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, syncSchedule: { enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, prowlarr: { url: '', apiKey: '', enabled: false, radarrCategories: [], sonarrCategories: [] }, authentication: 'forms', authenticationRequired: 'disabled_for_local_addresses', trustedNetworks: '', trustedProxies: '', sessionTtlDays: 30 },
     _syncScheduleSavedMode: 'daily',  // remembers the actual mode while UI dropdown shows 'disabled' sentinel; restored when user re-enables
     trashStatus: {},
@@ -89,7 +88,7 @@ export default function baseState() {
     expandedProfileGroups: {},
     pulling: false,
     trashResetting: false,
-    profileTabs: {},  // per app-type profile tab: { radarr: 'trash-sync', sonarr: 'trash-sync' }
+    profileTabs: {},  // per app-type profile tab: { radarr: 'trash-profiles', sonarr: 'sync-rules', ... }
     compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
     syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
     syncRulesSort: { col: '', dir: 'asc' },

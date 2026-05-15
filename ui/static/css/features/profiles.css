@@ -33,11 +33,9 @@
   .subtab:hover { color: var(--text-primary); }
   .subtab.active { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
   .subtab:focus-visible { outline-offset: -2px; }
-  .profile-tabs { display: flex; gap: 0; padding: 0 24px; background: var(--bg-page); border-bottom: 1px solid var(--bg-muted); }
-  .profile-tab { padding: 10px 16px; font-size: 15px; color: var(--text-soft); cursor: pointer; border-bottom: 2px solid transparent; user-select: none; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; }
-  .profile-tab:hover { color: var(--text-muted); }
-  .profile-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
-  .profile-tab:focus-visible { outline-offset: -2px; }
+  /* .profile-tabs / .profile-tab — removed in v3 Sprint 3 slice 1 along
+     with the in-page top-nav bar (app-pages.html). Sidebar is now the
+     single nav source. */
 
   /* App type toggle pills used by older embedded controls */
   .app-pill { padding: 5px 16px; font-size: 12px; font-weight: 500; border: 1px solid var(--border-subtle); border-radius: 20px; cursor: pointer; background: transparent; color: var(--text-muted); transition: all 0.15s; }

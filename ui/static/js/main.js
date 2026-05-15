@@ -513,8 +513,22 @@ export function clonarr() {
       });
       // Expanding the sidebar (Ctrl+B or click-toggle) closes the popup —
       // when the inline subnav becomes visible, the popup is redundant.
+      // Also cancel any pending show-timer: if user was hovering an icon
+      // and the 150ms delay hadn't elapsed yet, the timer would otherwise
+      // open the popup AFTER the sidebar already expanded.
       this.$watch('sidebarCollapsed', (val) => {
-        if (!val) this.sidebarSubnavPopup = '';
+        if (!val) {
+          this.sidebarSubnavPopup = '';
+          if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+          if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+        }
+      });
+      // Window resize closes the popup. The popup's captured top coord
+      // becomes stale on resize (the icon's getBoundingClientRect changes
+      // if the layout reflows), and the simplest robust answer is dismiss
+      // rather than try to re-anchor mid-interaction.
+      window.addEventListener('resize', () => {
+        if (this.sidebarSubnavPopup) this.sidebarSubnavPopup = '';
       });
 
       // Settings → Security loads the API key. Was inline on the old
