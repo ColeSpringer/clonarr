@@ -8,7 +8,7 @@
          Consolidates the old page-footer attribution into the sidebar so
          the version number lives in exactly one place. -->
     <div class="sidebar-brand">
-      <img class="sidebar-logo" src="icons/clonarr.png" alt="">
+      <img class="sidebar-logo" src="icons/clonarr.png?v={{.Version}}" alt="">
       <span class="sidebar-name" x-show="!sidebarCollapsed">Clonarr</span>
       <span class="sidebar-version" x-show="!sidebarCollapsed"
             x-text="config.version ? 'v' + config.version : ''"></span>
@@ -66,7 +66,7 @@
                 data-app="radarr"
                 @click="switchAppType('radarr')"
                 x-tt="'Switch to Radarr'">
-          <img class="sidebar-app-logo" src="icons/radarrNew.png" alt="">
+          <img class="sidebar-app-logo" src="icons/radarrNew.png?v={{.Version}}" alt="">
           <span class="sidebar-app-full" x-show="!sidebarCollapsed">Radarr</span>
           <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('radarr').length"></span>
         </button>
@@ -75,7 +75,7 @@
                 data-app="sonarr"
                 @click="switchAppType('sonarr')"
                 x-tt="'Switch to Sonarr'">
-          <img class="sidebar-app-logo" src="icons/sonarr.png" alt="">
+          <img class="sidebar-app-logo" src="icons/sonarr.png?v={{.Version}}" alt="">
           <span class="sidebar-app-full" x-show="!sidebarCollapsed">Sonarr</span>
           <span class="sidebar-app-num" x-show="!sidebarCollapsed" x-text="instancesOfType('sonarr').length"></span>
         </button>
