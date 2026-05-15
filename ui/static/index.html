@@ -49,10 +49,11 @@
      in main.js (CSP-tightening compatibility — no inline onclick). -->
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div x-data="clonarr" x-init="init()" x-cloak>
+<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'">
 
   {{template "layout/sidebar" .}}
   <main id="main-content" tabindex="-1">
+  {{template "layout/app-banner" .}}
   {{template "sections/app-pages" .}}
   {{template "sections/advanced" .}}
   {{template "overlays/profile-builder" .}}

@@ -1,0 +1,32 @@
+{{define "layout/app-banner"}}
+  <!-- v3 app context banner — sticky top of main pane. Shows which app
+       and which page you're on at all times, plus user + auto-sync chip
+       on the right (added in later Sprint 2 commits). Global sections
+       (Settings, About) collapse to a plain text banner without swatch
+       or breadcrumb separator. -->
+  <header class="app-banner" :class="{ 'is-global': isGlobalSection() }" aria-label="App context">
+    <!-- LEFT: brand logo + name. Settings/About show Clonarr's own
+         identity (green energy-core logo + CLONARR text); everything
+         else shows the active app (Radarr yellow / Sonarr blue). The
+         gradient + border-fade reuse the same --app-color cascade —
+         .is-global swaps the cascade to Clonarr green via CSS. -->
+    <span class="app-banner-app">
+      <img class="app-banner-logo"
+           :src="(isGlobalSection() ? 'icons/clonarr.png' : (activeAppType === 'sonarr' ? 'icons/sonarr.png' : 'icons/radarrNew.png')) + '?v={{.Version}}'"
+           alt="" aria-hidden="true">
+      <span class="app-banner-appname"
+            x-text="isGlobalSection() ? 'CLONARR' : (activeAppType === 'sonarr' ? 'SONARR' : 'RADARR')"></span>
+    </span>
+
+    <!-- MIDDLE: breadcrumb (always has the leading separator now since
+         the left block always renders a brand anchor). -->
+    <span class="app-banner-crumb">
+      <span class="app-banner-sep" aria-hidden="true">/</span>
+      <span x-text="currentBreadcrumb()"></span>
+    </span>
+
+    <!-- RIGHT: filled in by later Sprint 2 commits (auto-sync chip + user chip).
+         is-global hides the auto-sync chip since it isn't app-scoped. -->
+    <span class="app-banner-right"></span>
+  </header>
+{{end}}

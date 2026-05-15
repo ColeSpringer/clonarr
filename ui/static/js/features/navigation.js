@@ -213,5 +213,46 @@ export default {
       const id = this.compareInstanceIds[appType];
       return id ? (this.instances.find(i => i.id === id) || null) : null;
     },
+
+    // Sprint 2 — app-banner helpers. Banner has two display modes:
+    // app-scoped (full swatch + breadcrumb) and global (plain section
+    // text, no swatch). Settings + About are global; everything else
+    // is app-scoped.
+    isGlobalSection() {
+      return this.currentSection === 'settings' || this.currentSection === 'about';
+    },
+
+    // Returns the breadcrumb text shown in the banner middle.
+    // App-scoped sections: "Profiles / TRaSH Sync", "Custom Formats",
+    //                      "Advanced / Profile Builder", etc.
+    // Global sections: "Settings", "About".
+    // The "App / " prefix is intentionally omitted — the banner swatch
+    // already encodes the active app, repeating it as text is redundant.
+    currentBreadcrumb() {
+      const sectionLabels = {
+        'profiles': 'Profiles',
+        'custom-formats': 'Custom Formats',
+        'quality-size': 'Quality Definitions',
+        'naming': 'File Naming',
+        'maintenance': 'Maintenance',
+        'advanced': 'Advanced',
+        'settings': 'Settings',
+        'about': 'About',
+      };
+      const section = sectionLabels[this.currentSection] || '';
+      if (this.isGlobalSection()) return section;
+
+      if (this.currentSection === 'profiles') {
+        const tab = this.getProfileTab(this.activeAppType);
+        const tabLabel = { 'trash-sync': 'TRaSH Sync', 'history': 'History', 'compare': 'Compare' }[tab] || '';
+        return tabLabel ? `${section} / ${tabLabel}` : section;
+      }
+      if (this.currentSection === 'advanced') {
+        const tab = this.advancedTab;
+        const tabLabel = { 'builder': 'Profile Builder', 'scoring': 'Scoring Sandbox', 'group-builder': 'CF Group Builder' }[tab] || '';
+        return tabLabel ? `${section} / ${tabLabel}` : section;
+      }
+      return section;
+    },
   },
 };

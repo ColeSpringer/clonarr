@@ -7,10 +7,9 @@
   --sidebar-w-collapsed: 60px;
 }
 
-/* App-color driven by [data-app] on .sidebar (and later on .main banner).
-   Defaults to Radarr if not set. */
-.sidebar { --app-color: var(--radarr-color); --app-glow: var(--radarr-glow); }
-.sidebar[data-app="sonarr"] { --app-color: var(--sonarr-color); --app-glow: var(--sonarr-glow); }
+/* --app-color / --app-glow cascade now lives in tokens.css at :root scope,
+   flipped by [data-app="sonarr"] on the x-data wrapper. Both sidebar and
+   the main-pane banner pick it up via inheritance. */
 
 /* Make the root layout a sidebar+main grid. When the v3 sidebar is in the
    DOM, the body's top-level child stack (sidebar + main) flows as a CSS

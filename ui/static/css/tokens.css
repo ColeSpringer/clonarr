@@ -116,11 +116,27 @@
   --banner-warn-text: #ffdada;
 
   /* v3 app brand colors — official Radarr/Sonarr hex from their source repos.
-     Used by sidebar app switcher + banner accent + active-nav border. */
+     Clonarr green matches the energy-core green in the clonarr logo and is
+     used on app-agnostic global sections (Settings, About) so they get the
+     same fade-banner treatment as Radarr/Sonarr pages, just with Clonarr's
+     own identity. */
   --radarr-color: #ffc230;
   --radarr-glow: rgba(255, 194, 48, 0.18);
   --sonarr-color: #35c5f4;
   --sonarr-glow: rgba(53, 197, 244, 0.18);
+  --clonarr-color: #2faa57;
+  --clonarr-glow: rgba(47, 170, 87, 0.18);
+
+  /* Active app resolves at root level so both sidebar AND main-pane banner
+     pick up the same color via cascade. Default = Radarr; flipped to Sonarr
+     by [data-app="sonarr"] set on the x-data wrapper at runtime. */
+  --app-color: var(--radarr-color);
+  --app-glow: var(--radarr-glow);
+}
+
+[data-app="sonarr"] {
+  --app-color: var(--sonarr-color);
+  --app-glow: var(--sonarr-glow);
 }
 
 :root[data-theme="light"] {
@@ -220,4 +236,6 @@
   --radarr-glow: rgba(255, 194, 48, 0.22);
   --sonarr-color: #35c5f4;
   --sonarr-glow: rgba(53, 197, 244, 0.22);
+  --clonarr-color: #1e8540;
+  --clonarr-glow: rgba(30, 133, 64, 0.22);
 }
