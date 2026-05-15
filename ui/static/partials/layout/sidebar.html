@@ -54,12 +54,11 @@
       <span class="sidebar-collapse-label" x-show="!sidebarCollapsed">Collapse sidebar</span>
     </button>
 
-    <!-- App switcher — Radarr / Sonarr toggle with color theming -->
+    <!-- App switcher — Radarr / Sonarr toggle with color theming.
+         No "App" label row — the pill (logos + active highlight) is
+         self-explanatory, and "App" appears again as a nav section
+         label below for Settings/About. -->
     <div class="sidebar-app-switcher">
-      <div class="sidebar-app-label" x-show="!sidebarCollapsed">
-        <span>App</span>
-        <span class="sidebar-app-now" x-text="'● ' + (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr')"></span>
-      </div>
       <div class="sidebar-app-pill">
         <button type="button" class="sidebar-app-btn"
                 :class="{ active: activeAppType !== 'sonarr' }"
