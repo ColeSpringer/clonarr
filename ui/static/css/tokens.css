@@ -233,9 +233,9 @@
 
   /* v3 app brand colors (light-mode override — same hex, softer glow) */
   --radarr-color: #ffc230;
-  --radarr-glow: rgba(255, 194, 48, 0.22);
+  --radarr-glow: rgba(255, 194, 48, 0.10);
   --sonarr-color: #35c5f4;
-  --sonarr-glow: rgba(53, 197, 244, 0.22);
+  --sonarr-glow: rgba(53, 197, 244, 0.12);
   --clonarr-color: #1e8540;
-  --clonarr-glow: rgba(30, 133, 64, 0.22);
+  --clonarr-glow: rgba(30, 133, 64, 0.12);
 }
