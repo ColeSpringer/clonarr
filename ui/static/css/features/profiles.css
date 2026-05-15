@@ -139,8 +139,11 @@
 .v3-status.ok::before { background: var(--accent-green); }
 .v3-status.pending { color: var(--accent-orange); }
 .v3-status.pending::before { background: var(--accent-orange); }
-.v3-status.drift { color: #d9a93c; }
-.v3-status.drift::before { background: #d9a93c; }
+/* Drift uses a brighter amber than pending's --accent-orange so the two
+   read as distinct states at a glance. --accent-orange-bright exists
+   in tokens.css for both light and dark modes. */
+.v3-status.drift { color: var(--accent-orange-bright); }
+.v3-status.drift::before { background: var(--accent-orange-bright); }
 .v3-status.failed { color: var(--accent-red); }
 .v3-status.failed::before { background: var(--accent-red); }
 
@@ -149,13 +152,17 @@
 .v3-auto-label { font-size: 11px; color: var(--text-muted); }
 .v3-auto-label.on { color: var(--accent-green); }
 
-/* Customizations pill — single count, tooltip carries breakdown */
+/* Customizations pill — single count, tooltip carries breakdown.
+   Neutral background (matches other chips in the row) so the pill
+   doesn't carry Radarr-yellow tint that would clash with Sonarr-blue
+   foreground when active app is Sonarr. Token-driven for theme parity. */
 .v3-cust-pill {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 9px;
-  background: rgba(255,194,48,0.10);
-  color: var(--app-color);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  color: var(--text-body);
   font-size: 11px; font-weight: 500;
   white-space: nowrap;
 }

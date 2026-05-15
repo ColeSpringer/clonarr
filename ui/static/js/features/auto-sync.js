@@ -50,11 +50,14 @@ export default {
       try {
         const r = await fetch('/api/auto-sync/rules');
         if (r.ok) this.autoSyncRules = await r.json();
-        // v3: keep the Sync Rules customization-count pill cache in sync
-        // whenever rules are reloaded (Save+Sync, manual edit, etc.).
-        // No-op for users who never visit the Sync Rules tab — the
-        // payload is small (counts only, no profile data).
-        if (typeof this.loadRuleCustomizations === 'function') {
+        // v3 customization-count cache refresh — only when the user is
+        // actually on the Sync Rules tab. Skipping the fetch on every
+        // unrelated rules-reload (init, toggle, delete) keeps the
+        // backend ComputeRuleCustomizations loop off the hot path for
+        // users who never visit the tab.
+        if (typeof this.loadRuleCustomizations === 'function'
+            && this.currentSection === 'profiles'
+            && this.getProfileTab && this.getProfileTab(this.activeAppType) === 'sync-rules') {
           this.loadRuleCustomizations();
         }
       } catch (e) { console.error('loadAutoSyncRules:', e); }

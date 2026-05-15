@@ -571,9 +571,13 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
 
-	// Cache the TRaSH snapshot per app type to avoid repeated locking
-	// when many rules target the same Radarr/Sonarr instance.
+	// Per-appType caches so we don't re-lock TRaSH or re-list custom CFs
+	// for every rule. customCFIDs is the registry of `custom:<id>` trash
+	// IDs that ComputeRuleCustomizations uses to filter out dangling
+	// references (custom CFs deleted from the registry but still in a
+	// rule's scoreOverrides until CleanupDanglingCustomCFs runs).
 	snapByApp := map[string]*core.AppData{}
+	customByApp := map[string]map[string]bool{}
 	getAppData := func(appType string) *core.AppData {
 		if ad, ok := snapByApp[appType]; ok {
 			return ad
@@ -581,6 +585,19 @@ func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request
 		ad := s.Core.Trash.GetAppData(appType)
 		snapByApp[appType] = ad
 		return ad
+	}
+	getCustomCFIDs := func(appType string) map[string]bool {
+		if m, ok := customByApp[appType]; ok {
+			return m
+		}
+		m := make(map[string]bool)
+		// CustomCF.ID already carries the "custom:" prefix per its
+		// json schema, so we use it as-is to match ScoreOverrides keys.
+		for _, cf := range s.Core.CustomCFs.List(appType) {
+			m[cf.ID] = true
+		}
+		customByApp[appType] = m
+		return m
 	}
 
 	out := make(map[string]core.RuleCustomizations, len(cfg.AutoSync.Rules))
@@ -608,7 +625,7 @@ func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request
 				}
 			}
 		}
-		out[rule.ID] = core.ComputeRuleCustomizations(rule, profile, ad)
+		out[rule.ID] = core.ComputeRuleCustomizations(rule, profile, ad, getCustomCFIDs(inst.Type), inst.Type)
 	}
 
 	writeJSON(w, out)

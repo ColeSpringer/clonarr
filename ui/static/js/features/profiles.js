@@ -2646,20 +2646,30 @@ export default {
       // Status sort order: failed > drift > pending > ok (most-urgent first
       // when sorting ascending — matches "show me what needs attention").
       const statusOrder = { failed: 0, drift: 1, pending: 2, ok: 3 };
+      // Pre-index this instance's rules by arrProfileId so the comparator
+      // is O(1) per call. Without this, lastSync / status sorts do
+      // .find() twice per compare → O(N² log N) on each sort.
+      let ruleByArrID = null;
+      if (col === 'lastSync' || col === 'status') {
+        ruleByArrID = new Map();
+        for (const r of this.autoSyncRules) {
+          if (r.instanceId === instId) ruleByArrID.set(r.arrProfileId, r);
+        }
+      }
       return [...rules].sort((a, b) => {
         switch (col) {
           case 'trash': return dir * (a.profileName || '').localeCompare(b.profileName || '');
           case 'arr':   return dir * (a.arrProfileName || '').localeCompare(b.arrProfileName || '');
           case 'lastSync': {
-            const ar = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === a.arrProfileId);
-            const br = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === b.arrProfileId);
+            const ar = ruleByArrID.get(a.arrProfileId);
+            const br = ruleByArrID.get(b.arrProfileId);
             const at = ar?.lastSyncTime ? new Date(ar.lastSyncTime).getTime() : 0;
             const bt = br?.lastSyncTime ? new Date(br.lastSyncTime).getTime() : 0;
             return dir * (at - bt);
           }
           case 'status': {
-            const ar = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === a.arrProfileId);
-            const br = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === b.arrProfileId);
+            const ar = ruleByArrID.get(a.arrProfileId);
+            const br = ruleByArrID.get(b.arrProfileId);
             const av = statusOrder[this.v3RuleStatus(ar)] ?? 99;
             const bv = statusOrder[this.v3RuleStatus(br)] ?? 99;
             return dir * (av - bv);
@@ -2670,10 +2680,14 @@ export default {
     },
 
     // v3 Sprint 3 — per-rule status badge. Cheap-only checks (no API calls).
-    //   'ok'      — last sync succeeded, no pending overrides, TRaSH-commit in sync
+    //   'failed'  — LastSyncError set. Wins over everything else because
+    //               the error is the user's first concern; surfacing
+    //               "pending" while a sync is broken would bury the lede.
+    //               The status pill's tooltip carries the lastSyncError so
+    //               the user can see WHY without leaving the list.
     //   'pending' — user saved overrides via Save without a follow-up sync
     //   'drift'   — TRaSH local commit moved past this rule's last-synced commit
-    //   'failed'  — LastSyncError set on the rule
+    //   'ok'      — last sync succeeded, no pending overrides, TRaSH-commit in sync
     //   ''        — no rule object (orphaned / never-synced display path)
     // Arr-side drift (manual Arr edits) requires dry-run; see CLAUDE.md
     // post-v3 backlog.

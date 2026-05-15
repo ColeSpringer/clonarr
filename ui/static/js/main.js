@@ -511,6 +511,22 @@ export function clonarr() {
         // state-watcher is the robust way to dismiss it.
         this.sidebarSubnavPopup = '';
       });
+      // Navigation into the Sync Rules tab triggers the customizations
+      // cache load. We don't fire it from every loadAutoSyncRules call
+      // (would hammer the backend on init / every toggle); instead the
+      // tab-mount is the canonical entry point. Reactive on both
+      // section and per-app profileTab changes.
+      const maybeLoadCustomizations = () => {
+        if (this.currentSection === 'profiles'
+            && this.getProfileTab(this.activeAppType) === 'sync-rules'
+            && typeof this.loadRuleCustomizations === 'function') {
+          this.loadRuleCustomizations();
+        }
+      };
+      this.$watch('currentSection', maybeLoadCustomizations);
+      this.$watch('profileTabs', maybeLoadCustomizations);
+      this.$watch('activeAppType', maybeLoadCustomizations);
+
       // Expanding the sidebar (Ctrl+B or click-toggle) closes the popup —
       // when the inline subnav becomes visible, the popup is redundant.
       // Also cancel any pending show-timer: if user was hovering an icon

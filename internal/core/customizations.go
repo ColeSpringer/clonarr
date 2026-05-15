@@ -26,6 +26,8 @@
 
 package core
 
+import "strings"
+
 // RuleCustomizations is the per-rule breakdown returned by
 // ComputeRuleCustomizations and exposed via the API endpoint.
 type RuleCustomizations struct {
@@ -40,7 +42,16 @@ type RuleCustomizations struct {
 // Caller is responsible for resolving `profile` from the rule's
 // TrashProfileID against the active TRaSH snapshot; passing nil for either
 // profile or ad results in an empty (all-zero) breakdown.
-func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile, ad *AppData) RuleCustomizations {
+//
+// `customCFIDs` is the set of user-created custom CF trash IDs (the
+// `custom:<id>` registry). Used to filter out dangling references in
+// ScoreOverrides — when a user deletes a custom CF, its entry can
+// linger on rules until the next successful sync's CleanupDangling
+// pass purges it. The detail view hides those orphans; the list pill
+// must do the same to keep counts consistent.
+// `appType` is "radarr" or "sonarr"; used to gate the Sonarr-doesn't-
+// have-language defensive check.
+func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile, ad *AppData, customCFIDs map[string]bool, appType string) RuleCustomizations {
 	var out RuleCustomizations
 	if rule == nil || profile == nil {
 		return out
@@ -60,6 +71,16 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 	// 1. Split ScoreOverrides into ExtraCFs (added beyond defaults) and
 	//    CustomScores (override on default CF where score differs).
 	for tid, userScore := range rule.ScoreOverrides {
+		// Skip dangling `custom:<id>` orphans — the referenced custom CF
+		// has been deleted from the registry but the rule's override
+		// hasn't been cleaned yet. Detail view's pdAllCustomizations
+		// hides these via its lookup() returning null for custom:-prefix
+		// failures; we mirror that hiding here.
+		if strings.HasPrefix(tid, "custom:") {
+			if customCFIDs == nil || !customCFIDs[tid] {
+				continue
+			}
+		}
 		if !defaultCFs[tid] {
 			out.ExtraCFs++
 			continue
@@ -116,9 +137,13 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 
 	// 3. General settings overrides. Each Overrides field is *T (nil =
 	//    not overridden). Count when non-nil AND differs from default.
+	//    Language is gated to Radarr to match pdGeneralChangeCount's
+	//    behaviour — Sonarr profiles don't expose a Language editor so a
+	//    Sonarr rule with Language set is almost certainly a hand-edited
+	//    config; counting it would be unhelpful.
 	if rule.Overrides != nil {
 		ov := rule.Overrides
-		if ov.Language != nil && *ov.Language != profile.Language {
+		if appType == "radarr" && ov.Language != nil && *ov.Language != profile.Language {
 			out.General++
 		}
 		if ov.UpgradeAllowed != nil && *ov.UpgradeAllowed != profile.UpgradeAllowed {
