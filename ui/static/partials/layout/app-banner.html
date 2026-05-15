@@ -4,7 +4,8 @@
        on the right (added in later Sprint 2 commits). Global sections
        (Settings, About) collapse to a plain text banner without swatch
        or breadcrumb separator. -->
-  <header class="app-banner" :class="{ 'is-global': isGlobalSection() }" aria-label="App context">
+  <header class="app-banner" :class="{ 'is-global': isGlobalSection() }"
+          :aria-label="(isGlobalSection() ? 'Clonarr' : (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr')) + ' — ' + currentBreadcrumb()">
     <!-- LEFT: brand logo + name. Settings/About show Clonarr's own
          identity (green energy-core logo + CLONARR text); everything
          else shows the active app (Radarr yellow / Sonarr blue). The
@@ -33,26 +34,32 @@
          (auth required disabled for their network), shows "Local network"
          as a non-interactive chip. -->
     <span class="app-banner-right"
-          @keydown.escape.window="userMenuOpen = false">
+          @keydown.escape.window="if (userMenuOpen) { userMenuOpen = false; $nextTick(() => $refs.userMenuTrigger?.focus()) }">
       <!-- Authenticated user chip -->
       <template x-if="authStatus.authenticated">
         <span class="app-banner-user" :class="{ open: userMenuOpen }">
           <button type="button" class="app-banner-user-trigger"
+                  x-ref="userMenuTrigger"
                   @click="userMenuOpen = !userMenuOpen"
                   :aria-expanded="userMenuOpen"
-                  aria-haspopup="menu">
+                  aria-haspopup="true">
             <svg class="app-banner-user-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span class="app-banner-user-name" x-text="authStatus.username"></span>
             <span class="app-banner-user-chev" :class="{ flip: userMenuOpen }">&#9662;</span>
           </button>
-          <!-- Logout popover -->
+          <!-- Logout popover. role="dialog" (not "menu") since a real menu
+               with single menuitem violates the ARIA pattern; aria-haspopup
+               on the trigger is "true" to match. Click-outside is guarded
+               against the trigger so the trigger's own @click toggle is not
+               immediately undone by the outside-handler firing first. -->
           <div class="app-banner-user-menu"
                x-show="userMenuOpen" x-cloak
-               @click.outside="userMenuOpen = false"
-               role="menu">
+               @click.outside="if (!$refs.userMenuTrigger?.contains($event.target)) userMenuOpen = false"
+               role="dialog"
+               aria-label="Account">
             <form method="POST" action="logout" class="app-banner-user-logout-form">
               <input type="hidden" name="csrf_token" :value="csrfToken()">
-              <button type="submit" class="app-banner-user-logout" role="menuitem">
+              <button type="submit" class="app-banner-user-logout">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                 <span>Log out</span>
               </button>
@@ -65,7 +72,7 @@
         <span class="app-banner-user app-banner-user-local"
               x-tt="'Local network — authentication bypassed for this network'">
           <span class="app-banner-user-localdot" aria-hidden="true"></span>
-          <span class="app-banner-user-locallabel">Local network</span>
+          <span>Local network</span>
         </span>
       </template>
     </span>

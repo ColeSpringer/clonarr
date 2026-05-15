@@ -35,7 +35,6 @@
       <div class="sidebar-app-pill">
         <button type="button" class="sidebar-app-btn"
                 :class="{ active: activeAppType !== 'sonarr' }"
-                data-app="radarr"
                 @click="switchAppType('radarr')"
                 x-tt="'Switch to Radarr'">
           <img class="sidebar-app-logo" src="icons/radarrNew.png?v={{.Version}}" alt="">
@@ -44,7 +43,6 @@
         </button>
         <button type="button" class="sidebar-app-btn"
                 :class="{ active: activeAppType === 'sonarr' }"
-                data-app="sonarr"
                 @click="switchAppType('sonarr')"
                 x-tt="'Switch to Sonarr'">
           <img class="sidebar-app-logo" src="icons/sonarr.png?v={{.Version}}" alt="">

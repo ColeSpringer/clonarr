@@ -129,12 +129,14 @@
 
   /* Active app resolves at root level so both sidebar AND main-pane banner
      pick up the same color via cascade. Default = Radarr; flipped to Sonarr
-     by [data-app="sonarr"] set on the x-data wrapper at runtime. */
+     by [data-app="sonarr"] set on the x-data wrapper at runtime. The
+     selector is wrapper-scoped so it cannot accidentally match other
+     elements that happen to use a data-app attribute. */
   --app-color: var(--radarr-color);
   --app-glow: var(--radarr-glow);
 }
 
-[data-app="sonarr"] {
+[x-data="clonarr"][data-app="sonarr"] {
   --app-color: var(--sonarr-color);
   --app-glow: var(--sonarr-glow);
 }
