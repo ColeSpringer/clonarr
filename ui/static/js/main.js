@@ -368,6 +368,16 @@ export function clonarr() {
       // round-trip back to the same physical position. Defaults to 1 when
       // no zoom is applied.
       const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      // Collapsed-sidebar triggers (60px wide, anchored at the left edge)
+      // would land their centered-above tooltip ~130px to the right of
+      // the icon because the horizontal clamp below forces x ≥ halfMax+margin.
+      // Anchor to the right of the trigger instead, vertically centered.
+      if (el.closest('.sidebar.collapsed')) {
+        const xR = (r.right + margin) / zoom;
+        const yR = (r.top + r.height / 2) / zoom;
+        this.tt = { show: true, text: text, x: xR, y: yR, flip: false, placement: 'right' };
+        return;
+      }
       const triggerCenterX = (r.left + r.width / 2) / zoom;
       const triggerTop = r.top / zoom;
       const triggerBottom = r.bottom / zoom;
@@ -379,7 +389,7 @@ export function clonarr() {
         flip = true;
       }
       const x = Math.max(halfMax + margin, Math.min(triggerCenterX, viewportW - halfMax - margin));
-      this.tt = { show: true, text: text, x: x, y: y, flip: flip };
+      this.tt = { show: true, text: text, x: x, y: y, flip: flip, placement: 'top' };
     },
     hideTooltip() {
       this.tt.show = false;

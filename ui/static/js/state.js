@@ -109,7 +109,7 @@ export default function baseState() {
     // where the browser tooltip would overflow the viewport (right-edge inputs,
     // long messages, etc.). Driven by showTooltip / hideTooltip helpers in
     // main.js. The global tooltip element lives in partials/modals/tooltip.html.
-    tt: { show: false, text: '', x: 0, y: 0, flip: false },
+    tt: { show: false, text: '', x: 0, y: 0, flip: false, placement: 'top' },
     selectedOptionalCFs: {},
     // Profile detail — single global toggle that gates all override editing affordances.
     // OFF (default): user sees a clean "All values follow profile defaults" summary;

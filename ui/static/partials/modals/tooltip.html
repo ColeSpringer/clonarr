@@ -8,6 +8,6 @@
          x-tt="'static text'"      static label
          x-tt="someExpr"           dynamic expression -->
   <div id="global-tooltip" role="tooltip" x-show="tt.show" x-cloak
-       :style="`position:fixed;left:${tt.x}px;top:${tt.y + (tt.flip ? 8 : -8)}px;transform:translate(-50%, ${tt.flip ? '0' : '-100%'});background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:6px 10px;font-size:12px;color:#e1e4e8;line-height:1.4;max-width:320px;width:max-content;white-space:normal;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.6);z-index:10000;pointer-events:none;`"
+       :style="`position:fixed;${tt.placement === 'right' ? `left:${tt.x}px;top:${tt.y}px;transform:translate(0,-50%);text-align:left;` : `left:${tt.x}px;top:${tt.y + (tt.flip ? 8 : -8)}px;transform:translate(-50%,${tt.flip ? '0' : '-100%'});text-align:center;`}background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:6px 10px;font-size:12px;color:#e1e4e8;line-height:1.4;max-width:320px;width:max-content;white-space:normal;box-shadow:0 4px 12px rgba(0,0,0,0.6);z-index:10000;pointer-events:none;`"
        x-text="tt.text"></div>
 {{end}}
