@@ -352,7 +352,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to parse index template: %v", err)
 	}
-	mux.Handle("GET /{$}", &api.IndexHandler{Tmpl: indexTmpl, BasePath: basePath})
+	mux.Handle("GET /{$}", &api.IndexHandler{Tmpl: indexTmpl, BasePath: basePath, Version: Version})
 	mux.HandleFunc("/partials/", http.NotFound)
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 

@@ -1,7 +1,7 @@
 {{define "layout/top-nav"}}
   <!-- Top Navigation -->
   <div class="topnav">
-    <div class="logo"><img src="icons/clonarr.png" alt="" style="width:28px;height:28px;border-radius:6px;vertical-align:middle;margin-right:8px">Clonarr</div>
+    <div class="logo"><img src="icons/clonarr.png?v={{.Version}}" alt="" style="width:28px;height:28px;border-radius:6px;vertical-align:middle;margin-right:8px">Clonarr</div>
     <nav class="tabs" aria-label="Main">
       <a class="tab" :class="{ active: currentSection === 'profiles' }" :href="navHref('profiles')" :aria-current="currentSection === 'profiles' ? 'page' : null">Profiles</a>
       <a class="tab" :class="{ active: currentSection === 'custom-formats' }" :href="navHref('custom-formats')" :aria-current="currentSection === 'custom-formats' ? 'page' : null">Custom Formats</a>

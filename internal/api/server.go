@@ -14,12 +14,16 @@ import (
 type IndexHandler struct {
 	Tmpl     *template.Template
 	BasePath string
+	Version  string
 }
 
 func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = h.Tmpl.Execute(w, map[string]any{"BasePath": h.BasePath})
+	_ = h.Tmpl.Execute(w, map[string]any{
+		"BasePath": h.BasePath,
+		"Version":  h.Version,
+	})
 }
 
 // Server wraps the core application and provides HTTP handlers.
