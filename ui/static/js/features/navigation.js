@@ -269,7 +269,12 @@ export default {
     //   paused   — autoSyncSettings.paused === true
     //   never    — rules exist but none have ever synced successfully
 
-    // Rules scoped to the active Radarr/Sonarr app type.
+    // Rules scoped to the active Radarr/Sonarr app type. Auto-sync is
+    // app-wide — the same schedule kicks all enabled rules across every
+    // instance of the active app at once — so aggregating by app rather
+    // than per-instance matches the schedule's actual behaviour, and
+    // keeps the chip stable when section pickers point at different
+    // instances.
     _autoSyncRulesForActiveApp() {
       const ids = new Set(this.instancesOfType(this.activeAppType).map(i => i.id));
       return (this.autoSyncRules || []).filter(r => ids.has(r.instanceId));
