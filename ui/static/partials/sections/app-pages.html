@@ -2,34 +2,10 @@
   <!-- ==================== APP-SCOPED SECTIONS (Radarr/Sonarr) ==================== -->
   <template x-if="true">
     <div x-show="!['settings','about'].includes(currentSection) && !profileDetail && !profileBuilder">
-      <!-- App selector + section sub-tabs (universal bar, matches page width) -->
-      <nav class="profile-tabs" aria-label="App and section" style="max-width:1100px;margin:0 auto;padding:0 24px;background:transparent;border-bottom:1px solid var(--bg-muted)">
-        <template x-for="appType in availableAppTypes" :key="'global-'+appType">
-          <a class="profile-tab" :class="{ active: activeAppType === appType }"
-             :href="navHref(currentSection, { appType })"
-             :aria-current="activeAppType === appType ? 'page' : null"
-             @click="if (cfgbNeedsConfirm($event, appType)) $event.preventDefault()">
-            <span x-text="appType.charAt(0).toUpperCase() + appType.slice(1)"></span>
-            <span x-show="instancesOfType(appType).length > 0" style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;margin-left:4px;font-size:11px" x-text="instancesOfType(appType).length"></span>
-          </a>
-        </template>
-        <!-- Profiles sub-tabs -->
-        <template x-if="currentSection === 'profiles'">
-          <div style="display:flex;gap:0;margin-left:16px;border-left:1px solid var(--border-subtle);padding-left:8px">
-            <a class="profile-tab" :class="{ active: getProfileTab(activeAppType) === 'trash-sync' }" :href="navHref('profiles', { profileTab: 'trash-sync' })" :aria-current="getProfileTab(activeAppType) === 'trash-sync' ? 'page' : null">TRaSH Sync</a>
-            <a class="profile-tab" :class="{ active: getProfileTab(activeAppType) === 'history' }" :href="navHref('profiles', { profileTab: 'history' })" :aria-current="getProfileTab(activeAppType) === 'history' ? 'page' : null">History</a>
-            <a class="profile-tab" :class="{ active: getProfileTab(activeAppType) === 'compare' }" :href="navHref('profiles', { profileTab: 'compare' })" :aria-current="getProfileTab(activeAppType) === 'compare' ? 'page' : null">Compare</a>
-          </div>
-        </template>
-        <!-- Advanced sub-tabs -->
-        <template x-if="currentSection === 'advanced'">
-          <div style="display:flex;gap:0;margin-left:16px;border-left:1px solid var(--border-subtle);padding-left:8px">
-            <a class="profile-tab" :class="{ active: advancedTab === 'builder' }" :href="navHref('advanced', { advancedTab: 'builder' })" :aria-current="advancedTab === 'builder' ? 'page' : null">Profile Builder</a>
-            <a class="profile-tab" :class="{ active: advancedTab === 'scoring' }" :href="navHref('advanced', { advancedTab: 'scoring' })" :aria-current="advancedTab === 'scoring' ? 'page' : null">Scoring Sandbox</a>
-            <a class="profile-tab" :class="{ active: advancedTab === 'group-builder' }" :href="navHref('advanced', { advancedTab: 'group-builder' })" :aria-current="advancedTab === 'group-builder' ? 'page' : null">CF Group Builder</a>
-          </div>
-        </template>
-      </nav>
+      <!-- In-page top-nav removed in v3 — sidebar is the single nav source.
+           App switcher lives in the sidebar pill; section sub-tabs live in
+           the sidebar sub-nav under Profiles / Advanced; current location
+           is mirrored in the banner breadcrumb. -->
       <!-- Section bodies shown by currentSection / advancedTab state. -->
       {{template "sections/profiles" .}}
       {{template "sections/custom-formats" .}}

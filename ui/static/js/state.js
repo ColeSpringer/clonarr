@@ -331,6 +331,15 @@ export default function baseState() {
     // Sync
     showChangelog: false,
     userMenuOpen: false,            // v3 banner: user-chip click toggles logout popover
+    // v3 sidebar: when collapsed, the section icons can't show their sub-nav
+    // (no room). Clicking an icon that owns sub-tabs (Profiles / Advanced)
+    // opens a flyout to the right with the same options. Value holds the
+    // section key whose popup is open, or '' for closed.
+    sidebarSubnavPopup: '',
+    // Top viewport coordinate where the popup should anchor — captured
+    // from the clicked icon's getBoundingClientRect on open so the popup
+    // sits aligned with whichever nav-item was clicked.
+    sidebarSubnavPopupTop: 0,
     sandboxCFBrowser: { open: false, appType: '', categories: [], customCFs: [], selected: {}, scores: {}, expanded: {}, filter: '' },
     showSyncModal: false,
     syncMode: 'create',

@@ -4,11 +4,11 @@
 
 
 
-        <!-- ===== TRaSH Sync tab ===== -->
-        <div class="page" x-show="getProfileTab(activeAppType) === 'trash-sync'">
-          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Quality Profiles</div>
+        <!-- ===== Sync Rules tab ===== -->
+        <div class="page" x-show="getProfileTab(activeAppType) === 'sync-rules'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Sync Rules</div>
           <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            TRaSH Guides quality profiles — click a profile to view its contents, customize groups, and sync to your <span x-text="activeAppLabel"></span> instance. Manage sync rules, auto-sync, and overrides from the Sync Rules section below.
+            Your active TRaSH sync rules for this <span x-text="activeAppLabel"></span> instance. Toggle auto-sync, edit per-rule overrides, or re-sync on demand. Add new rules from the <strong>TRaSH Profiles</strong> tab.
           </div>
           <!-- Auto-sync paused banner -->
           <template x-if="autoSyncSettings.paused">
@@ -162,6 +162,16 @@
               </div>
             </div>
 
+        </div>
+        <!-- end Sync Rules tab -->
+
+        <!-- ===== TRaSH Profiles tab ===== -->
+        <div class="page" x-show="getProfileTab(activeAppType) === 'trash-profiles'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">TRaSH Profiles</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+            Browse the TRaSH Guides quality profile catalog. Click a profile to view its custom formats and scoring, then sync it to your <span x-text="activeAppLabel"></span> instance to create a new rule.
+          </div>
+
           <!-- TRaSH Profiles list -->
           <template x-if="trashProfiles[activeAppType] && trashProfiles[activeAppType].length > 0">
           <div>
@@ -200,7 +210,7 @@
         </template>
 
         </div>
-        <!-- end TRaSH Sync tab -->
+        <!-- end TRaSH Profiles tab -->
 
         <!-- ===== History tab ===== -->
         <div class="page" x-show="getProfileTab(activeAppType) === 'history'">

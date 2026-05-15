@@ -101,7 +101,7 @@ export default {
       if (s === 'about') return '#about';
       const app = this.activeAppType;
       let hash = '#' + app + '/' + s;
-      if (s === 'profiles') hash += '/' + (this.getProfileTab(app) || 'trash-sync');
+      if (s === 'profiles') hash += '/' + (this.getProfileTab(app) || 'trash-profiles');
       else if (s === 'advanced') hash += '/' + (this.advancedTab || 'builder');
       return hash;
     },
@@ -121,7 +121,7 @@ export default {
       const app = opts.appType || this.activeAppType;
       let hash = '#' + app + '/' + section;
       if (section === 'profiles') {
-        hash += '/' + (opts.profileTab || this.getProfileTab(app) || 'trash-sync');
+        hash += '/' + (opts.profileTab || this.getProfileTab(app) || 'trash-profiles');
       } else if (section === 'advanced') {
         hash += '/' + (opts.advancedTab || this.advancedTab || 'builder');
       }
@@ -168,7 +168,10 @@ export default {
       const parts = hash.replace(/^#/, '').split('/');
       const validSections = ['profiles','custom-formats','quality-size','naming','maintenance','advanced','settings','about'];
       const validSettings = ['instances','trash','prowlarr','notifications','display','security','advanced'];
-      const validProfileTabs = ['trash-sync','history','compare'];
+      // v3: 'trash-sync' kept as a legacy alias of 'trash-profiles' so old
+      // bookmarks and hashes keep working after the sub-tab split. Mapped
+      // during hash restore below.
+      const validProfileTabs = ['trash-profiles','sync-rules','history','compare','trash-sync'];
       const validAdvancedTabs = ['builder','group-builder','scoring','import'];
       this._navSkipPush = true;
       try {
@@ -183,7 +186,13 @@ export default {
           if (parts[1] && validSections.includes(parts[1])) this.currentSection = parts[1];
           else return false;
           if (parts[2]) {
-            if (this.currentSection === 'profiles' && validProfileTabs.includes(parts[2])) this.setProfileTab(this.activeAppType, parts[2]);
+            if (this.currentSection === 'profiles' && validProfileTabs.includes(parts[2])) {
+              // Legacy alias: pre-v3 hashes used 'trash-sync' for what now
+              // splits into 'trash-profiles' + 'sync-rules'. Old links land
+              // on the profile-browser tab (the more discoverable side).
+              const tab = parts[2] === 'trash-sync' ? 'trash-profiles' : parts[2];
+              this.setProfileTab(this.activeAppType, tab);
+            }
             else if (this.currentSection === 'advanced' && validAdvancedTabs.includes(parts[2])) this.advancedTab = parts[2];
           }
         }
@@ -196,7 +205,12 @@ export default {
     },
 
     getProfileTab(appType) {
-      return this.profileTabs[appType] || 'trash-sync';
+      const tab = this.profileTabs[appType];
+      if (!tab) return 'trash-profiles';
+      // Legacy: map 'trash-sync' to its post-split default ('trash-profiles')
+      // so any stale in-memory state from a previous build doesn't 404.
+      if (tab === 'trash-sync') return 'trash-profiles';
+      return tab;
     },
 
     setProfileTab(appType, tab) {
@@ -244,7 +258,7 @@ export default {
 
       if (this.currentSection === 'profiles') {
         const tab = this.getProfileTab(this.activeAppType);
-        const tabLabel = { 'trash-sync': 'TRaSH Sync', 'history': 'History', 'compare': 'Compare' }[tab] || '';
+        const tabLabel = { 'trash-profiles': 'TRaSH Profiles', 'sync-rules': 'Sync Rules', 'history': 'History', 'compare': 'Compare' }[tab] || '';
         return tabLabel ? `${section} / ${tabLabel}` : section;
       }
       if (this.currentSection === 'advanced') {

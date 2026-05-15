@@ -394,6 +394,50 @@ export function clonarr() {
     hideTooltip() {
       this.tt.show = false;
     },
+
+    // v3 collapsed-sidebar sub-nav flyout — hover-based, VS Code activity-bar
+    // pattern. Hover icon → 150ms delay → popup appears anchored to icon.
+    // Move mouse to popup → stays open. Move away → 250ms delay → closes.
+    // Switching between hovered sections is instant (no delay) when a popup
+    // is already showing.
+    //
+    // Timers live on the Alpine instance but outside the reactive surface
+    // (we don't watch them), so writing to them doesn't trigger re-renders.
+    _sidebarHoverShowTimer: null,
+    _sidebarHoverHideTimer: null,
+
+    showSidebarSubnav(section, el) {
+      if (!this.sidebarCollapsed) return;
+      if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+      if (this.sidebarSubnavPopup === section) return; // already showing this section
+      if (this.sidebarSubnavPopup) {
+        // Switching from another section's popup — instant, no delay
+        if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+        this.sidebarSubnavPopupTop = el.getBoundingClientRect().top;
+        this.sidebarSubnavPopup = section;
+        return;
+      }
+      // Fresh hover — delayed open avoids flicker on quick sweep-by
+      if (this._sidebarHoverShowTimer) clearTimeout(this._sidebarHoverShowTimer);
+      this._sidebarHoverShowTimer = setTimeout(() => {
+        this.sidebarSubnavPopupTop = el.getBoundingClientRect().top;
+        this.sidebarSubnavPopup = section;
+        this._sidebarHoverShowTimer = null;
+      }, 150);
+    },
+    scheduleHideSidebarSubnav() {
+      // Cancel any pending show — user moved away before delay elapsed
+      if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+      if (this._sidebarHoverHideTimer) clearTimeout(this._sidebarHoverHideTimer);
+      this._sidebarHoverHideTimer = setTimeout(() => {
+        this.sidebarSubnavPopup = '';
+        this._sidebarHoverHideTimer = null;
+      }, 250);
+    },
+    cancelHideSidebarSubnav() {
+      if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+    },
+
     async init() {
       // Apply saved UI scale. `zoom` is a Chromium-original property that
       // Firefox only added in v126 (May 2024); the CSS.supports guard avoids
@@ -461,6 +505,16 @@ export function clonarr() {
         this.profileDetail = null;
         this.syncPlan = null;
         this.syncResult = null;
+        // v3: any section change closes the collapsed-sidebar sub-nav
+        // popup. @click.outside doesn't fire reliably when navigation is
+        // triggered from a sidebar anchor (Settings, About, etc.), so a
+        // state-watcher is the robust way to dismiss it.
+        this.sidebarSubnavPopup = '';
+      });
+      // Expanding the sidebar (Ctrl+B or click-toggle) closes the popup —
+      // when the inline subnav becomes visible, the popup is redundant.
+      this.$watch('sidebarCollapsed', (val) => {
+        if (!val) this.sidebarSubnavPopup = '';
       });
 
       // Settings → Security loads the API key. Was inline on the old

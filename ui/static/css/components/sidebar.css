@@ -487,3 +487,47 @@ body:has(.sidebar.collapsed) .sidebar-trash-popover {
 /* Hide the top-nav when the sidebar is in the DOM (defensive — index.html
    only renders one or the other based on which template is loaded). */
 body:has(.sidebar) .topnav { display: none; }
+
+/* Collapsed-sidebar sub-nav flyout. Rendered as a sibling of <aside>
+   (NOT inside it) so .sidebar's overflow:hidden does not clip the popup.
+   Position is fixed-to-viewport, anchored just past the collapsed
+   sidebar's right edge; top is captured from the clicked icon's
+   getBoundingClientRect on open so the popup aligns with the icon. */
+.sidebar-subnav-popup {
+  position: fixed;
+  left: calc(var(--sidebar-w-collapsed) + 6px);
+  min-width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 6px 0;
+  z-index: 80;
+}
+.sidebar-subnav-popup-header {
+  padding: 4px 12px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-muted);
+  margin-bottom: 4px;
+}
+.sidebar-subnav-popup-item {
+  display: block;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+}
+.sidebar-subnav-popup-item:hover {
+  background: var(--bg-elevated-hover);
+  color: var(--text-body);
+}
+.sidebar-subnav-popup-item.active {
+  background: var(--bg-elevated);
+  color: var(--app-color);
+  border-left-color: var(--app-color);
+}
