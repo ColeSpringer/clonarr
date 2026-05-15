@@ -35,10 +35,12 @@
          as a non-interactive chip. -->
     <span class="app-banner-right"
           @keydown.escape.window="if (userMenuOpen) { userMenuOpen = false; $nextTick(() => $refs.userMenuTrigger?.focus()) }">
-      <!-- Auto-sync status chip — shows the most-recent auto-sync activity
-           for the active app. Click navigates to Profiles → History so
-           the user can see what happened. Hidden on global sections
-           (Settings, About) and when no rules exist for the active app. -->
+      <!-- Auto-sync status chip — only shown when auto-sync is actively
+           running AND has something to report (last success or unresolved
+           error). Hidden when global is disabled / paused, no enabled
+           rules exist, or nothing has run yet — those are intentional
+           user states the chip would only nag about. Click navigates to
+           Profiles → History. -->
       <template x-if="autoSyncChipVisible()">
         <button type="button" class="app-banner-autosync"
                 :class="'state-' + autoSyncChipState()"

@@ -406,6 +406,22 @@ export function clonarr() {
       matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
         if (this.theme === 'system') this.applyTheme();
       });
+      // v3 sidebar mobile auto-collapse — sidebars on narrow viewports
+      // (Unraid sub-window side-by-side, half-screen split, etc.) eat too
+      // much real estate. Force collapsed below 1100px; restore the user's
+      // last manual preference (from localStorage) when going wide again.
+      // The manual toggleSidebar() button still writes to localStorage, so
+      // the user's intentional choice wins on wide widths.
+      const narrowMQ = matchMedia('(max-width: 1100px)');
+      const applyNarrow = (matches) => {
+        if (matches) {
+          this.sidebarCollapsed = true;
+        } else {
+          this.sidebarCollapsed = localStorage.getItem('clonarr-sidebar-collapsed') === '1';
+        }
+      };
+      narrowMQ.addEventListener('change', (e) => applyNarrow(e.matches));
+      if (narrowMQ.matches) applyNarrow(true);
       // Load the UI manifest first — it carries enum option lists, agent
       // field specs, and category-color tokens that downstream renders need.
       // Awaited so getCategoryClass() / agent modal lookups don't race on

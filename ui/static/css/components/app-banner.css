@@ -7,7 +7,10 @@
 .app-banner {
   position: sticky;
   top: 0;
-  z-index: 50;
+  /* z-index above the sidebar foot (51) so any future floating element
+     in main can't accidentally slip between banner and foot. Modals are
+     z-index 100+ so they still cover the banner. */
+  z-index: 52;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -97,6 +100,8 @@
   background: var(--bg-elevated-hover);
   color: var(--text-body);
 }
+/* Leading dot — green for ok, red for failed. Chip is only rendered
+   in those two states, so no other visual variants needed. */
 .app-banner-autosync-dot {
   width: 8px;
   height: 8px;
@@ -112,14 +117,10 @@
   box-shadow: 0 0 6px var(--accent-red);
 }
 .app-banner-autosync.state-failed { color: var(--accent-red); }
-.app-banner-autosync.state-paused .app-banner-autosync-dot {
-  background: var(--accent-orange);
-}
-.app-banner-autosync.state-never .app-banner-autosync-dot {
-  background: var(--text-muted);
-}
 
-/* User chip — relocated from sidebar in Sprint 2 slice 2. Avatar circle
+/* User chip — relocated from sidebar in Sprint 2 slice 2 (.sidebar-user-*
+   rules used to live in sidebar.css and were deleted in the same commit
+   that added these styles). Avatar circle
    in --app-color tint + username + chevron. Clicking opens a small
    popover with a single Logout button (POST + CSRF, same flow as the
    sidebar form it replaced). Local-network-bypass users see a non-

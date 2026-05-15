@@ -263,18 +263,20 @@ export default {
     // and when no enabled rules exist for the active app — auto-sync is
     // per-app-instance, so it has no meaning on those pages.
     //
-    // States:
-    //   ok       — at least one rule has LastSyncTime, none have a current error
-    //   failed   — at least one enabled rule has LastSyncError set
-    //   paused   — autoSyncSettings.paused === true
-    //   never    — rules exist but none have ever synced successfully
+    // Chip is a STATUS indicator showing "when did the last sync happen,
+    // and did it succeed?" — for ANY sync trigger (auto-sync engine,
+    // manual /api/sync/apply, Restore, etc.). LastSyncTime / LastSyncError
+    // in the backend don't distinguish trigger, so neither does this chip.
+    // Two states, no chip otherwise:
+    //   ok      — green dot + "Last sync · 8m ago"
+    //   failed  — red dot + "Last sync failed · 8m ago"
+    // Chip is hidden when no rule has any sync history at all and on
+    // global sections (Settings, About) where sync isn't a relevant
+    // concept.
 
-    // Rules scoped to the active Radarr/Sonarr app type. Auto-sync is
-    // app-wide — the same schedule kicks all enabled rules across every
-    // instance of the active app at once — so aggregating by app rather
-    // than per-instance matches the schedule's actual behaviour, and
-    // keeps the chip stable when section pickers point at different
-    // instances.
+    // Rules scoped to the active Radarr/Sonarr app type, regardless of
+    // their enabled flag — the chip reports last sync history, which
+    // can come from a manual sync on a currently-disabled rule.
     _autoSyncRulesForActiveApp() {
       const ids = new Set(this.instancesOfType(this.activeAppType).map(i => i.id));
       return (this.autoSyncRules || []).filter(r => ids.has(r.instanceId));
@@ -283,32 +285,26 @@ export default {
     autoSyncChipVisible() {
       if (this.isGlobalSection()) return false;
       const rules = this._autoSyncRulesForActiveApp();
-      return rules.length > 0;
+      // Need something to report — either an error or a successful run.
+      return rules.some(r => r.lastSyncError || r.lastSyncTime);
     },
 
     autoSyncChipState() {
-      if (this.autoSyncSettings && this.autoSyncSettings.paused) return 'paused';
-      const rules = this._autoSyncRulesForActiveApp().filter(r => r.enabled);
-      if (rules.length === 0) return 'paused';  // visible only when rules exist, so this means all disabled
-      if (rules.some(r => r.lastSyncError)) return 'failed';
-      if (rules.every(r => !r.lastSyncTime)) return 'never';
-      return 'ok';
+      const rules = this._autoSyncRulesForActiveApp();
+      return rules.some(r => r.lastSyncError) ? 'failed' : 'ok';
     },
 
     autoSyncChipLabel() {
-      const state = this.autoSyncChipState();
-      if (state === 'paused') return 'Auto-sync paused';
-      if (state === 'never') return 'Auto-sync · never run';
-      // Find the most-recent LastSyncTime across all enabled rules.
-      const rules = this._autoSyncRulesForActiveApp().filter(r => r.enabled && r.lastSyncTime);
+      const rules = this._autoSyncRulesForActiveApp().filter(r => r.lastSyncTime);
       let latest = null;
       for (const r of rules) {
         const t = new Date(r.lastSyncTime).getTime();
         if (!latest || t > latest) latest = t;
       }
       const ago = latest ? this.timeAgo(new Date(latest).toISOString()) : 'never';
-      if (state === 'failed') return `Auto-sync failed · ${ago}`;
-      return `Auto-sync · ${ago}`;
+      return this.autoSyncChipState() === 'failed'
+        ? `Last sync failed · ${ago}`
+        : `Last sync · ${ago}`;
     },
 
     // Click → navigate to Profiles → History so the user can see what ran.
