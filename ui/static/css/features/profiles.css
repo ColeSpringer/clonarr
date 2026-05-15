@@ -45,3 +45,131 @@
 
   /* Section description */
   .section-desc { font-size: 12px; color: var(--text-muted); padding: 4px 20px 8px; line-height: 1.4; }
+
+/* ============================================================
+   v3 Sprint 3 — Sync Rules tab (per-instance compact layout)
+   ============================================================ */
+
+.v3-paused-banner {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px;
+  background: var(--accent-orange-bg); border: 1px solid var(--accent-orange); border-radius: 6px;
+  color: var(--cat-hq-release-groups); font-size: 13px;
+}
+
+.v3-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+
+/* Per-instance card */
+.v3-inst-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 7px; margin-bottom: 12px; overflow: hidden; }
+.v3-inst-header {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  /* Match the app banner's gradient fade — the instance card is the
+     content-level analog of the banner, so the same color-language reads
+     as "this section belongs to the active app". */
+  background: linear-gradient(90deg, var(--app-glow) 0%, transparent 60%), var(--bg-elevated);
+  border-bottom: 1px solid var(--border-muted);
+  border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-muted) 60%, var(--border-muted) 100%) 1;
+  font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text-secondary);
+}
+.v3-inst-name { color: var(--app-color); }
+.v3-inst-count { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11.5px; margin-left: 4px; }
+.v3-inst-actions { margin-left: auto; }
+.v3-inst-action { padding: 3px 9px; background: transparent; border: 1px solid var(--border-subtle); border-radius: 3px; color: var(--text-secondary); font-size: 11.5px; cursor: pointer; font-family: inherit; }
+.v3-inst-action:hover { color: var(--app-color); border-color: var(--app-color); }
+
+/* Column grid — shared by header + rows.
+   TRaSH | → | Arr | Last sync | Status | Auto-sync | Customizations | Actions */
+.v3-rule-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) 18px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
+  align-items: center; gap: 10px;
+}
+.v3-col-header {
+  padding: 5px 14px;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text-muted); font-weight: 600;
+  border-bottom: 1px solid var(--border-muted);
+}
+.v3-col-header > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v3-col-sort { cursor: pointer; user-select: none; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; }
+.v3-col-sort:hover { color: var(--text-secondary); }
+.v3-col-sort .arr { font-size: 9px; margin-left: 2px; }
+
+/* Rule rows */
+.v3-rule-row {
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 12.5px;
+}
+.v3-rule-row:last-child { border-bottom: 0; }
+.v3-rule-row:hover { background: var(--bg-elevated); }
+.v3-rule-row.orphaned { background: var(--accent-orange-bg); }
+
+/* TRaSH profile name — neutral text, no link-blue */
+.v3-prof-trash {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--text-body); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.v3-prof-trash-name { overflow: hidden; text-overflow: ellipsis; }
+.v3-prof-trash-info { color: var(--text-muted); cursor: help; font-size: 12px; flex-shrink: 0; }
+
+.v3-arrow { color: var(--text-muted); text-align: center; font-size: 13px; }
+
+/* Arr profile — single line: name + ID inline */
+.v3-prof-arr { color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v3-prof-arr-rename { background: none; border: 0; padding: 0; color: var(--text-primary); font-weight: 500; cursor: pointer; font: inherit; border-bottom: 1px dashed transparent; }
+.v3-prof-arr-rename:hover { border-bottom-color: var(--border-subtle); }
+.v3-prof-arr-id { color: var(--text-muted); font-weight: 400; font-size: 11.5px; margin-left: 4px; }
+.v3-prof-arr-orph { color: var(--text-muted); text-decoration: line-through; }
+.v3-prof-arr-orph-tag { background: var(--accent-orange-bg); border: 1px solid var(--accent-orange); color: var(--cat-hq-release-groups); padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 500; margin-left: 6px; }
+
+/* Last sync */
+.v3-last-sync { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.v3-last-sync.never { color: var(--text-muted); font-style: italic; }
+
+/* Status pill */
+.v3-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  white-space: nowrap; font-weight: 500;
+}
+.v3-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.v3-status.ok { color: var(--accent-green); }
+.v3-status.ok::before { background: var(--accent-green); }
+.v3-status.pending { color: var(--accent-orange); }
+.v3-status.pending::before { background: var(--accent-orange); }
+.v3-status.drift { color: #d9a93c; }
+.v3-status.drift::before { background: #d9a93c; }
+.v3-status.failed { color: var(--accent-red); }
+.v3-status.failed::before { background: var(--accent-red); }
+
+/* Auto-sync cell */
+.v3-auto-cell { display: flex; align-items: center; gap: 7px; }
+.v3-auto-label { font-size: 11px; color: var(--text-muted); }
+.v3-auto-label.on { color: var(--accent-green); }
+
+/* Customizations pill — single count, tooltip carries breakdown */
+.v3-cust-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: rgba(255,194,48,0.10);
+  color: var(--app-color);
+  font-size: 11px; font-weight: 500;
+  white-space: nowrap;
+}
+.v3-cust-empty { color: var(--text-muted); font-size: 11px; }
+
+/* Action icon cluster — neutral color, no per-action tint */
+.v3-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.v3-action-icon {
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border-muted); border-radius: 4px;
+  color: var(--text-secondary); cursor: pointer; padding: 0;
+  font-size: 13px; font-family: inherit;
+}
+.v3-action-icon:hover { color: var(--app-color); border-color: var(--app-color); }
+.v3-action-icon.danger:hover { color: var(--accent-red); border-color: var(--accent-red); }
+.v3-action-icon:disabled { opacity: 0.4; cursor: not-allowed; }

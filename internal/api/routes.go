@@ -105,6 +105,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auto-sync/notification-agents/test", s.handleTestNotificationAgentInline)
 	mux.HandleFunc("POST /api/auto-sync/notification-agents/{id}/test", s.handleTestNotificationAgent)
 	mux.HandleFunc("GET /api/auto-sync/rules", s.handleListAutoSyncRules)
+	mux.HandleFunc("GET /api/auto-sync/rules/customizations", s.handleRuleCustomizations)
 	mux.HandleFunc("POST /api/auto-sync/rules", s.handleCreateAutoSyncRule)
 	mux.HandleFunc("PUT /api/auto-sync/rules/{id}", s.handleUpdateAutoSyncRule)
 	mux.HandleFunc("DELETE /api/auto-sync/rules/{id}", s.handleDeleteAutoSyncRule)

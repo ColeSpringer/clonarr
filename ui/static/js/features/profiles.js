@@ -336,6 +336,14 @@ export default {
       document.documentElement.setAttribute('data-theme', resolved);
     },
 
+    // v3 content-alignment toggle — applies immediately, persists to
+    // localStorage. CSS rule in layout.css reads [data-content-align="left"]
+    // on the x-data wrapper and removes the centering margin.
+    setContentAlign(value) {
+      this.contentAlign = (value === 'left') ? 'left' : 'center';
+      localStorage.setItem('clonarr-content-align', this.contentAlign);
+    },
+
     async checkCleanupEvents() {
       try {
         const r = await fetch('/api/cleanup-events');
@@ -2635,11 +2643,101 @@ export default {
       }
       const col = this.syncRulesSort.col || 'arr';
       const dir = this.syncRulesSort.dir === 'desc' ? -1 : 1;
+      // Status sort order: failed > drift > pending > ok (most-urgent first
+      // when sorting ascending — matches "show me what needs attention").
+      const statusOrder = { failed: 0, drift: 1, pending: 2, ok: 3 };
       return [...rules].sort((a, b) => {
-        const av = col === 'trash' ? (a.profileName || '') : (a.arrProfileName || '');
-        const bv = col === 'trash' ? (b.profileName || '') : (b.arrProfileName || '');
-        return dir * av.localeCompare(bv);
+        switch (col) {
+          case 'trash': return dir * (a.profileName || '').localeCompare(b.profileName || '');
+          case 'arr':   return dir * (a.arrProfileName || '').localeCompare(b.arrProfileName || '');
+          case 'lastSync': {
+            const ar = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === a.arrProfileId);
+            const br = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === b.arrProfileId);
+            const at = ar?.lastSyncTime ? new Date(ar.lastSyncTime).getTime() : 0;
+            const bt = br?.lastSyncTime ? new Date(br.lastSyncTime).getTime() : 0;
+            return dir * (at - bt);
+          }
+          case 'status': {
+            const ar = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === a.arrProfileId);
+            const br = this.autoSyncRules.find(r => r.instanceId === instId && r.arrProfileId === b.arrProfileId);
+            const av = statusOrder[this.v3RuleStatus(ar)] ?? 99;
+            const bv = statusOrder[this.v3RuleStatus(br)] ?? 99;
+            return dir * (av - bv);
+          }
+          default: return dir * (a.arrProfileName || '').localeCompare(b.arrProfileName || '');
+        }
       });
+    },
+
+    // v3 Sprint 3 — per-rule status badge. Cheap-only checks (no API calls).
+    //   'ok'      — last sync succeeded, no pending overrides, TRaSH-commit in sync
+    //   'pending' — user saved overrides via Save without a follow-up sync
+    //   'drift'   — TRaSH local commit moved past this rule's last-synced commit
+    //   'failed'  — LastSyncError set on the rule
+    //   ''        — no rule object (orphaned / never-synced display path)
+    // Arr-side drift (manual Arr edits) requires dry-run; see CLAUDE.md
+    // post-v3 backlog.
+    v3RuleStatus(rule) {
+      if (!rule) return '';
+      if (rule.lastSyncError) return 'failed';
+      const hasPending = rule.updatedAt && (!rule.lastSyncTime || rule.updatedAt > rule.lastSyncTime);
+      if (hasPending) return 'pending';
+      const remoteCommit = this.trashStatus?.commitHash || '';
+      if (rule.lastSyncCommit && remoteCommit && rule.lastSyncCommit !== remoteCommit) {
+        return 'drift';
+      }
+      return 'ok';
+    },
+    v3RuleStatusLabel(rule) {
+      switch (this.v3RuleStatus(rule)) {
+        case 'ok':      return 'In sync';
+        case 'pending': return 'Pending';
+        case 'drift':   return 'Out of sync';
+        case 'failed':  return 'Failed';
+        default:        return '—';
+      }
+    },
+    v3RuleStatusTip(rule) {
+      switch (this.v3RuleStatus(rule)) {
+        case 'ok':      return 'Last sync matched the target Arr profile';
+        case 'pending': return 'Saved overrides not yet pushed — click Sync now';
+        case 'drift':   return 'TRaSH was updated since last sync — Sync to apply';
+        case 'failed':  return rule?.lastSyncError || 'Last sync attempt failed';
+        default:        return '';
+      }
+    },
+
+    // Customizations pill — reads from the ruleCustomizations cache
+    // populated by loadRuleCustomizations() on Sync Rules tab mount.
+    // Backend (core.ComputeRuleCustomizations) does the actual diff
+    // against TRaSH defaults; the frontend just reads the result.
+    //
+    // Returns an empty (all-zero) object until the cache loads, which
+    // the markup renders as "—". Once loaded, the breakdown matches
+    // what the detail view's "Override mode · N changes" header shows
+    // for the same rule.
+    v3RuleCustomizations(rule) {
+      const empty = { total: 0, quality: 0, extraCFs: 0, customScores: 0, general: 0 };
+      if (!rule || !this.ruleCustomizationsLoaded) return empty;
+      return this.ruleCustomizations[rule.id] || empty;
+    },
+
+    // Load per-rule customization counts from the backend. Called when
+    // the user navigates to the Sync Rules tab; results cache in
+    // ruleCustomizations until the next call. Refresh after Save+Sync
+    // is wired separately via the existing autoSyncRules reload chain.
+    async loadRuleCustomizations() {
+      try {
+        const r = await fetch('/api/auto-sync/rules/customizations');
+        if (!r.ok) return;
+        const data = await r.json();
+        this.ruleCustomizations = data || {};
+        this.ruleCustomizationsLoaded = true;
+      } catch (e) {
+        // Network error — keep whatever's in the cache. Pill renders "—"
+        // for entries we don't have.
+        console.error('loadRuleCustomizations:', e);
+      }
     },
 
     historyEventCount(instId, arrProfileId) {

@@ -370,6 +370,18 @@
               <span style="font-size:13px;color:var(--text-secondary)" x-text="uiScale === '1' ? '(current default)' : Math.round(parseFloat(uiScale) * 100) + '%'"></span>
             </div>
           </div>
+          <div class="setting-row">
+            <div class="setting-label">Content alignment</div>
+            <div class="setting-value" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <template x-for="opt in [{label:'Centered',value:'center'},{label:'Left-aligned',value:'left'}]" :key="opt.value">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="contentAlign" :value="opt.value" :checked="contentAlign === opt.value" @change="setContentAlign(opt.value)" style="accent-color:var(--accent-blue)">
+                  <span x-text="opt.label" :style="contentAlign === opt.value ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"></span>
+                </label>
+              </template>
+              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Centered keeps content balanced in the page. Left-aligned anchors it next to the sidebar — useful on widescreen monitors where the centered version has a long gap between sidebar and content.</div>
+            </div>
+          </div>
         </div>
 
         <!-- ===== Security ===== -->

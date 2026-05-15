@@ -12,155 +12,170 @@
           </div>
           <!-- Auto-sync paused banner -->
           <template x-if="autoSyncSettings.paused">
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:var(--accent-orange-bg);border:1px solid var(--accent-orange);border-radius:6px;color:var(--cat-hq-release-groups);font-size:13px">
+            <div class="v3-paused-banner">
               <span style="font-size:16px">⏸</span>
               <div style="flex:1">
                 <div style="font-weight:600">Auto-sync paused</div>
-                <div style="font-size:12px;color:var(--accent-orange);margin-top:2px">Scheduled and after-pull syncs are skipped. Manual actions ("Sync All", per-rule "Sync now", Save &amp; Sync from a profile) still work.</div>
+                <div style="font-size:12px;color:var(--accent-orange);margin-top:2px">Scheduled and after-pull syncs are skipped. Manual actions still work.</div>
               </div>
-              <button class="btn btn-sm" style="border-color:var(--accent-orange);color:var(--cat-hq-release-groups);font-size:12px" @click="setAutoSyncPaused(false)">▶ Resume</button>
+              <button class="v3-inst-action" style="border-color:var(--accent-orange);color:var(--cat-hq-release-groups)" @click="setAutoSyncPaused(false)">▶ Resume</button>
             </div>
           </template>
 
-          <!-- Collapsible Sync Rules (always visible) -->
-            <div class="card" style="margin-bottom:20px">
-              <div style="display:flex;align-items:center;padding:12px 16px;gap:8px;border-left:3px solid var(--text-primary)">
-                <button type="button" class="collapse-toggle"
-                        style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"
-                        @click="syncRulesExpanded = { ...syncRulesExpanded, [activeAppType]: !syncRulesExpanded[activeAppType] }"
-                        :aria-expanded="syncRulesExpanded[activeAppType]"
-                        aria-controls="sync-rules-body">
-                  <span class="profile-group-chevron" :class="{ open: syncRulesExpanded[activeAppType] }">&#9654;</span>
-                  <span style="font-size:13px;font-weight:500">Sync Rules</span>
-                  <span style="font-size:13px;color:var(--text-muted);margin-left:auto"
-                        x-text="(() => { let count = 0; for (const inst of instancesOfType(activeAppType)) count += sortedSyncRules(inst.id).length; return count > 0 ? count + ' synced profile' + (count !== 1 ? 's' : '') : 'No syncs yet'; })()"></span>
-                </button>
-                <button class="btn btn-sm"
-                        @click.stop="setAutoSyncPaused(!autoSyncSettings.paused)"
-                        x-tt="autoSyncSettings.paused ? 'Resume auto-sync' : 'Pause auto-sync (scheduled + after-pull). Manual syncs unaffected.'"
-                        :style="autoSyncSettings.paused
-                                ? 'font-size:12px;padding:2px 8px;border-color:var(--accent-orange);color:var(--cat-hq-release-groups);margin-left:8px'
-                                : 'font-size:12px;padding:2px 8px;border-color:var(--border-subtle);color:var(--text-secondary);margin-left:8px'"
-                        x-text="autoSyncSettings.paused ? '▶ Resume Auto-Sync' : '⏸ Pause Auto-Sync'"></button>
-              </div>
-              <div id="sync-rules-body" x-show="syncRulesExpanded[activeAppType]" style="border-top:1px solid var(--bg-muted)">
-                <template x-for="inst in instancesOfType(activeAppType)" :key="'sr-'+inst.id">
-                  <template x-if="sortedSyncRules(inst.id).length > 0">
-                    <div>
-                      <div style="padding:8px 16px;font-size:13px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:var(--bg-page);border-bottom:1px solid var(--bg-muted);display:flex;align-items:center">
-                        <span x-text="inst.name"></span>
-                        <button class="btn btn-sm" style="margin-left:auto;font-size:12px;padding:2px 8px;border-color:var(--accent-green-strong);color:var(--accent-green)" @click.stop="syncAllForInstance(inst)" x-tt="'Re-sync all profiles with auto-sync enabled on this instance'">Sync All</button>
-                      </div>
-                      <div style="display:flex;align-items:center;padding:4px 16px;gap:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--bg-card);user-select:none">
-                        <button type="button" class="sort-header" style="width:200px;flex-shrink:0;white-space:nowrap;text-transform:inherit;letter-spacing:inherit"
-                                @click="toggleSyncRulesSort('trash')"
-                                :aria-sort="syncRulesSort.col === 'trash' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
-                          TRaSH Profile <span x-show="syncRulesSort.col==='trash'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span>
-                        </button>
-                        <span style="width:20px;flex-shrink:0"></span>
-                        <button type="button" class="sort-header" style="width:200px;flex-shrink:0;white-space:nowrap;text-transform:inherit;letter-spacing:inherit"
-                                @click="toggleSyncRulesSort('arr')"
-                                :aria-sort="syncRulesSort.col === 'arr' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
-                          Arr Profile <span x-show="syncRulesSort.col==='arr'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span>
-                        </button>
-                        <span style="width:100px;flex-shrink:0">Auto-Sync</span>
-                        <span style="flex:1;text-align:center">Details</span>
-                        <span style="width:180px;flex-shrink:0;text-align:center">Actions</span>
-                      </div>
-                      <template x-for="sh in sortedSyncRules(inst.id)" :key="sh.arrProfileId">
-                        <div :style="'display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--bg-card);gap:8px;font-size:12px;' + (sh.orphanedAt ? 'background:var(--accent-orange-bg)' : '')">
-                          <span :style="'color:' + (sh.orphanedAt ? 'var(--text-muted)' : 'var(--accent-blue)') + ';font-weight:500;width:200px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'" x-text="sh.profileName"></span>
-                          <span style="color:var(--text-muted);flex-shrink:0;font-size:15px;width:20px;text-align:center">&rarr;</span>
-                          <span style="width:200px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                                x-data="{ editing: false, newName: '' }">
-                            <template x-if="sh.orphanedAt">
-                              <span>
-                                <span style="color:var(--text-muted);text-decoration:line-through" x-text="sh.arrProfileName"></span>
-                                <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:500;margin-left:6px" x-tt="'Profile deleted in Arr — ' + (sh.orphanedAt || '')">orphaned</span>
-                              </span>
-                            </template>
-                            <template x-if="!sh.orphanedAt && !editing">
-                              <span>
-                                <button type="button" class="inline-action" style="color:var(--text-primary);border-bottom:1px dashed var(--border-subtle)" @click.stop="newName = sh.arrProfileName; editing = true" x-tt="'Click to rename in Arr'" x-text="sh.arrProfileName"></button>
-                                <span style="color:var(--text-muted);font-size:12px" x-text="'ID ' + sh.arrProfileId"></span>
-                              </span>
-                            </template>
-                            <template x-if="editing">
-                              <input type="text" class="input" style="width:180px;font-size:13px;padding:2px 6px"
-                                     x-model="newName"
-                                     autocomplete="off"
-                                     data-lpignore="true"
-                                     data-1p-ignore="true"
-                                     data-form-type="other"
-                                     name="arr-profile-rename"
-                                     @keyup.enter="if(newName.trim() && newName.trim() !== sh.arrProfileName) { renameArrProfile(inst, sh, newName.trim()); } editing = false"
-                                     @keyup.escape="editing = false"
-                                     @click.outside="editing = false"
-                                     x-init="$nextTick(() => { $el.focus(); $el.select(); })">
-                            </template>
-                          </span>
-                          <div style="display:flex;align-items:center;gap:4px;width:100px;flex-shrink:0">
-                              <label class="toggle toggle-sm" @click.stop x-tt="sh.orphanedAt ? 'Restore the profile to re-enable auto-sync' : 'Toggle auto-sync for this profile'">
-                                <input type="checkbox"
-                                       :disabled="!!sh.orphanedAt"
-                                       :checked="!sh.orphanedAt && autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled"
-                                       @change="(() => { if (sh.orphanedAt) return; const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId); if (rule) toggleAutoSyncRule(rule); })()">
-                                <span class="slider"></span>
-                              </label>
-                              <span style="font-size:11px"
-                                    :style="sh.orphanedAt ? 'color:var(--text-muted-secondary)' : (autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'color:var(--accent-green)' : 'color:color-mix(in srgb, var(--accent-red) 50%, transparent)')"
-                                    x-text="sh.orphanedAt ? 'orphaned' : (autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'auto-sync' : 'auto-sync off')"></span>
-                          </div>
-                          <span style="flex:1;display:flex;gap:8px;align-items:center;justify-content:flex-end">
-                            <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && r.updatedAt && (!r.lastSyncTime || r.updatedAt > r.lastSyncTime); })()">
-                              <span style="font-size:11px;padding:1px 6px;border-radius:3px;background:transparent;border:1px solid var(--accent-orange);color:var(--accent-orange);flex-shrink:0;display:inline-flex;align-items:center;gap:4px"
-                                    x-tt="'Settings saved but not synced to Arr yet. Will apply on next Sync All / Sync Now / Auto-Sync.'"><span style="font-size:8px;line-height:1">&#9679;</span> unsynced</span>
-                            </template>
-                            <template x-if="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">
-                              <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-red-bg);color:var(--accent-red);flex-shrink:0"
-                                    x-tt="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">error</span>
-                            </template>
-                            <span style="display:flex;gap:4px;align-items:center;flex-shrink:0"
-                                  x-data="{ get _rule() { return autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId) || {}; }, get _so() { return Object.keys(this._rule.scoreOverrides || {}).filter(k => !k.startsWith('custom:')).length; }, get _extra() { return Object.keys(this._rule.scoreOverrides || {}).filter(k => k.startsWith('custom:')).length; }, get _qo() { return Object.keys(this._rule.qualityOverrides || {}).length; }, get _oo() { return this._rule.overrides ? Object.keys(this._rule.overrides).filter(k => this._rule.overrides[k] !== undefined).length : 0; } }">
-                              <template x-if="_extra > 0">
-                                <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--fill-blue-soft);color:var(--accent-blue);flex-shrink:0"
-                                      x-tt="'Custom formats created by you and added to this profile'"
-                                      x-text="_extra + ' custom CF' + (_extra !== 1 ? 's' : '')"></span>
-                              </template>
-                              <template x-if="_so + _qo + _oo > 0">
-                                <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-orange-bg);color:var(--accent-orange);flex-shrink:0"
-                                      x-tt="(() => { const parts = []; if (_so) parts.push(_so + ' score'); if (_qo) parts.push(_qo + ' quality'); if (_oo) parts.push(_oo + ' settings'); return 'Values that differ from profile defaults: ' + parts.join(', '); })()"
-                                      x-text="(_so + _qo + _oo) + ' override' + ((_so + _qo + _oo) !== 1 ? 's' : '')"></span>
-                              </template>
-                            </span>
-                            <span style="color:var(--text-muted);flex-shrink:0" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
-                            <span style="color:var(--text-muted);flex-shrink:0" x-text="timeAgo(sh.lastSync)"></span>
-                          </span>
-                          <span style="display:flex;gap:6px;flex-shrink:0;align-items:center">
-                            <template x-if="sh.orphanedAt">
-                              <button class="btn" style="padding:3px 10px;font-size:11px;background:var(--fill-blue-soft);border:1px solid var(--accent-green-bg);color:var(--accent-green)" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634; Restore</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync settings'">&#9998;</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" style="color:var(--accent-green)" @click.stop="quickSync(inst, sh)" x-tt="'Re-sync with saved settings'">&#8635;</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" style="color:var(--accent-blue)" @click.stop="cloneProfile(inst, sh)" x-tt="'Clone to new profile'">&#10697;</button>
-                            </template>
-                            <button class="btn-icon" style="color:var(--accent-red)" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" x-tt="sh.orphanedAt ? 'Permanently remove this orphaned sync rule and history' : 'Remove sync rule'">&#10005;</button>
-                          </span>
-                        </div>
+          <!-- Toolbar: pause toggle (only when not already paused) -->
+          <template x-if="!autoSyncSettings.paused">
+            <div class="v3-toolbar">
+              <button class="v3-inst-action" style="margin-left:auto"
+                      @click="setAutoSyncPaused(true)"
+                      x-tt="'Pause auto-sync (scheduled + after-pull). Manual syncs unaffected.'">⏸ Pause Auto-Sync</button>
+            </div>
+          </template>
+
+          <!-- Per-instance cards -->
+          <template x-for="inst in instancesOfType(activeAppType)" :key="'sr-'+inst.id">
+            <template x-if="sortedSyncRules(inst.id).length > 0">
+              <div class="v3-inst-card">
+                <div class="v3-inst-header">
+                  <span class="v3-inst-name" x-text="inst.name"></span>
+                  <span class="v3-inst-count" x-text="sortedSyncRules(inst.id).length + ' rule' + (sortedSyncRules(inst.id).length !== 1 ? 's' : '')"></span>
+                  <span class="v3-inst-actions">
+                    <button class="v3-inst-action" @click.stop="syncAllForInstance(inst)" x-tt="'Re-sync all profiles with auto-sync enabled on this instance'">Sync all</button>
+                  </span>
+                </div>
+                <div class="v3-rule-grid v3-col-header">
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('trash')"
+                            :aria-sort="syncRulesSort.col === 'trash' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      TRaSH Profile<span class="arr" x-show="syncRulesSort.col==='trash'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div></div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('arr')"
+                            :aria-sort="syncRulesSort.col === 'arr' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Arr Profile<span class="arr" x-show="syncRulesSort.col==='arr'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('lastSync')"
+                            :aria-sort="syncRulesSort.col === 'lastSync' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Last sync<span class="arr" x-show="syncRulesSort.col==='lastSync'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('status')"
+                            :aria-sort="syncRulesSort.col === 'status' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Status<span class="arr" x-show="syncRulesSort.col==='status'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>Auto-sync</div>
+                  <div>Customizations</div>
+                  <div></div>
+                </div>
+                <template x-for="sh in sortedSyncRules(inst.id)" :key="sh.arrProfileId">
+                  <div class="v3-rule-grid v3-rule-row"
+                       :class="{ orphaned: sh.orphanedAt }"
+                       x-data="{ editing: false, newName: '' }">
+                    <!-- TRaSH profile name (neutral, no link-blue) -->
+                    <div class="v3-prof-trash"
+                         x-data="{ get _trashProf() { return (trashProfiles[activeAppType] || []).find(p => p.name === sh.profileName); } }">
+                      <span class="v3-prof-trash-name" x-text="sh.profileName"></span>
+                      <span class="v3-prof-trash-info" x-show="_trashProf?.trashDescription"
+                            @mouseenter="_trashProf?.trashDescription && showCFTooltip($event, _trashProf.trashDescription)"
+                            @mouseleave="hideCFTooltip()">&#9432;</span>
+                    </div>
+                    <div class="v3-arrow">&rarr;</div>
+                    <!-- Arr profile (with rename + ID) -->
+                    <div class="v3-prof-arr">
+                      <template x-if="sh.orphanedAt">
+                        <span>
+                          <span class="v3-prof-arr-orph" x-text="sh.arrProfileName"></span>
+                          <span class="v3-prof-arr-orph-tag" x-tt="'Profile deleted in Arr — ' + (sh.orphanedAt || '')">orphaned</span>
+                        </span>
+                      </template>
+                      <template x-if="!sh.orphanedAt && !editing">
+                        <span>
+                          <button type="button" class="v3-prof-arr-rename"
+                                  @click.stop="newName = sh.arrProfileName; editing = true"
+                                  x-tt="'Click to rename in Arr'"
+                                  x-text="sh.arrProfileName"></button>
+                          <span class="v3-prof-arr-id" x-text="'ID ' + sh.arrProfileId"></span>
+                        </span>
+                      </template>
+                      <template x-if="editing">
+                        <input type="text" class="input" style="width:180px;font-size:12.5px;padding:2px 6px"
+                               x-model="newName"
+                               autocomplete="off"
+                               data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                               name="arr-profile-rename"
+                               @keyup.enter="if(newName.trim() && newName.trim() !== sh.arrProfileName) { renameArrProfile(inst, sh, newName.trim()); } editing = false"
+                               @keyup.escape="editing = false"
+                               @click.outside="editing = false"
+                               x-init="$nextTick(() => { $el.focus(); $el.select(); })">
                       </template>
                     </div>
-                  </template>
-                </template>
-                <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
-                  <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px">No sync history yet. Sync a profile from the list below to get started.</div>
+                    <!-- Last sync -->
+                    <div class="v3-last-sync"
+                         :class="{ never: !(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncTime) }"
+                         x-text="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r?.lastSyncTime ? timeAgo(r.lastSyncTime) : 'Never'; })()"></div>
+                    <!-- Status pill -->
+                    <div>
+                      <template x-if="!sh.orphanedAt">
+                        <span class="v3-status"
+                              :class="v3RuleStatus(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
+                              x-tt="v3RuleStatusTip(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
+                              x-text="v3RuleStatusLabel(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"></span>
+                      </template>
+                      <template x-if="sh.orphanedAt">
+                        <span class="v3-status failed" x-tt="'Arr profile was deleted'">Orphaned</span>
+                      </template>
+                    </div>
+                    <!-- Auto-sync toggle -->
+                    <div class="v3-auto-cell">
+                      <label class="toggle toggle-sm" @click.stop x-tt="sh.orphanedAt ? 'Restore the profile to re-enable auto-sync' : 'Toggle auto-sync for this profile'">
+                        <input type="checkbox"
+                               :disabled="!!sh.orphanedAt"
+                               :checked="!sh.orphanedAt && autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled"
+                               @change="(() => { if (sh.orphanedAt) return; const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId); if (rule) toggleAutoSyncRule(rule); })()">
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <!-- Customizations -->
+                    <div>
+                      <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && v3RuleCustomizations(r).total > 0; })()">
+                        <span class="v3-cust-pill"
+                              x-data="{ get _summary() { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return v3RuleCustomizations(r); } }"
+                              x-tt="(() => { const p = []; if (_summary.quality)      p.push('Quality: '       + _summary.quality);      if (_summary.extraCFs)     p.push('Extra CFs: '     + _summary.extraCFs);     if (_summary.customScores) p.push('Custom scores: ' + _summary.customScores); if (_summary.general)      p.push('General: '       + _summary.general);      return p.join('\n'); })()"
+                              x-text="_summary.total + ' change' + (_summary.total !== 1 ? 's' : '')"></span>
+                      </template>
+                      <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return !r || v3RuleCustomizations(r).total === 0; })()">
+                        <span class="v3-cust-empty">—</span>
+                      </template>
+                    </div>
+                    <!-- Actions -->
+                    <div class="v3-actions">
+                      <template x-if="sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync rule'">&#9998;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="quickSync(inst, sh)" x-tt="'Re-sync with saved settings'">&#8635;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="cloneProfile(inst, sh)" x-tt="'Clone to new profile'">&#10697;</button>
+                      </template>
+                      <button class="v3-action-icon danger" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" x-tt="sh.orphanedAt ? 'Permanently remove this orphaned sync rule and history' : 'Remove sync rule'">&#10005;</button>
+                    </div>
+                  </div>
                 </template>
               </div>
-            </div>
+            </template>
+          </template>
+          <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
+            <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No sync rules yet. Sync a profile from the <strong>TRaSH Profiles</strong> tab to get started.</div>
+          </template>
 
         </div>
         <!-- end Sync Rules tab -->

@@ -376,6 +376,15 @@ export default function baseState() {
     theme: localStorage.getItem('clonarr-theme') || 'system',
     // v3 sidebar collapse state — persists per-browser. Default expanded.
     sidebarCollapsed: localStorage.getItem('clonarr-sidebar-collapsed') === '1',
+    // v3 content alignment — 'center' (default, balanced) or 'left'
+    // (anchored next to the sidebar, shorter mouse travel on widescreen).
+    contentAlign: localStorage.getItem('clonarr-content-align') || 'center',
+    // v3 Sync Rules — per-rule customization-count cache. Keyed by rule
+    // ID, populated by loadRuleCustomizations() when the Sync Rules tab
+    // mounts. Each entry: { quality, extraCFs, customScores, general, total }.
+    // Empty {} = not yet loaded; missing keys = unknown rule (will render —).
+    ruleCustomizations: {},
+    ruleCustomizationsLoaded: false,
 
     // Scoring Sandbox (per app-type state)
     sandbox: {

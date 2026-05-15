@@ -51,7 +51,12 @@
   /* Page layout — global default. Scoring Sandbox overrides this inline with
      style="max-width:none" because it has wide tabular results that benefit
      from the full viewport. */
-  .page { padding: 24px; max-width: 1250px; margin: 0 auto; }
+  /* v3 page container. Default: centered with 1500px max-width — gives
+     8-column tables enough room without stretching card-based sections.
+     User can switch to left-anchored via Settings → Display; the
+     [data-content-align="left"] override below drops the auto-margin. */
+  .page { padding: 24px; max-width: 1500px; margin: 0 auto; }
+  [data-content-align="left"] .page { margin: 0; }
 
   /* Section header */
   .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

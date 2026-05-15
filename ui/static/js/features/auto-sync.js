@@ -50,6 +50,13 @@ export default {
       try {
         const r = await fetch('/api/auto-sync/rules');
         if (r.ok) this.autoSyncRules = await r.json();
+        // v3: keep the Sync Rules customization-count pill cache in sync
+        // whenever rules are reloaded (Save+Sync, manual edit, etc.).
+        // No-op for users who never visit the Sync Rules tab — the
+        // payload is small (counts only, no profile data).
+        if (typeof this.loadRuleCustomizations === 'function') {
+          this.loadRuleCustomizations();
+        }
       } catch (e) { console.error('loadAutoSyncRules:', e); }
     },
 

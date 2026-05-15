@@ -557,3 +557,59 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+
+// handleRuleCustomizations returns a per-rule breakdown of how much each
+// sync rule deviates from its TRaSH profile defaults. Read-only — does
+// not touch sync state, never calls Arr, makes no writes. Used by the
+// v3 Sync Rules list to render a per-row customization-count pill that
+// matches what the detail view's "Override mode · N changes" header
+// shows when the user opens the rule.
+//
+// Response shape: { ruleId: RuleCustomizations }. Rules whose target
+// profile is missing from the current TRaSH snapshot return an empty
+// breakdown (all zeros) — the caller can still render "—" for those.
+func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Core.Config.Get()
+
+	// Cache the TRaSH snapshot per app type to avoid repeated locking
+	// when many rules target the same Radarr/Sonarr instance.
+	snapByApp := map[string]*core.AppData{}
+	getAppData := func(appType string) *core.AppData {
+		if ad, ok := snapByApp[appType]; ok {
+			return ad
+		}
+		ad := s.Core.Trash.GetAppData(appType)
+		snapByApp[appType] = ad
+		return ad
+	}
+
+	out := make(map[string]core.RuleCustomizations, len(cfg.AutoSync.Rules))
+	for i := range cfg.AutoSync.Rules {
+		rule := &cfg.AutoSync.Rules[i]
+		inst, ok := s.Core.Config.GetInstance(rule.InstanceID)
+		if !ok {
+			out[rule.ID] = core.RuleCustomizations{}
+			continue
+		}
+		ad := getAppData(inst.Type)
+		if ad == nil {
+			out[rule.ID] = core.RuleCustomizations{}
+			continue
+		}
+		// Look up the TRaSH profile by trash ID. Rules can also target
+		// imported profiles (ImportedProfileID set); those don't have
+		// TRaSH defaults to diff against, so we return zeros.
+		var profile *core.TrashQualityProfile
+		if rule.TrashProfileID != "" {
+			for _, p := range ad.Profiles {
+				if p.TrashID == rule.TrashProfileID {
+					profile = p
+					break
+				}
+			}
+		}
+		out[rule.ID] = core.ComputeRuleCustomizations(rule, profile, ad)
+	}
+
+	writeJSON(w, out)
+}
