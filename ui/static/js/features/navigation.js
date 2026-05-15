@@ -254,5 +254,63 @@ export default {
       }
       return section;
     },
+
+    // Sprint 2 slice 3 — auto-sync banner chip helpers.
+    //
+    // Aggregates the auto-sync rules belonging to the currently-active app
+    // type (Radarr/Sonarr) and exposes a compact "last activity" summary
+    // for the banner chip. Hidden on global sections (Settings, About)
+    // and when no enabled rules exist for the active app — auto-sync is
+    // per-app-instance, so it has no meaning on those pages.
+    //
+    // States:
+    //   ok       — at least one rule has LastSyncTime, none have a current error
+    //   failed   — at least one enabled rule has LastSyncError set
+    //   paused   — autoSyncSettings.paused === true
+    //   never    — rules exist but none have ever synced successfully
+
+    // Rules scoped to the active Radarr/Sonarr app type.
+    _autoSyncRulesForActiveApp() {
+      const ids = new Set(this.instancesOfType(this.activeAppType).map(i => i.id));
+      return (this.autoSyncRules || []).filter(r => ids.has(r.instanceId));
+    },
+
+    autoSyncChipVisible() {
+      if (this.isGlobalSection()) return false;
+      const rules = this._autoSyncRulesForActiveApp();
+      return rules.length > 0;
+    },
+
+    autoSyncChipState() {
+      if (this.autoSyncSettings && this.autoSyncSettings.paused) return 'paused';
+      const rules = this._autoSyncRulesForActiveApp().filter(r => r.enabled);
+      if (rules.length === 0) return 'paused';  // visible only when rules exist, so this means all disabled
+      if (rules.some(r => r.lastSyncError)) return 'failed';
+      if (rules.every(r => !r.lastSyncTime)) return 'never';
+      return 'ok';
+    },
+
+    autoSyncChipLabel() {
+      const state = this.autoSyncChipState();
+      if (state === 'paused') return 'Auto-sync paused';
+      if (state === 'never') return 'Auto-sync · never run';
+      // Find the most-recent LastSyncTime across all enabled rules.
+      const rules = this._autoSyncRulesForActiveApp().filter(r => r.enabled && r.lastSyncTime);
+      let latest = null;
+      for (const r of rules) {
+        const t = new Date(r.lastSyncTime).getTime();
+        if (!latest || t > latest) latest = t;
+      }
+      const ago = latest ? this.timeAgo(new Date(latest).toISOString()) : 'never';
+      if (state === 'failed') return `Auto-sync failed · ${ago}`;
+      return `Auto-sync · ${ago}`;
+    },
+
+    // Click → navigate to Profiles → History so the user can see what ran.
+    // navHref already returns a leading-# hash; assign directly to
+    // location.hash and the existing hashchange listener restores state.
+    autoSyncChipClick() {
+      window.location.hash = this.navHref('profiles', { profileTab: 'history' });
+    },
   },
 };
