@@ -5,19 +5,23 @@
 <base href="{{.BasePath}}/">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clonarr</title>
-<link rel="icon" type="image/png" href="icons/clonarr.png">
+<link rel="icon" type="image/png" href="icons/clonarr.png?v={{.Version}}">
 <!-- main.js (type=module, deferred) registers the clonarr Alpine factory
      via `Alpine.data('clonarr', ...)` inside an alpine:init listener.
      It MUST appear before the Alpine <script> below so deferred-script
      document order guarantees main.js executes (and registers the
-     listener) before Alpine.start() fires alpine:init and walks the DOM. -->
-<script type="module" src="js/main.js"></script>
+     listener) before Alpine.start() fires alpine:init and walks the DOM.
+     The ?v= cache buster on all static refs ensures Firefox (and other
+     browsers that sometimes ignore Cache-Control on bf-cache hits) fetch
+     fresh files after a version bump instead of serving stale modules
+     that may not match the rest of the dep graph. Issue #50. -->
+<script type="module" src="js/main.js?v={{.Version}}"></script>
 <!-- Self-hosted Alpine.js v3.14.9. Embedded in the binary (see ui/embed.go)
      so the app has no third-party CDN dependency at runtime — works
      offline / behind firewalls and avoids browser tracking-prevention
      warnings about cross-origin storage access. To upgrade, replace
      ui/static/js/vendor/alpine.min.js with the new cdn.min.js bundle. -->
-<script defer src="js/vendor/alpine.min.js"></script>
+<script defer src="js/vendor/alpine.min.js?v={{.Version}}"></script>
 <!-- Resolve theme synchronously before CSS paints to avoid a flash of
      wrong theme. Mirrors the logic in applyTheme() (features/profiles.js). -->
 <script>
@@ -29,14 +33,14 @@
     document.documentElement.setAttribute('data-theme', resolved);
   })();
 </script>
-<link rel="stylesheet" href="css/styles.css">
-<link rel="modulepreload" href="js/api.js">
-<link rel="modulepreload" href="js/state.js">
-<link rel="modulepreload" href="js/features/profiles.js">
-<link rel="modulepreload" href="js/features/custom-formats.js">
-<link rel="modulepreload" href="js/features/quality-sizes.js">
-<link rel="modulepreload" href="js/features/profile-builder.js">
-<link rel="modulepreload" href="js/features/cf-group-builder.js">
+<link rel="stylesheet" href="css/styles.css?v={{.Version}}">
+<link rel="modulepreload" href="js/api.js?v={{.Version}}">
+<link rel="modulepreload" href="js/state.js?v={{.Version}}">
+<link rel="modulepreload" href="js/features/profiles.js?v={{.Version}}">
+<link rel="modulepreload" href="js/features/custom-formats.js?v={{.Version}}">
+<link rel="modulepreload" href="js/features/quality-sizes.js?v={{.Version}}">
+<link rel="modulepreload" href="js/features/profile-builder.js?v={{.Version}}">
+<link rel="modulepreload" href="js/features/cf-group-builder.js?v={{.Version}}">
 </head>
 <body>
 
