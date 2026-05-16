@@ -6,6 +6,12 @@
         <div style="font-size:18px;font-weight:600;margin-bottom:4px"
              x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></div>
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">TRaSH recommended naming schemes for folders and files. Select a media server tab and an instance to compare and apply.</div>
+
+        <!-- Shared Media Management header — same position as on Quality
+             Definitions so the picker doesn't jitter when the user
+             switches sub-tabs. -->
+        {{template "layout/media-management-header" .}}
+
         <!-- Shared info cards — text sourced verbatim from TRaSH-Guides:
              includes/starr/renaming-description-faq.md
              includes/{sonarr,radarr}/{imdb-vs-tvdb,imdb-vs-tmdb}.md
@@ -107,8 +113,8 @@
         </div>
         <template x-if="getNaming(activeAppType)">
           <div>
-            {{template "layout/media-management-header" .}}
-            <!-- Naming card: tabs + content (instance picker moved to shared header) -->
+            <!-- Naming card: tabs + content (instance picker is now at
+                 the top of the page in the shared Media Management header). -->
             <div class="card" style="margin:0;overflow:visible">
               <div style="padding:16px">
                 <!-- Current naming on the connected Arr instance — rendered as a small card inside
