@@ -39,7 +39,7 @@ export default {
 
     async cleanupApply(opts = {}) {
       if (!this.cleanupResult?.items?.length) return;
-      // For unused-by-clonarr, the user can opt to keep rename-flagged CFs
+      // For unused-by-clonarr, the user can opt to keep rename-only CFs
       // (the safer default) or delete everything. Other cleanup actions
       // ignore opts and delete the full item list.
       const items = opts.skipRenameFlagged
@@ -53,7 +53,7 @@ export default {
       const renameCount = items.filter(i => i.renamingFlag).length;
       let message = `Permanently delete ${items.length} custom format${items.length === 1 ? '' : 's'} from ${this.cleanupResult.instance}?`;
       if (includesRenameTags && renameCount > 0) {
-        message += `\n\nIncludes ${renameCount} CF${renameCount === 1 ? '' : 's'} tagged for filename rendering. Future renames will no longer include their tags (e.g. [AMZN], [v2]). Existing files on disk are unaffected.`;
+        message += `\n\nIncludes ${renameCount} rename-only CF${renameCount === 1 ? '' : 's'} (score 0 in every profile, only contributing to filenames). Future renames will no longer include their tags. Existing files on disk are unaffected.`;
       }
       message += `\n\nThis cannot be undone, but you can re-sync any TRaSH or builder profile to recreate CFs.`;
 

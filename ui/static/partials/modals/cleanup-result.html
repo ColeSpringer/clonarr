@@ -64,7 +64,7 @@
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> unmanaged items out of <span x-text="cleanupResult.totalCount"></span> total CFs.
                             <template x-if="cleanupResult.items.some(i => i.renamingFlag)">
                               <span style="color:var(--text-muted)">
-                                (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> tagged for filename rendering — see info below)
+                                (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> rename-only — see info below)
                               </span>
                             </template>
                           </span>
@@ -72,16 +72,16 @@
                       </div>
                       <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.namingUsesCustomFormats && cleanupResult.items.some(i => i.renamingFlag)">
                         <div style="margin-bottom:12px;padding:12px 14px;background:var(--fill-blue-soft);border:1px solid var(--fill-blue-dark);border-radius:6px;font-size:13px;color:var(--accent-sky);line-height:1.6">
-                          <div style="font-weight:600;color:var(--accent-sky);margin-bottom:6px;font-size:14px">ⓘ About filename-rendering CFs</div>
+                          <div style="font-weight:600;color:var(--accent-sky);margin-bottom:6px;font-size:14px">ⓘ About rename-only CFs</div>
                           Your file naming format on this instance contains <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">{Custom Formats}</code>.
-                          The CFs marked <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:12px;font-weight:500">rename tag</span> below contribute their names to filenames Radarr/Sonarr renders after import (e.g. <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">[AMZN]</code>, <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">[v2]</code>).
-                          Deleting them removes those tags from <em>future</em> renames; existing files on disk are unaffected. If you re-sync any TRaSH or builder profile that includes them, they're recreated automatically.
+                          The CFs marked <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:12px;font-weight:500">rename-only</span> below have score 0 in every quality profile AND are flagged in Arr to contribute their names to filenames. They have no scoring impact, but their tags will appear in filenames when releases match them.
+                          Deleting them removes those tags from <em>future</em> renames; existing files on disk are unaffected. If you re-sync a TRaSH or builder profile that includes them, they're recreated automatically.
                         </div>
                       </template>
                       <template x-if="cleanupResult.action === 'unused-by-clonarr' && !cleanupResult.namingUsesCustomFormats && cleanupResult.items.some(i => i.renamingFlag)">
                         <div style="margin-bottom:12px;padding:12px 14px;background:var(--fill-blue-soft);border:1px solid var(--accent-green-bg);border-radius:6px;font-size:13px;color:var(--accent-green);line-height:1.6">
-                          <div style="font-weight:600;color:var(--accent-green);margin-bottom:6px;font-size:14px">ⓘ Filename-rendering CFs are inert here</div>
-                          Some CFs below have a "rename tag" flag, but your file naming format on this instance does <strong>not</strong> use the <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">{Custom Formats}</code> token, so the flag has no functional effect. Safe to delete.
+                          <div style="font-weight:600;color:var(--accent-green);margin-bottom:6px;font-size:14px">ⓘ Rename-only CFs are inert here</div>
+                          Some CFs below are flagged <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:12px;font-weight:500">rename-only</span> (score 0 in every profile + Arr's <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">includeCustomFormatWhenRenaming</code> on), but your file naming format on this instance does <strong>not</strong> use the <code style="background:var(--bg-card);padding:1px 5px;border-radius:3px;font-size:12px">{Custom Formats}</code> token, so the flag has no functional effect. Safe to delete.
                         </div>
                       </template>
 
@@ -96,7 +96,7 @@
                             <button class="btn"
                               :style="cleanupFilter === 'rename-flagged' ? 'background:var(--accent-orange);border-color:var(--accent-orange);color:var(--text-inverse)' : ''"
                               @click="cleanupFilter = 'rename-flagged'"
-                              x-text="'Rename-tagged only (' + cleanupResult.items.filter(i => i.renamingFlag).length + ')'"></button>
+                              x-text="'Rename-only (' + cleanupResult.items.filter(i => i.renamingFlag).length + ')'"></button>
                           </template>
                           <template x-if="(cleanupResult.managedItems || []).length > 0">
                             <button class="btn"
@@ -155,7 +155,7 @@
                                 <template x-if="cleanupResult.action === 'unused-by-clonarr'">
                                   <td style="padding:6px 8px">
                                     <template x-if="item.renamingFlag">
-                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'includeCustomFormatWhenRenaming=true on this CF'">rename tag</span>
+                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on — this CF only contributes to file names, no scoring impact.'">rename-only</span>
                                     </template>
                                   </td>
                                 </template>
@@ -197,7 +197,7 @@
                                   </td>
                                   <td style="padding:6px 8px">
                                     <template x-if="item.renamingFlag">
-                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500">rename tag</span>
+                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on — this CF only contributes to file names, no scoring impact.'">rename-only</span>
                                     </template>
                                   </td>
                                 </tr>
@@ -227,11 +227,11 @@
           <button class="btn" @click="cleanupResult = null">Cancel</button>
           <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag)">
             <div style="display:flex;gap:6px">
-              <button class="btn btn-danger" style="padding:5px 10px;font-size:12px" @click="cleanupApply({ skipRenameFlagged: true })" :disabled="cleanupApplying" x-tt="'Keep CFs tagged for filename rendering'">
+              <button class="btn btn-danger" style="padding:5px 10px;font-size:12px" @click="cleanupApply({ skipRenameFlagged: true })" :disabled="cleanupApplying" x-tt="'Keep CFs whose only purpose is contributing to filenames'">
                 <span x-show="cleanupApplying" class="spinner" style="width:10px;height:10px;border-width:1.5px"></span>
                 <span x-show="!cleanupApplying" x-text="'Delete safe (' + cleanupResult.items.filter(i => !i.renamingFlag).length + ')'"></span>
               </button>
-              <button class="btn" style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--accent-red);color:var(--accent-red)" @click="cleanupApply({ skipRenameFlagged: false })" :disabled="cleanupApplying" x-tt="'Also delete CFs tagged for filename rendering'">
+              <button class="btn" style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--accent-red);color:var(--accent-red)" @click="cleanupApply({ skipRenameFlagged: false })" :disabled="cleanupApplying" x-tt="'Also delete CFs that only contribute to filenames'">
                 <span x-show="cleanupApplying" class="spinner" style="width:10px;height:10px;border-width:1.5px"></span>
                 <span x-show="!cleanupApplying" x-text="'Delete all (' + cleanupResult.affectCount + ')'"></span>
               </button>
