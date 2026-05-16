@@ -1094,12 +1094,42 @@ function registerSidebarToggleShortcut() {
   });
 }
 
+// `/` focuses the first visible page-search input on the current section.
+// Industry standard (Slack, GitHub, Discord, Gmail, YouTube) — does NOT
+// hijack browser Ctrl+F, which stays available for in-page find. Skips
+// when a typeable element is already focused so it doesn't intercept the
+// literal slash a user is trying to type into something else.
+function registerSearchShortcut() {
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== '/') return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target;
+    const tag = (target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+    // Find any visible search field marked with the convention class. Today
+    // that's only the Custom Formats browse search; future search fields
+    // (Profiles, History, etc.) tag themselves the same way and the
+    // shortcut works without further wiring.
+    const searches = document.querySelectorAll('.js-page-search');
+    for (const el of searches) {
+      const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+      if (visible) {
+        event.preventDefault();
+        el.focus();
+        if (typeof el.select === 'function') el.select();
+        return;
+      }
+    }
+  });
+}
+
 function registerClonarr() {
   window.Alpine.data('clonarr', clonarr);
   registerModalTrapDirective(window.Alpine);
   registerTooltipEscapeListener();
   registerSkipLinkHandler();
   registerSidebarToggleShortcut();
+  registerSearchShortcut();
   // x-tt="'tooltip text'" — viewport-aware custom tooltip directive.
   // Replaces native title="" for elements where the OS tooltip would overflow
   // the viewport (right-edge buttons, long messages). Wires hover, focus, and

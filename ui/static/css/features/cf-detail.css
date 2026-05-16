@@ -89,6 +89,27 @@
      a profile-detail sub-row) and tightens vertical padding. */
   .cf-row-compact { padding: 4px 14px; }
 
+  /* TRaSH-Guides external link — small icon next to the CF name on
+     TRaSH CFs (custom CFs have no upstream source, so the icon hides
+     there). Points at the canonical JSON file on GitHub. */
+  .cf-trash-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 11px;
+    padding: 0 3px;
+    border-radius: 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .cf-trash-link:hover {
+    color: var(--app-color);
+    background: var(--app-glow);
+  }
+  .cf-trash-link:focus-visible {
+    outline: 2px solid var(--app-color);
+    outline-offset: 1px;
+  }
+
   /* Detail section headers */
   .detail-section { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; margin-bottom: 6px; overflow: hidden; }
   .detail-section-header { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; user-select: none; gap: 8px; border: 0; background: transparent; width: 100%; text-align: left; color: inherit; font-family: inherit; }
