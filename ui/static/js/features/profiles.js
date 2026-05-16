@@ -920,7 +920,13 @@ export default {
       clearTimeout(window._tooltipHideTimer);
       const el = document.getElementById('cf-tooltip-portal');
       if (!el) return;
-      el.innerHTML = sanitizeHTML(text);
+      // Pre-process pymdownx-extra "caret" syntax (^^text^^) used in
+      // TRaSH descriptions for underline emphasis — without this the
+      // raw "^^NOT^^" leaks through to the tooltip text. The <u> tag
+      // is already on sanitizeHTML's allow-list, so the rendered
+      // underline survives sanitization.
+      const md = (text || '').replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
+      el.innerHTML = sanitizeHTML(md);
       el.style.display = 'block';
       const rect = event.target.getBoundingClientRect();
       // UI Scale fix: getBoundingClientRect() returns post-zoom actual
