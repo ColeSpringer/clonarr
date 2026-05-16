@@ -21,9 +21,12 @@
                 <div class="v3-inst-header">
                   <span class="v3-inst-name" x-text="inst.name"></span>
                   <span class="v3-inst-count" x-text="sortedSyncRules(inst.id).length + ' rule' + (sortedSyncRules(inst.id).length !== 1 ? 's' : '')"></span>
-                  <span class="v3-inst-paused-chip" x-show="inst.autoSyncPaused"
-                        x-tt="'Scheduled and after-pull syncs are skipped for this instance. Manual actions still work.'">&#9208; Auto-sync paused</span>
                   <span class="v3-inst-actions">
+                    <!-- Pause/Resume share one slot. When not paused the
+                         button is a plain Pause action; when paused the
+                         same button reflects current state ("Auto-sync
+                         paused") AND acts as the Resume trigger on click.
+                         Single source of truth — no separate chip needed. -->
                     <button class="v3-inst-action"
                             x-show="!inst.autoSyncPaused"
                             @click.stop="setInstancePaused(inst.id, true)"
@@ -31,7 +34,7 @@
                     <button class="v3-inst-action v3-inst-action-resume"
                             x-show="inst.autoSyncPaused"
                             @click.stop="setInstancePaused(inst.id, false)"
-                            x-tt="'Resume auto-sync for this instance'">&#9654; Resume</button>
+                            x-tt="'Auto-sync is paused for this instance — click to resume. Scheduled + after-pull syncs are skipped while paused; manual actions still work.'">&#9208; Auto-sync paused</button>
                     <button class="v3-inst-action" @click.stop="syncAllForInstance(inst)" x-tt="'Re-sync all profiles with auto-sync enabled on this instance'">Sync all</button>
                   </span>
                 </div>

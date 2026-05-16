@@ -68,22 +68,20 @@
 .v3-inst-actions { margin-left: auto; display: flex; gap: 6px; }
 .v3-inst-action { padding: 3px 9px; background: transparent; border: 1px solid var(--border-subtle); border-radius: 3px; color: var(--text-secondary); font-size: 11.5px; cursor: pointer; font-family: inherit; }
 .v3-inst-action:hover { color: var(--app-color); border-color: var(--app-color); }
-/* Resume button — uses --app-color so it visually belongs to the same
-   theme as everything else in the card. The label change (Pause →
-   Resume) carries the state semantics; color stays app-consistent. */
-.v3-inst-action-resume { color: var(--app-color); border-color: var(--app-color); }
-.v3-inst-action-resume:hover { color: var(--app-color); border-color: var(--app-color); background: var(--app-glow); }
-/* Paused chip — sits inline in the header, follows --app-color so it
-   reads as "this app's paused state" rather than a generic warning. */
-.v3-inst-paused-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 10px;
-  background: var(--app-glow);
+/* Paused-state button — same slot as Pause, but its visible label IS
+   the current state ("Auto-sync paused") and clicking it resumes. Uses
+   --app-color treatment so the button reads as "active state of this
+   app" rather than a generic warning, and we don't need a separate
+   chip to mirror the state somewhere else in the card. */
+.v3-inst-action-resume {
   color: var(--app-color);
-  border: 1px solid var(--app-color);
-  font-size: 10.5px; font-weight: 600;
-  text-transform: none; letter-spacing: 0;
-  margin-left: 6px;
+  border-color: var(--app-color);
+  background: var(--app-glow);
+}
+.v3-inst-action-resume:hover {
+  color: var(--app-color);
+  border-color: var(--app-color);
+  background: var(--app-glow);
 }
 
 /* Column grid — shared by header + rows.
