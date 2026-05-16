@@ -155,19 +155,29 @@
                             </template>
                           </div>
 
-                          <table style="width:100%;border-collapse:collapse;font-size:12px">
+                          <!-- table-layout:fixed forces the browser to respect the
+                               declared column widths from the first row instead of auto-
+                               shrinking each column to its content. Without it, the short
+                               numeric data ("0", "5", "853") collapses each column tight,
+                               leaving Series + Import lists glued left under ID. -->
+                          <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+                            <colgroup>
+                              <col><!-- Profile (takes remaining space) -->
+                              <col style="width:60px"><!-- ID -->
+                              <col style="width:90px"><!-- Series / Movies -->
+                              <col style="width:110px"><!-- Import lists -->
+                              <template x-if="activeAppType === 'radarr'">
+                                <col style="width:100px"><!-- Collections -->
+                              </template>
+                            </colgroup>
                             <thead>
                               <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
                                 <th style="padding:6px 8px;font-weight:500">Profile</th>
-                                <th style="padding:6px 8px;font-weight:500;width:50px;text-align:right">ID</th>
-                                <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right" x-text="activeAppType === 'sonarr' ? 'Series' : 'Movies'"></th>
-                                <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right">Import lists</th>
-                                <!-- x-if (not x-show) so Sonarr removes the cell from the DOM entirely
-                                     rather than collapsing it via display:none — display:none on a
-                                     <th>/<td> can leave the table-layout calculator with mismatched
-                                     column widths and shift data left/right. -->
+                                <th style="padding:6px 8px;font-weight:500;text-align:right">ID</th>
+                                <th style="padding:6px 8px;font-weight:500;text-align:right" x-text="activeAppType === 'sonarr' ? 'Series' : 'Movies'"></th>
+                                <th style="padding:6px 8px;font-weight:500;text-align:right">Import lists</th>
                                 <template x-if="activeAppType === 'radarr'">
-                                  <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right">Collections</th>
+                                  <th style="padding:6px 8px;font-weight:500;text-align:right">Collections</th>
                                 </template>
                               </tr>
                             </thead>
