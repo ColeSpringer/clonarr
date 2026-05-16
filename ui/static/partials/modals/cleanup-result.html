@@ -177,15 +177,19 @@
                                 <tr style="border-bottom:1px solid var(--bg-muted)">
                                   <td style="padding:6px 8px;color:var(--text-primary);font-weight:500" x-text="item.name"></td>
                                   <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px;color:var(--text-muted)" x-text="'#' + item.id"></td>
+                                  <!-- :style MUST be object syntax so it merges with the inline
+                                       style. Alpine's string :style REPLACES the entire style
+                                       attribute, wiping the padding / text-align / font-family
+                                       we set inline. -->
                                   <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                      :style="((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                      :style="{ color: ((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
                                       x-text="(item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0"></td>
                                   <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                      :style="((item.usage || {}).importLists || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                      :style="{ color: ((item.usage || {}).importLists || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
                                       x-text="(item.usage || {}).importLists || 0"></td>
                                   <template x-if="activeAppType === 'radarr'">
                                     <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                        :style="((item.usage || {}).collections || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                        :style="{ color: ((item.usage || {}).collections || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
                                         x-text="(item.usage || {}).collections || 0"></td>
                                   </template>
                                 </tr>
