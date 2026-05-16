@@ -13,14 +13,19 @@
   /* ============================================================
      v3 Sprint 3 — Naming sub-tab cards. Two card families with
      distinct accent colors so the page reads as two clear regions
-     instead of blending visually. Uses the same .detail-section
-     pattern as Custom Formats for consistency across Media Management.
-       - .naming-card-info  (blue accent) = info-from-guide cards
+     without too many competing colors:
+       - .naming-card-info  (--app-color) = info-from-guide cards
                             (Why use a naming scheme, IMDb vs TMDb)
-       - .naming-card-scheme (green accent) = recommended naming
-                            scheme cards (one per section)
+                            — matches the "Currently on instance"
+                            chip so the active-app theme threads
+                            through everything that's app-scoped.
+       - .naming-card-scheme (--cat-language green) = recommended
+                            naming scheme cards. Green signals
+                            "approved/actionable recommendations"
+                            and is the only non-app-color highlight,
+                            so it stands out clearly.
      ============================================================ */
-  .naming-card-info .detail-section-header { border-left: 3px solid var(--accent-blue); }
+  .naming-card-info .detail-section-header { border-left: 3px solid var(--app-color); }
   .naming-card-scheme .detail-section-header { border-left: 3px solid var(--cat-language); }
   .naming-card-info,
   .naming-card-scheme { margin-bottom: 6px; }
