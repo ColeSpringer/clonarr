@@ -43,6 +43,17 @@
   }
   .cf-browse-count strong { color: var(--text-primary); font-weight: 600; }
   .cf-browse-filter-hint { color: var(--text-muted); }
+  /* Expand all / Collapse all — small subtle text button, lives
+     between the count and the search field. Label flips depending on
+     current state. */
+  .cf-browse-expand-toggle {
+    background: transparent; border: 0; padding: 2px 6px;
+    color: var(--text-secondary);
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .cf-browse-expand-toggle:hover { color: var(--app-color); background: var(--app-glow); }
   .cf-browse-search-wrap {
     position: relative;
     flex: 1; max-width: 360px;
@@ -125,25 +136,23 @@
      + cluster stay packed left while score stays right. */
   .cf-row-compact .cf-score { margin-left: auto; flex-shrink: 0; }
 
-  /* TRaSH-Guides external links — plain text links, dotted underline
-     on hover. "guide" → docs page anchor; "json" → canonical JSON on
-     GitHub. Subtle enough not to compete with the CF name. */
+  /* TRaSH-Guides external links — blue + underline, classic external-
+     link convention so the user instantly recognises them as off-site
+     URLs (no tooltip needed; the labels "guide" / "json" plus the
+     external-link styling are self-explanatory). */
   .cf-trash-link {
-    color: var(--text-muted);
-    text-decoration: none;
+    color: var(--accent-blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
     font-size: 11px;
     padding: 0;
     border: 0;
     background: transparent;
-    border-bottom: 1px dotted transparent;
     line-height: 1.3;
   }
-  .cf-trash-link:hover {
-    color: var(--app-color);
-    border-bottom-color: var(--app-color);
-  }
+  .cf-trash-link:hover { color: var(--accent-blue); filter: brightness(1.2); }
   .cf-trash-link:focus-visible {
-    outline: 2px solid var(--app-color);
+    outline: 2px solid var(--accent-blue);
     outline-offset: 1px;
   }
 

@@ -113,6 +113,28 @@ export default {
       return !!this.cfBrowseFilter || !!this.detailSections['cfb_' + cat.displayName];
     },
 
+    // True if any category card is currently open. Drives the Expand
+    // all / Collapse all toggle label so the button always offers the
+    // action that has effect.
+    anyCFCategoryExpanded(appType) {
+      const cats = this.getCFBrowseGroups(appType) || [];
+      return cats.some(c => !!this.detailSections['cfb_' + c.displayName]);
+    },
+
+    // Flip every category card open or closed in one go. If any are
+    // open, collapse all; otherwise expand all. Search-active filter
+    // already auto-expands matching categories so the toggle is most
+    // useful when there's no filter.
+    toggleAllCFCategories(appType) {
+      const cats = this.getCFBrowseGroups(appType) || [];
+      const next = !this.anyCFCategoryExpanded(appType);
+      const update = { ...this.detailSections };
+      for (const c of cats) {
+        update['cfb_' + c.displayName] = next;
+      }
+      this.detailSections = update;
+    },
+
     getCFBrowseGroups(appType) {
       const data = this.cfBrowseData[appType];
       if (!data) return [];

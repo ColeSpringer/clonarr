@@ -17,6 +17,9 @@
                 <span x-show="cfBrowseFilter" class="cf-browse-filter-hint"
                       x-text="' · ' + (filteredCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0) + ' match'"></span>
               </div>
+              <button type="button" class="cf-browse-expand-toggle"
+                      @click="toggleAllCFCategories(activeAppType)"
+                      x-text="anyCFCategoryExpanded(activeAppType) ? 'Collapse all' : 'Expand all'"></button>
               <div class="cf-browse-search-wrap">
                 <input type="search" class="cf-browse-search js-page-search"
                        x-model="cfBrowseFilter"
@@ -78,13 +81,11 @@
                                    :href="trashCFGuideUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
                                    class="cf-trash-link"
-                                   x-tt="'Open this CF on the TRaSH-Guides docs page'"
                                    @click.stop>guide</a>
                                 <a x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
                                    :href="trashCFJsonUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
                                    class="cf-trash-link"
-                                   x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
                                    @click.stop>json</a>
                               </div>
                               <div class="cf-edit-actions" x-show="cf.isCustom">
@@ -110,13 +111,11 @@
                                    :href="trashCFGuideUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
                                    class="cf-trash-link"
-                                   x-tt="'Open this CF on the TRaSH-Guides docs page'"
                                    @click.stop>guide</a>
                                 <a x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
                                    :href="trashCFJsonUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
                                    class="cf-trash-link"
-                                   x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
                                    @click.stop>json</a>
                               </div>
                               <div class="cf-edit-actions" x-show="cf.isCustom">
@@ -155,13 +154,11 @@
                                   <a :href="trashCFGuideUrl(cf, activeAppType)"
                                      target="_blank" rel="noopener"
                                      class="cf-trash-link"
-                                     x-tt="'Open this CF on the TRaSH-Guides docs page'"
                                      @click.stop>guide</a>
                                   <a x-show="trashCFJsonUrl(cf, activeAppType)"
                                      :href="trashCFJsonUrl(cf, activeAppType)"
                                      target="_blank" rel="noopener"
                                      class="cf-trash-link"
-                                     x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
                                      @click.stop>json</a>
                                 </div>
                                 <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
