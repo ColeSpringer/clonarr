@@ -774,25 +774,37 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 	// Walk the Arr CF list once: split into unmanaged (Items — delete
 	// candidates) and managed (ManagedItems — display only). Keep-list
 	// CFs are skipped from both buckets — they're explicit user-protected.
+	//
+	// RenamingFlag now requires BOTH the Arr per-CF flag
+	// (IncludeCustomFormatWhenRenaming) AND zero score across every
+	// quality profile. The Arr flag alone is misleading: TRaSH CFs like
+	// Repack 1/2/3, CC (Comedy Central), and streaming-service variants
+	// all have the flag set on top of meaningful scores, so they're
+	// scoring CFs first, rename contributors second. Labelling them
+	// "rename tag" implied they were safe-to-delete-as-rename-only,
+	// which they're not — deleting them changes scoring decisions.
+	// profileUsage[cf.ID] is the list of profile names where this CF
+	// has non-zero score; empty slice == score 0 everywhere.
 	var items []CleanupItem
 	var managedItems []ManagedCFRef
 	for _, cf := range cfs {
 		if keepSet[cf.Name] {
 			continue
 		}
+		isRenameOnly := cf.IncludeCustomFormatWhenRenaming && len(profileUsage[cf.ID]) == 0
 		if managedNames[cf.Name] {
 			managedItems = append(managedItems, ManagedCFRef{
 				ID:             cf.ID,
 				Name:           cf.Name,
 				UsedInProfiles: profileUsage[cf.ID],
-				RenamingFlag:   cf.IncludeCustomFormatWhenRenaming,
+				RenamingFlag:   isRenameOnly,
 			})
 			continue
 		}
 		items = append(items, CleanupItem{
 			ID:           cf.ID,
 			Name:         cf.Name,
-			RenamingFlag: cf.IncludeCustomFormatWhenRenaming,
+			RenamingFlag: isRenameOnly,
 		})
 	}
 

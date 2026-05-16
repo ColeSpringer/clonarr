@@ -71,11 +71,21 @@ export default {
     // anchor that scrolls to the CF section. Falls back to the
     // collection landing page if the slug can't be derived. Empty for
     // custom CFs (no upstream).
+    //
+    // TRaSH-Guides uses inconsistent casing per app — Radarr's page
+    // path is /Radarr/Radarr-collection-of-custom-formats/ (both
+    // capitalized) but Sonarr's is /Sonarr/sonarr-collection-of-custom-
+    // formats/ (capital dir, lowercase filename). Verified by curl
+    // against trash-guides.info — the wrong case returns 404. The
+    // ?h={slug} query param triggers Material's search-highlight on
+    // the destination page.
     trashCFGuideUrl(cf, appType) {
       if (!cf || cf.isCustom) return '';
       const slug = this._cfSlug(cf.name);
-      const app = appType === 'sonarr' ? 'Sonarr' : 'Radarr';
-      return `https://trash-guides.info/${app}/${app}-collection-of-custom-formats/${slug ? '#' + slug : ''}`;
+      const base = appType === 'sonarr'
+        ? 'https://trash-guides.info/Sonarr/sonarr-collection-of-custom-formats/'
+        : 'https://trash-guides.info/Radarr/Radarr-collection-of-custom-formats/';
+      return slug ? `${base}?h=${slug}#${slug}` : base;
     },
 
     // Links a CF to the raw JSON file on TRaSH-Guides GitHub. TRaSH
