@@ -133,9 +133,64 @@
                         </table>
                       </template>
 
+                      <!-- Reset Non-Synced Scores — dedicated table with score chips per profile. -->
+                      <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px">
+                          <thead>
+                            <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500">Custom Format</th>
+                              <th style="padding:6px 8px;font-weight:500">Current scores</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <template x-for="item in cleanupResult.items" :key="item.id">
+                              <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;color:var(--text-primary);font-weight:500" x-text="item.name"></td>
+                                <td style="padding:6px 8px">
+                                  <div style="display:flex;flex-wrap:wrap;gap:4px">
+                                    <template x-for="[prof, score] in Object.entries(item.profileScores || {})" :key="prof">
+                                      <span style="background:var(--bg-elevated);border:1px solid var(--border-muted);color:var(--text-body);padding:1px 7px;border-radius:9px;font-size:11px;font-weight:500;line-height:1.4">
+                                        <span :style="score > 0 ? 'color:var(--accent-green)' : 'color:var(--accent-red)'" x-text="(score > 0 ? '+' : '') + score"></span>
+                                        <span style="color:var(--text-muted)"> on </span><span x-text="prof"></span>
+                                      </span>
+                                    </template>
+                                  </div>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </template>
+
+                      <!-- Orphaned Scores — dedicated table showing CF ID + affected profiles. -->
+                      <template x-if="cleanupResult.action === 'orphaned-scores'">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px">
+                          <thead>
+                            <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500;width:80px">CF ID</th>
+                              <th style="padding:6px 8px;font-weight:500">Found in</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <template x-for="item in cleanupResult.items" :key="item.id">
+                              <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;color:var(--text-muted);font-family:'SF Mono',Monaco,monospace;font-size:11.5px" x-text="'#' + item.id"></td>
+                                <td style="padding:6px 8px">
+                                  <div style="display:flex;flex-wrap:wrap;gap:4px">
+                                    <template x-for="prof in (item.profiles || [])" :key="prof">
+                                      <span style="background:var(--bg-elevated);border:1px solid var(--border-muted);color:var(--text-body);padding:1px 7px;border-radius:9px;font-size:11px;font-weight:500;line-height:1.4" x-text="prof"></span>
+                                    </template>
+                                  </div>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </template>
+
                       <!-- Default items table — used by unused-by-clonarr (rename-flag
-                           Tag column matters there) and the score-reset actions. -->
-                      <template x-if="cleanupResult.action !== 'duplicates' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
+                           Tag column matters there). -->
+                      <template x-if="cleanupResult.action !== 'duplicates' && cleanupResult.action !== 'reset-unsynced-scores' && cleanupResult.action !== 'orphaned-scores' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
@@ -208,13 +263,19 @@
                       </template>
                     </div>
                   </template>
+                  <!-- Both Delete-All warnings: red border + red text only,
+                       no loud filled background. The destructive intent is
+                       carried by the border + the Remove/Delete button below;
+                       a loud colored fill would compete with both. Same red
+                       treatment on both since both are destructive (matches
+                       the card framing on Maintenance Cleanup tab). -->
                   <template x-if="cleanupResult.action === 'delete-cfs-and-scores'">
-                    <div style="margin-top:12px;padding:10px;background:var(--accent-red-bg);border:1px solid var(--accent-red);border-radius:6px;font-size:12px;color:var(--accent-red)">
+                    <div style="margin-top:12px;padding:10px;background:transparent;border:1px solid var(--accent-red);border-radius:6px;font-size:12px;color:var(--accent-red)">
                       This will permanently delete all custom formats and reset all scores to 0. This action cannot be undone.
                     </div>
                   </template>
                   <template x-if="cleanupResult.action === 'delete-cfs-keep-scores'">
-                    <div style="margin-top:12px;padding:10px;background:var(--accent-orange-bg);border:1px solid var(--accent-orange);border-radius:6px;font-size:12px;color:var(--accent-orange)">
+                    <div style="margin-top:12px;padding:10px;background:transparent;border:1px solid var(--accent-red);border-radius:6px;font-size:12px;color:var(--accent-red)">
                       This will delete all custom formats. Scores will be preserved in profiles so CFs can be re-added later.
                     </div>
                   </template>

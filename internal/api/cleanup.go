@@ -43,6 +43,11 @@ type CleanupItem struct {
 	Name     string   `json:"name"`
 	Detail   string   `json:"detail,omitempty"`
 	Profiles []string `json:"profiles,omitempty"`
+	// ProfileScores maps profile name → score for actions that need to
+	// surface per-profile score data (reset-unsynced-scores). Avoids the
+	// frontend having to parse a string like "Score 100 on HD-Bluray, 50
+	// on UHD-Bluray" out of Detail.
+	ProfileScores map[string]int `json:"profileScores,omitempty"`
 	// RenamingFlag is true when the CF has includeCustomFormatWhenRenaming
 	// set in Arr. When the instance's naming format uses the {Custom Formats}
 	// token, deleting these CFs removes their tags from filenames rendered
@@ -466,11 +471,12 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 
 
 
-	// Find CFs with non-zero scores that aren't in any synced profile
-	// Collect all profiles where each CF has a non-zero score
+	// Find CFs with non-zero scores that aren't in any synced profile.
+	// Collect per-profile scores so the modal can render them as structured
+	// chips rather than parsing a "Score 100 on X, 50 on Y" string client-side.
 	type cfScoreInfo struct {
-		name    string
-		details []string
+		name   string
+		scores map[string]int // profile name → score
 	}
 	cfScores := make(map[int]*cfScoreInfo)
 	for _, profile := range profiles {
@@ -479,7 +485,7 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 				continue
 			}
 			if info, ok := cfScores[fi.Format]; ok {
-				info.details = append(info.details, strconv.Itoa(fi.Score)+" on "+profile.Name)
+				info.scores[profile.Name] = fi.Score
 			} else {
 				var cfName string
 				for _, cf := range cfs {
@@ -492,8 +498,8 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 					continue
 				}
 				cfScores[fi.Format] = &cfScoreInfo{
-					name:    cfName,
-					details: []string{strconv.Itoa(fi.Score) + " on " + profile.Name},
+					name:   cfName,
+					scores: map[string]int{profile.Name: fi.Score},
 				}
 			}
 		}
@@ -501,9 +507,9 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 	var items []CleanupItem
 	for cfID, info := range cfScores {
 		items = append(items, CleanupItem{
-			ID:     cfID,
-			Name:   info.name,
-			Detail: "Score " + strings.Join(info.details, ", "),
+			ID:            cfID,
+			Name:          info.name,
+			ProfileScores: info.scores,
 		})
 	}
 
@@ -533,21 +539,26 @@ func scanOrphanedScores(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 		cfIDs[cf.ID] = true
 	}
 
-	// Find profile format items referencing non-existent CFs
-	var items []CleanupItem
-	seen := make(map[int]bool)
+	// Find profile format items referencing non-existent CFs. First pass
+	// collects ALL referencing profiles per orphan ID (the old code stopped
+	// at the first match, so a CF orphaned across three profiles only showed
+	// one of them). Second pass turns the map into stable-ordered items.
+	orphanProfiles := make(map[int][]string)
 	for _, profile := range profiles {
 		for _, fi := range profile.FormatItems {
-			if cfIDs[fi.Format] || seen[fi.Format] {
+			if cfIDs[fi.Format] {
 				continue
 			}
-			seen[fi.Format] = true
-			items = append(items, CleanupItem{
-				ID:     fi.Format,
-				Name:   "CF #" + strconv.Itoa(fi.Format),
-				Detail: "Referenced in " + profile.Name + " but CF no longer exists",
-			})
+			orphanProfiles[fi.Format] = append(orphanProfiles[fi.Format], profile.Name)
 		}
+	}
+	var items []CleanupItem
+	for id, profs := range orphanProfiles {
+		items = append(items, CleanupItem{
+			ID:       id,
+			Name:     "CF #" + strconv.Itoa(id),
+			Profiles: profs,
+		})
 	}
 
 	return &CleanupScanResult{
