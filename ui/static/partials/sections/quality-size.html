@@ -6,13 +6,13 @@
         <template x-if="getQualitySizes(activeAppType).length > 0">
           <div>
             {{template "layout/media-management-header" .}}
-            <!-- Quality size type picker (Movies, Series, Anime, etc.) — content
-                 specific to this sub-tab, lives in its own compact card. -->
-            <div class="card" style="padding:8px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-              <span style="font-size:13px;color:var(--text-muted)">Type:</span>
+            <!-- Quality size type picker (Movies, Series, Anime, etc.) —
+                 subtle app-color pills, active state filled with --app-glow. -->
+            <div class="card" style="padding:8px 14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <span style="font-size:13px;color:var(--text-muted);margin-right:4px">Type:</span>
               <template x-for="(qsType, idx) in getQualitySizes(activeAppType)" :key="qsType.trash_id">
-                <button class="btn btn-sm"
-                        :class="{ 'btn-primary': (selectedQSType[activeAppType] || 0) === idx }"
+                <button class="qs-type-btn"
+                        :class="{ active: (selectedQSType[activeAppType] || 0) === idx }"
                         @click="selectedQSType = { ...selectedQSType, [activeAppType]: idx }; qsSyncResult[activeAppType] = null"
                         x-text="qsType.type.charAt(0).toUpperCase() + qsType.type.slice(1).replace(/-/g, ' ')">
                 </button>
@@ -127,8 +127,8 @@
                   </template>
                   <template x-if="mediaInstanceId[activeAppType]">
                     <div style="width:58px;flex-shrink:0;text-align:center">
-                      <button class="btn btn-sm" style="padding:2px 8px;font-size:12px;width:58px"
-                              :class="isQSCustom(activeAppType, qs.quality) ? 'btn-danger' : 'btn-primary'"
+                      <button class="qs-mode-btn"
+                              :class="{ 'is-custom': isQSCustom(activeAppType, qs.quality) }"
                               @click="toggleQSMode(activeAppType, qs.quality)"
                               x-tt="isQSCustom(activeAppType, qs.quality) ? 'Using custom values — click to revert to TRaSH' : 'Following TRaSH values — click to set custom values'"
                               x-text="isQSCustom(activeAppType, qs.quality) ? 'Custom' : 'Auto'">
@@ -137,10 +137,10 @@
                   </template>
                   <template x-if="mediaInstanceId[activeAppType]">
                     <div style="width:68px;flex-shrink:0;text-align:center">
-                      <button class="btn btn-sm btn-blue" style="padding:2px 8px;font-size:12px;width:68px"
+                      <button class="qs-sync-btn"
                               @click="syncSingleQS(activeAppType, qs.quality)"
                               x-show="qsHasRowChange(activeAppType, qs)"
-                              x-tt="'Instance values differ from TRaSH — click to update'">Sync Now</button>
+                              x-tt="'Instance values differ from TRaSH — click to update'">Sync</button>
                     </div>
                   </template>
                 </div>
