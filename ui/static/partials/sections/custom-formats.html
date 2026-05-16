@@ -71,10 +71,8 @@
                           <template x-for="cf in group.cfs" :key="cf.trashId">
                             <div class="cf-row cf-row-compact">
                               <div class="cf-name">
-                                <span x-text="cf.name"></span>
+                                <span class="cf-name-text" x-text="cf.name"></span>
                                 <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
-                              </div>
-                              <div class="cf-actions">
                                 <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
                                 <a x-show="!cf.isCustom"
                                    :href="trashCFGuideUrl(cf, activeAppType)"
@@ -88,8 +86,10 @@
                                    class="cf-trash-link"
                                    x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
                                    @click.stop>json</a>
-                                <button type="button" class="cf-action-btn cf-action-edit" x-show="cf.isCustom" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                <button type="button" class="cf-action-btn cf-action-delete" x-show="cf.isCustom" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
+                              </div>
+                              <div class="cf-edit-actions" x-show="cf.isCustom">
+                                <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
+                                <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
                               </div>
                               <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
                                    x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
@@ -103,10 +103,8 @@
                           <template x-for="cf in group.cfs" :key="cf.trashId">
                             <div class="cf-row cf-row-compact">
                               <div class="cf-name">
-                                <span x-text="cf.name"></span>
+                                <span class="cf-name-text" x-text="cf.name"></span>
                                 <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
-                              </div>
-                              <div class="cf-actions">
                                 <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
                                 <a x-show="!cf.isCustom"
                                    :href="trashCFGuideUrl(cf, activeAppType)"
@@ -120,8 +118,10 @@
                                    class="cf-trash-link"
                                    x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
                                    @click.stop>json</a>
-                                <button type="button" class="cf-action-btn cf-action-edit" x-show="cf.isCustom" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                <button type="button" class="cf-action-btn cf-action-delete" x-show="cf.isCustom" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
+                              </div>
+                              <div class="cf-edit-actions" x-show="cf.isCustom">
+                                <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
+                                <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
                               </div>
                               <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
                                    x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
@@ -150,9 +150,7 @@
                             <template x-for="cf in group.cfs" :key="cf.trashId">
                               <div class="cf-row cf-row-compact">
                                 <div class="cf-name">
-                                  <span x-text="cf.name"></span>
-                                </div>
-                                <div class="cf-actions">
+                                  <span class="cf-name-text" x-text="cf.name"></span>
                                   <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
                                   <a :href="trashCFGuideUrl(cf, activeAppType)"
                                      target="_blank" rel="noopener"

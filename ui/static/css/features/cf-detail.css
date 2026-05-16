@@ -85,16 +85,20 @@
        description truncates awkwardly at the 120-char boundary. */
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
-  /* Compact CF row — drops the 36px left-indent (no longer indented as
-     a profile-detail sub-row) and tightens vertical padding. Three
-     cells: name (flex:1) | actions (auto) | score (fixed). Splitting
-     actions out of .cf-name keeps the name unencumbered by link/icon
-     chrome and groups all secondary affordances visually. */
-  .cf-row-compact { padding: 4px 14px; }
+  /* Compact CF row — name + per-name affordances cluster on the left
+     (info-icon, guide/json links right beside the name so the eye
+     doesn't have to travel), edit/delete cluster for customs in the
+     middle, score pinned to the right via margin-left:auto. */
+  .cf-row-compact { padding: 4px 14px; gap: 10px; }
   .cf-row-compact .cf-name {
-    flex: 1; min-width: 0;
+    display: inline-flex; align-items: baseline; gap: 6px;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .cf-name-text {
+    min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    display: flex; align-items: baseline; gap: 8px;
+    color: var(--text-primary);
   }
 
   /* Custom badge — small, muted-orange pill replaces the inline-style
@@ -109,15 +113,17 @@
     flex-shrink: 0;
   }
 
-  /* Actions cluster — sits between name and score. Everything that's
-     row-meta (description, links, edit/delete) lives here so the name
-     keeps the full left flex without competing chrome. */
-  .cf-actions {
-    display: inline-flex; align-items: center; gap: 8px;
+  /* Custom-CF edit/delete cluster — only present for user CFs. Sits
+     right after the name cluster so it doesn't drift to the far edge. */
+  .cf-edit-actions {
+    display: inline-flex; align-items: center; gap: 6px;
     flex-shrink: 0;
-    font-size: 11.5px;
-    color: var(--text-muted);
   }
+
+  /* Score cell pinned to the right edge of the row. margin-left:auto
+     gives the row's leftover space to the score's left margin so name
+     + cluster stay packed left while score stays right. */
+  .cf-row-compact .cf-score { margin-left: auto; flex-shrink: 0; }
 
   /* TRaSH-Guides external links — plain text links, dotted underline
      on hover. "guide" → docs page anchor; "json" → canonical JSON on
