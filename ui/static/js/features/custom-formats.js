@@ -1,5 +1,10 @@
 export default {
-  state: {},
+  state: {
+    // Custom Formats browse — name/category text filter. Single string
+    // applies across all categories simultaneously; matching categories
+    // auto-expand so results are visible without manual clicks.
+    cfBrowseFilter: '',
+  },
   methods: {
     async loadCFBrowse(appType) {
       try {
@@ -21,6 +26,58 @@ export default {
         const res = await fetch(`/api/trash/${appType}/conflicts`);
         if (res.ok) this.conflictsData = { ...this.conflictsData, [appType]: await res.json() };
       } catch (e) { /* not available */ }
+    },
+
+    // Filtered view of getCFBrowseGroups. When cfBrowseFilter is empty,
+    // returns the raw category list. When set:
+    //   - Category whose displayName matches → include with all CFs intact
+    //   - Otherwise, filter each group's CFs by name match; drop groups
+    //     with no matches; drop the category if all groups are empty.
+    // Case-insensitive substring match. The result feeds the template so
+    // categories with zero matching CFs disappear entirely.
+    filteredCFBrowseGroups(appType) {
+      const filter = (this.cfBrowseFilter || '').trim().toLowerCase();
+      const groups = this.getCFBrowseGroups(appType) || [];
+      if (!filter) return groups;
+      return groups
+        .map(cat => {
+          if (cat.displayName.toLowerCase().includes(filter)) return cat;
+          const filteredGroups = (cat.groups || [])
+            .map(g => ({ ...g, cfs: (g.cfs || []).filter(cf => cf.name.toLowerCase().includes(filter)) }))
+            .filter(g => g.cfs.length > 0);
+          if (filteredGroups.length === 0) return null;
+          return {
+            ...cat,
+            groups: filteredGroups,
+            totalCFs: filteredGroups.reduce((acc, g) => acc + g.cfs.length, 0),
+          };
+        })
+        .filter(Boolean);
+    },
+
+    // Category-snippet helper for the collapsed-card preview line.
+    // Strips TRaSH's HTML description down to plain text and truncates to
+    // ~120 chars so the user can see what a category covers at a glance
+    // without having to expand it. Returns '' for categories with no
+    // description (Custom, Other, or upstream groups without trash_description).
+    cfCategorySnippet(cat) {
+      const html = cat?.trashDescription;
+      if (!html) return '';
+      // DOMParser approach gives clean text-only output without inheriting
+      // any of the source styling. Cached implicitly by Alpine's expression
+      // cache — same cat object → same result while x-data is alive.
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const text = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      return text.length > 120 ? text.slice(0, 120).trim() + '…' : text;
+    },
+
+    // True when the category should render expanded. Either the user
+    // explicitly opened it OR a non-empty cfBrowseFilter is active —
+    // search results need to be visible without manual clicks.
+    isCFCategoryExpanded(cat) {
+      return !!this.cfBrowseFilter || !!this.detailSections['cfb_' + cat.displayName];
     },
 
     getCFBrowseGroups(appType) {
