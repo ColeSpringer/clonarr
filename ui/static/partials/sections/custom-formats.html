@@ -6,12 +6,14 @@
 
         <template x-if="getCFBrowseGroups(activeAppType).length > 0">
           <div>
-            <!-- Toolbar: total count · search · actions. Single row to keep
-                 the page tight; toolbar is sticky-feeling at the top of
-                 the content rather than a separate visual band. -->
+            <!-- Toolbar: app tag · count · search · actions. Toolbar carries
+                 the gradient + --app-color treatment (same language as the
+                 v3-inst-header in Sync Rules / History) so the page makes
+                 the active app obvious without an extra banner row. -->
             <div class="cf-browse-toolbar">
+              <span class="cf-browse-app-tag" x-text="activeAppType === 'sonarr' ? 'SONARR' : 'RADARR'"></span>
               <div class="cf-browse-count">
-                Showing <strong x-text="(getCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0)"></strong> Custom Formats
+                <strong x-text="(getCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0)"></strong> Custom Formats
                 <span x-show="cfBrowseFilter" class="cf-browse-filter-hint"
                       x-text="' · ' + (filteredCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0) + ' match'"></span>
               </div>
