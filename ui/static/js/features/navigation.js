@@ -103,6 +103,7 @@ export default {
       let hash = '#' + app + '/' + s;
       if (s === 'profiles') hash += '/' + (this.getProfileTab(app) || 'trash-profiles');
       else if (s === 'media-management') hash += '/' + (this.getMediaTab(app) || 'quality');
+      else if (s === 'maintenance') hash += '/' + (this.getMaintenanceTab(app) || 'backup');
       else if (s === 'advanced') hash += '/' + (this.advancedTab || 'builder');
       return hash;
     },
@@ -125,6 +126,8 @@ export default {
         hash += '/' + (opts.profileTab || this.getProfileTab(app) || 'trash-profiles');
       } else if (section === 'media-management') {
         hash += '/' + (opts.mediaTab || this.getMediaTab(app) || 'quality');
+      } else if (section === 'maintenance') {
+        hash += '/' + (opts.maintenanceTab || this.getMaintenanceTab(app) || 'backup');
       } else if (section === 'advanced') {
         hash += '/' + (opts.advancedTab || this.advancedTab || 'builder');
       }
@@ -181,6 +184,7 @@ export default {
       // during hash restore below.
       const validProfileTabs = ['trash-profiles','sync-rules','history','compare','trash-sync'];
       const validMediaTabs = ['quality','naming'];
+      const validMaintenanceTabs = ['backup','cleanup'];
       const validAdvancedTabs = ['builder','group-builder','scoring','import'];
       this._navSkipPush = true;
       try {
@@ -215,6 +219,9 @@ export default {
             else if (this.currentSection === 'media-management' && validMediaTabs.includes(parts[2])) {
               this.setMediaTab(this.activeAppType, parts[2]);
             }
+            else if (this.currentSection === 'maintenance' && validMaintenanceTabs.includes(parts[2])) {
+              this.setMaintenanceTab(this.activeAppType, parts[2]);
+            }
             else if (this.currentSection === 'advanced' && validAdvancedTabs.includes(parts[2])) this.advancedTab = parts[2];
           }
         }
@@ -246,6 +253,16 @@ export default {
     },
     setMediaTab(appType, tab) {
       this.mediaTabs = { ...this.mediaTabs, [appType]: tab };
+    },
+
+    // Maintenance sub-tabs — Backup & Restore vs Cleanup. Default
+    // 'backup' because that's the safer entry point (no destructive
+    // actions visible until the user explicitly switches to Cleanup).
+    getMaintenanceTab(appType) {
+      return this.maintenanceTabs[appType] || 'backup';
+    },
+    setMaintenanceTab(appType, tab) {
+      this.maintenanceTabs = { ...this.maintenanceTabs, [appType]: tab };
     },
 
     getCompareInstanceId(appType) {
@@ -295,6 +312,11 @@ export default {
         const tab = this.getMediaTab(this.activeAppType);
         const namingLabel = this.activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming';
         const tabLabel = { 'quality': 'Quality Definitions', 'naming': namingLabel }[tab] || '';
+        return tabLabel ? `${section} / ${tabLabel}` : section;
+      }
+      if (this.currentSection === 'maintenance') {
+        const tab = this.getMaintenanceTab(this.activeAppType);
+        const tabLabel = { 'backup': 'Backup & Restore', 'cleanup': 'Cleanup' }[tab] || '';
         return tabLabel ? `${section} / ${tabLabel}` : section;
       }
       if (this.currentSection === 'advanced') {

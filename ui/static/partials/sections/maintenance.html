@@ -1,8 +1,8 @@
 {{define "sections/maintenance"}}
       <!-- ===== Maintenance section ===== -->
       <div class="page" x-show="currentSection === 'maintenance'">
-        <div style="font-size:18px;font-weight:600;margin-bottom:4px">Backup &amp; Maintenance</div>
-        <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Backup and restore instance data, clean up custom formats and scores.</div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:4px">Maintenance</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Backup and restore instance data, or scan and clean up custom formats and scores.</div>
 
         <template x-if="instancesOfType(activeAppType).length === 0">
           <div class="card" style="padding:24px;text-align:center;color:var(--text-muted)">
@@ -12,174 +12,188 @@
 
         <template x-if="instancesOfType(activeAppType).length > 0">
           <div>
-            <!-- Instance selector -->
-            <div class="card" style="padding:16px;margin-bottom:16px">
-              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                <span style="font-size:13px;color:var(--text-muted)">Instance:</span>
-                <select class="input" style="width:250px"
-                        x-model="maintenanceInstanceId"
-                        @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { testInstance(maintenanceInstance); }">
-                  <option value="">Select instance...</option>
-                  <template x-for="inst in instancesOfType(activeAppType)" :key="inst.id">
-                    <option :value="inst.id" x-text="inst.name"></option>
-                  </template>
-                </select>
-                <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && instanceStatus[maintenanceInstance.id] === 'connected'">
-                  <span style="font-size:13px;color:var(--accent-green)">Connected</span>
+            <!-- Shared header — RADARR/SONARR tag + instance picker.
+                 Maintenance keeps its OWN picker state (maintenanceInstanceId)
+                 separate from Media Management's mediaInstanceId because the
+                 destructive cleanup ops on this page should require an
+                 explicit "I'm acting on this instance" choice rather than
+                 inheriting a picker selection the user made elsewhere. -->
+            <div class="media-mgmt-header">
+              <span class="media-mgmt-app-tag" x-text="activeAppType === 'sonarr' ? 'SONARR' : 'RADARR'"></span>
+              <span class="media-mgmt-instance-label">Instance:</span>
+              <select class="input media-mgmt-instance-select"
+                      x-model="maintenanceInstanceId"
+                      @change="cleanupInstanceId = maintenanceInstanceId; loadCleanupKeep(); loadCleanupCFNames(); if (maintenanceInstance) { testInstance(maintenanceInstance); }">
+                <option value="">Select instance…</option>
+                <template x-for="inst in instancesOfType(activeAppType)" :key="inst.id">
+                  <option :value="inst.id" x-text="inst.name"></option>
                 </template>
-                <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && instanceStatus[maintenanceInstance.id] === 'failed'">
-                  <span style="font-size:13px;color:var(--accent-red)">Connection failed</span>
-                </template>
-                <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && !instanceStatus[maintenanceInstance.id]">
-                  <span style="font-size:13px;color:var(--accent-orange)">Not tested</span>
-                </template>
-              </div>
+              </select>
+              <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && instanceStatus[maintenanceInstance.id] === 'connected'">
+                <span class="media-mgmt-status media-mgmt-status-ok">Connected</span>
+              </template>
+              <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && instanceStatus[maintenanceInstance.id] === 'failed'">
+                <span class="media-mgmt-status media-mgmt-status-fail">Connection failed</span>
+              </template>
+              <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType && !instanceStatus[maintenanceInstance.id]">
+                <span class="media-mgmt-status media-mgmt-status-warn">Not tested</span>
+              </template>
+              <template x-if="!maintenanceInstance || maintenanceInstance.type !== activeAppType">
+                <span class="media-mgmt-status-hint">Select an instance to begin</span>
+              </template>
             </div>
 
-            <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType">
-              <div>
-                <!-- ===== Backup & Restore Section ===== -->
-                <div class="card" style="padding:16px;margin-bottom:16px">
+            <!-- ============================================================
+                 Backup & Restore sub-tab
+                 ============================================================ -->
+            <div x-show="getMaintenanceTab(activeAppType) === 'backup'">
+              <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType">
+                <div class="card" style="padding:16px;margin-bottom:12px">
                   <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Backup &amp; Restore</div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Download instance profiles and custom formats as JSON, or restore from a previous backup.</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Download instance profiles and custom formats as JSON, or restore from a previous backup. Backups are a safe point-in-time snapshot — make one before any destructive cleanup action.</div>
                   <div style="display:flex;gap:8px">
                     <button class="btn btn-sm btn-primary" @click="openBackupModal(maintenanceInstance)">Backup</button>
                     <button class="btn btn-sm" @click="openRestoreModal(maintenanceInstance)">Restore</button>
                   </div>
                 </div>
+              </template>
+              <template x-if="!maintenanceInstance || maintenanceInstance.type !== activeAppType">
+                <div class="card" style="padding:16px;color:var(--text-muted);font-size:13px">Select an instance above to enable Backup &amp; Restore.</div>
+              </template>
+            </div>
 
-                <!-- ===== Cleanup Section ===== -->
-                <div style="margin-bottom:16px">
-                  <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Cleanup</div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Scan and clean up custom formats and scores. All operations show a preview before applying.</div>
+            <!-- ============================================================
+                 Cleanup sub-tab
+                 ============================================================ -->
+            <div x-show="getMaintenanceTab(activeAppType) === 'cleanup'">
+              <template x-if="!maintenanceInstance || maintenanceInstance.type !== activeAppType">
+                <div class="card" style="padding:16px;color:var(--text-muted);font-size:13px">Select an instance above to begin cleanup.</div>
+              </template>
 
-                  <div style="display:flex;flex-direction:column;gap:12px">
-
-                    <!-- Duplicate CFs -->
-                    <div class="card" style="padding:16px">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--text-primary)">Duplicate Custom Formats</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Find CFs with identical specifications but different names. Keeps the first, flags duplicates for removal.</div>
-                        </div>
-                        <button class="btn btn-primary" @click="cleanupScan('duplicates')" :disabled="cleanupScanning">Scan</button>
-                      </div>
-                    </div>
-
-                    <!-- Unused by clonarr -->
-                    <div class="card" style="padding:16px;border-color:var(--accent-orange)">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--accent-orange)">Unused Custom Formats (Clonarr-managed only)</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.5">Finds CFs in this Arr instance that are not referenced by any Clonarr sync rule (selectedCFs, score overrides, or required by the rule's TRaSH/imported profile) and are not used for renaming. <strong>Assumes Clonarr is the sole tool managing CFs on this instance</strong> — CFs added via the Arr UI directly, or via Recyclarr / Notifiarr / other tools, will appear here as "unused". Review the preview list carefully. Keep List protection still applies.</div>
-                        </div>
-                        <button class="btn" style="border-color:var(--accent-orange);color:var(--accent-orange)" @click="cleanupScan('unused-by-clonarr')" :disabled="cleanupScanning">Scan</button>
-                      </div>
-                    </div>
-
-                    <!-- Reset unsynced scores -->
-                    <div class="card" style="padding:16px">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--text-primary)">Reset Non-Synced Scores</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Finds CFs with non-zero scores that weren't set by Clonarr (not part of any synced profile). Resets their scores to 0. Useful for cleaning up scores set manually or by other tools like Recyclarr.</div>
-                        </div>
-                        <button class="btn btn-primary" @click="cleanupScan('reset-unsynced-scores')" :disabled="cleanupScanning">Scan</button>
-                      </div>
-                    </div>
-
-                    <!-- Orphaned scores -->
-                    <div class="card" style="padding:16px">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--text-primary)">Orphaned Scores</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Finds score entries in profiles that reference Custom Formats which have been deleted. These ghost entries are harmless but clutter the profile. Resets them to 0.</div>
-                        </div>
-                        <button class="btn btn-primary" @click="cleanupScan('orphaned-scores')" :disabled="cleanupScanning">Scan</button>
-                      </div>
-                    </div>
-
-                    <!-- Keep list (shared by both delete actions) -->
-                    <div class="card" style="padding:16px;border-color:var(--border-subtle);overflow:visible">
-                      <div style="display:flex;gap:16px">
-                        <!-- Left: title, description, search -->
-                        <div style="flex-shrink:0;width:380px">
-                          <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Keep List</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Custom formats on this list will be excluded from delete operations. Case-insensitive, saved per instance.</div>
-                          <div style="display:flex;gap:6px;position:relative">
-                            <div style="width:250px;position:relative">
-                              <input type="text" x-model="cleanupKeepInput" placeholder="Type to search CFs..."
-                                     @input="cleanupKeepSuggestions = cleanupKeepInput.trim() ? cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10) : []"
-                                     @focus="cleanupKeepFocused = true; if (cleanupKeepInput.trim()) cleanupKeepSuggestions = cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10)"
-                                     @keydown.enter.prevent="cleanupKeepSuggestions.length > 0 ? addCleanupKeepName(cleanupKeepSuggestions[0]) : addCleanupKeep()"
-                                     @keydown.escape="cleanupKeepSuggestions = []; cleanupKeepFocused = false"
-                                     @blur="setTimeout(() => { cleanupKeepFocused = false; cleanupKeepSuggestions = [] }, 150)"
-                                     style="width:100%;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:4px;padding:6px 8px;color:var(--text-primary);font-size:12px">
-                              <div x-show="cleanupKeepFocused && cleanupKeepSuggestions.length > 0" @mousedown.prevent
-                                   style="position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px var(--alpha-shadow)">
-                                <template x-for="(suggestion, si) in cleanupKeepSuggestions" :key="si">
-                                  <button type="button" @click="addCleanupKeepName(suggestion)"
-                                          style="display:block;width:100%;padding:6px 10px;font-size:12px;color:var(--text-body);cursor:pointer;border:0;border-bottom:1px solid var(--bg-muted);background:transparent;text-align:left;font:inherit"
-                                          @mouseenter="$el.style.background='color-mix(in srgb, var(--accent-blue-strong) 20%, transparent)'" @mouseleave="$el.style.background='transparent'"
-                                          x-text="suggestion"></button>
-                                </template>
-                              </div>
-                            </div>
-                            <button class="btn btn-sm" @click="addCleanupKeep()" style="white-space:nowrap">Add</button>
-                            <button class="btn btn-sm" style="white-space:nowrap;border-color:var(--accent-orange);color:var(--accent-orange)"
-                                    x-show="cleanupKeepInput.trim()"
-                                    @click="addAllMatchingKeep()"
-                                    :disabled="cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length === 0"
-                                    x-text="'Add all (' + cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length + ')'"></button>
-                          </div>
-                        </div>
-                        <!-- Right: keep list entries as compact column -->
-                        <div style="flex:1;min-width:0" x-show="cleanupKeepList.length > 0">
-                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-                            <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px" x-text="cleanupKeepList.length + ' kept'"></span>
-                            <button class="btn" style="font-size:11px;padding:1px 8px;border-color:var(--accent-red);color:var(--accent-red)" @click="cleanupKeepList = []; saveCleanupKeep()" x-tt="'Remove all from Keep List'">Remove all</button>
-                          </div>
-                          <div style="max-height:160px;overflow-y:auto;overflow-x:hidden">
-                            <div style="column-count:3;column-gap:8px">
-                              <template x-for="(name, idx) in [...cleanupKeepList].sort((a,b) => a.localeCompare(b))" :key="'kl-'+idx">
-                                <div style="break-inside:avoid;display:flex;align-items:center;padding:1px 0;font-size:12px">
-                                  <span style="color:var(--accent-blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="name"></span>
-                                  <button type="button" class="inline-action" style="color:var(--text-secondary);font-size:13px;flex-shrink:0;margin-left:4px" @click="removeCleanupKeep(cleanupKeepList.indexOf(name))" x-tt="'Remove'" aria-label="Remove from keep list">&times;</button>
-                                </div>
+              <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType">
+                <div>
+                  <!-- ===== Keep List — settings, affects every delete action below ===== -->
+                  <div class="maintenance-section-label">Keep List</div>
+                  <div class="card maintenance-card maintenance-card-settings" style="overflow:visible">
+                    <div style="display:flex;gap:16px">
+                      <!-- Left: title, description, search -->
+                      <div style="flex-shrink:0;width:380px">
+                        <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Custom formats on this list will be excluded from delete operations. Case-insensitive, saved per instance.</div>
+                        <div style="display:flex;gap:6px;position:relative">
+                          <div style="width:250px;position:relative">
+                            <input type="text" x-model="cleanupKeepInput" placeholder="Type to search CFs..."
+                                   @input="cleanupKeepSuggestions = cleanupKeepInput.trim() ? cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10) : []"
+                                   @focus="cleanupKeepFocused = true; if (cleanupKeepInput.trim()) cleanupKeepSuggestions = cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).slice(0, 10)"
+                                   @keydown.enter.prevent="cleanupKeepSuggestions.length > 0 ? addCleanupKeepName(cleanupKeepSuggestions[0]) : addCleanupKeep()"
+                                   @keydown.escape="cleanupKeepSuggestions = []; cleanupKeepFocused = false"
+                                   @blur="setTimeout(() => { cleanupKeepFocused = false; cleanupKeepSuggestions = [] }, 150)"
+                                   style="width:100%;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:4px;padding:6px 8px;color:var(--text-primary);font-size:12px">
+                            <div x-show="cleanupKeepFocused && cleanupKeepSuggestions.length > 0" @mousedown.prevent
+                                 style="position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px var(--alpha-shadow)">
+                              <template x-for="(suggestion, si) in cleanupKeepSuggestions" :key="si">
+                                <button type="button" @click="addCleanupKeepName(suggestion)"
+                                        style="display:block;width:100%;padding:6px 10px;font-size:12px;color:var(--text-body);cursor:pointer;border:0;border-bottom:1px solid var(--bg-muted);background:transparent;text-align:left;font:inherit"
+                                        @mouseenter="$el.style.background='color-mix(in srgb, var(--accent-blue-strong) 20%, transparent)'" @mouseleave="$el.style.background='transparent'"
+                                        x-text="suggestion"></button>
                               </template>
                             </div>
                           </div>
+                          <button class="qs-mode-btn" @click="addCleanupKeep()" style="white-space:nowrap">Add</button>
+                          <button class="qs-mode-btn is-custom" style="white-space:nowrap"
+                                  x-show="cleanupKeepInput.trim()"
+                                  @click="addAllMatchingKeep()"
+                                  :disabled="cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length === 0"
+                                  x-text="'Add all (' + cleanupCFNames.filter(n => n.toLowerCase().includes(cleanupKeepInput.trim().toLowerCase()) && !cleanupKeepList.some(k => k.toLowerCase() === n.toLowerCase())).length + ')'"></button>
+                        </div>
+                      </div>
+                      <!-- Right: keep list entries as compact column -->
+                      <div style="flex:1;min-width:0" x-show="cleanupKeepList.length > 0">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                          <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px" x-text="cleanupKeepList.length + ' kept'"></span>
+                          <button class="qs-mode-btn" style="color:var(--accent-red);border-color:var(--accent-red)" @click="cleanupKeepList = []; saveCleanupKeep()" x-tt="'Remove all from Keep List'">Remove all</button>
+                        </div>
+                        <div style="max-height:160px;overflow-y:auto;overflow-x:hidden">
+                          <div style="column-count:3;column-gap:8px">
+                            <template x-for="(name, idx) in [...cleanupKeepList].sort((a,b) => a.localeCompare(b))" :key="'kl-'+idx">
+                              <div style="break-inside:avoid;display:flex;align-items:center;padding:1px 0;font-size:12px">
+                                <span style="color:var(--accent-blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="name"></span>
+                                <button type="button" class="inline-action" style="color:var(--text-secondary);font-size:13px;flex-shrink:0;margin-left:4px" @click="removeCleanupKeep(cleanupKeepList.indexOf(name))" x-tt="'Remove'" aria-label="Remove from keep list">&times;</button>
+                              </div>
+                            </template>
+                          </div>
                         </div>
                       </div>
                     </div>
+                  </div>
 
-                    <!-- Delete all CFs keep scores -->
-                    <div class="card" style="padding:16px;border-color:var(--accent-orange)">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--accent-orange)">Delete All Custom Formats (Keep Scores)</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Remove all CFs but preserve score mappings in profiles (respects Keep List). CFs can be re-added and will retain their scores.</div>
-                        </div>
-                        <button class="btn" style="border-color:var(--accent-orange);color:var(--accent-orange)" @click="cleanupScan('delete-cfs-keep-scores')" :disabled="cleanupScanning">Scan</button>
+                  <!-- ===== Find & remove — scan-then-act workflows ===== -->
+                  <div class="maintenance-section-label">Find &amp; remove</div>
+
+                  <div class="card maintenance-card">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title">Duplicate Custom Formats</div>
+                        <div class="maintenance-card-desc">Find CFs with identical specifications but different names. Keeps the first, flags duplicates for removal.</div>
                       </div>
+                      <button class="qs-mode-btn" @click="cleanupScan('duplicates')" :disabled="cleanupScanning">Scan</button>
                     </div>
+                  </div>
 
-                    <!-- Delete all CFs and scores (nuclear) -->
-                    <div class="card" style="padding:16px;border-color:var(--accent-red)">
-                      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                        <div>
-                          <div style="font-size:14px;font-weight:600;color:var(--accent-red)">Delete All Custom Formats &amp; Scores</div>
-                          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Complete fresh start — removes all CFs and resets their scores to 0 across every profile (respects Keep List). This cannot be undone.</div>
-                        </div>
-                        <button class="btn btn-danger" @click="cleanupScan('delete-cfs-and-scores')" :disabled="cleanupScanning">Scan</button>
+                  <div class="card maintenance-card">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title">Unused Custom Formats <span class="maintenance-card-caveat">(Clonarr-managed only)</span></div>
+                        <div class="maintenance-card-desc">Finds CFs in this Arr instance that are not referenced by any Clonarr sync rule (selectedCFs, score overrides, or required by the rule's TRaSH/imported profile) and are not used for renaming. <strong>Assumes Clonarr is the sole tool managing CFs on this instance</strong> — CFs added via the Arr UI directly, or via Recyclarr / Notifiarr / other tools, will appear here as "unused". Review the preview list carefully. Keep List protection still applies.</div>
                       </div>
+                      <button class="qs-mode-btn" @click="cleanupScan('unused-by-clonarr')" :disabled="cleanupScanning">Scan</button>
                     </div>
+                  </div>
 
+                  <div class="card maintenance-card">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title">Reset Non-Synced Scores</div>
+                        <div class="maintenance-card-desc">Finds CFs with non-zero scores that weren't set by Clonarr (not part of any synced profile). Resets their scores to 0. Useful for cleaning up scores set manually or by other tools like Recyclarr.</div>
+                      </div>
+                      <button class="qs-mode-btn" @click="cleanupScan('reset-unsynced-scores')" :disabled="cleanupScanning">Scan</button>
+                    </div>
+                  </div>
+
+                  <div class="card maintenance-card">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title">Orphaned Scores</div>
+                        <div class="maintenance-card-desc">Finds score entries in profiles that reference Custom Formats which have been deleted. These ghost entries are harmless but clutter the profile. Resets them to 0.</div>
+                      </div>
+                      <button class="qs-mode-btn" @click="cleanupScan('orphaned-scores')" :disabled="cleanupScanning">Scan</button>
+                    </div>
+                  </div>
+
+                  <!-- ===== Destructive actions — both Delete All buttons share the RED treatment ===== -->
+                  <div class="maintenance-section-label maintenance-section-danger">Destructive actions</div>
+
+                  <div class="card maintenance-card maintenance-card-danger">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title maintenance-card-title-danger">Delete All Custom Formats (Keep Scores)</div>
+                        <div class="maintenance-card-desc">Remove all CFs but preserve score mappings in profiles (respects Keep List). CFs can be re-added and will retain their scores.</div>
+                      </div>
+                      <button class="qs-mode-btn maintenance-btn-danger" @click="cleanupScan('delete-cfs-keep-scores')" :disabled="cleanupScanning">Scan</button>
+                    </div>
+                  </div>
+
+                  <div class="card maintenance-card maintenance-card-danger">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title maintenance-card-title-danger">Delete All Custom Formats &amp; Scores</div>
+                        <div class="maintenance-card-desc">Complete fresh start — removes all CFs and resets their scores to 0 across every profile (respects Keep List). This cannot be undone.</div>
+                      </div>
+                      <button class="qs-mode-btn maintenance-btn-danger" @click="cleanupScan('delete-cfs-and-scores')" :disabled="cleanupScanning">Scan</button>
+                    </div>
                   </div>
                 </div>
-
-              </div>
-            </template>
+              </template>
+            </div>
           </div>
         </template>
       </div>

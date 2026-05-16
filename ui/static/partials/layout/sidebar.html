@@ -121,14 +121,26 @@
 
       <div class="sidebar-section-label" x-show="!sidebarCollapsed">Tools</div>
 
-      <!-- Maintenance -->
+      <!-- Maintenance — Backup & Restore vs Cleanup sub-tabs, same
+           pattern as Profiles / Media Management. Hover-popup gives
+           access from collapsed sidebar. -->
       <a class="sidebar-nav-item" :class="{ active: currentSection === 'maintenance' }"
          :href="navHref('maintenance')"
          :aria-current="currentSection === 'maintenance' ? 'page' : null"
-         x-tt="sidebarCollapsed ? 'Maintenance' : null">
+         x-tt="sidebarCollapsed ? 'Maintenance' : null"
+         @mouseenter="showSidebarSubnav('maintenance', $el)"
+         @mouseleave="scheduleHideSidebarSubnav()">
         <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
         <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Maintenance</span>
       </a>
+
+      <!-- Sub-nav under Maintenance, only when sidebar expanded -->
+      <div class="sidebar-subnav" x-show="!sidebarCollapsed && currentSection === 'maintenance'">
+        <a class="sidebar-subnav-item" :class="{ active: getMaintenanceTab(activeAppType) === 'backup' }"
+           :href="navHref('maintenance', { maintenanceTab: 'backup' })">Backup &amp; Restore</a>
+        <a class="sidebar-subnav-item" :class="{ active: getMaintenanceTab(activeAppType) === 'cleanup' }"
+           :href="navHref('maintenance', { maintenanceTab: 'cleanup' })">Cleanup</a>
+      </div>
 
       <!-- Advanced (dev-mode gated) -->
       <a class="sidebar-nav-item" :class="{ active: currentSection === 'advanced' }"
@@ -295,7 +307,7 @@
        @mouseleave="scheduleHideSidebarSubnav()"
        @keydown.escape.window="sidebarSubnavPopup = ''"
        role="menu"
-       :aria-label="(sidebarSubnavPopup === 'profiles' ? 'Profiles' : sidebarSubnavPopup === 'media-management' ? 'Media Management' : 'Advanced') + ' sub-navigation'">
+       :aria-label="(sidebarSubnavPopup === 'profiles' ? 'Profiles' : sidebarSubnavPopup === 'media-management' ? 'Media Management' : sidebarSubnavPopup === 'maintenance' ? 'Maintenance' : 'Advanced') + ' sub-navigation'">
     <template x-if="sidebarSubnavPopup === 'profiles'">
       <div>
         <div class="sidebar-subnav-popup-header">Profiles</div>
@@ -317,6 +329,15 @@
         <a class="sidebar-subnav-popup-item" :class="{ active: getMediaTab(activeAppType) === 'naming' }"
            :href="navHref('media-management', { mediaTab: 'naming' })" @click="sidebarSubnavPopup = ''"
            x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></a>
+      </div>
+    </template>
+    <template x-if="sidebarSubnavPopup === 'maintenance'">
+      <div>
+        <div class="sidebar-subnav-popup-header">Maintenance</div>
+        <a class="sidebar-subnav-popup-item" :class="{ active: getMaintenanceTab(activeAppType) === 'backup' }"
+           :href="navHref('maintenance', { maintenanceTab: 'backup' })" @click="sidebarSubnavPopup = ''">Backup &amp; Restore</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: getMaintenanceTab(activeAppType) === 'cleanup' }"
+           :href="navHref('maintenance', { maintenanceTab: 'cleanup' })" @click="sidebarSubnavPopup = ''">Cleanup</a>
       </div>
     </template>
     <template x-if="sidebarSubnavPopup === 'advanced'">

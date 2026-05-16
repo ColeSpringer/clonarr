@@ -218,6 +218,12 @@
          :href="navHref('media-management', { mediaTab: 'naming' })"
          x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></a>
     </div>
+    <div class="topnav-subnav" x-show="currentSection === 'maintenance'">
+      <a class="topnav-subtab" :class="{ active: getMaintenanceTab(activeAppType) === 'backup' }"
+         :href="navHref('maintenance', { maintenanceTab: 'backup' })">Backup &amp; Restore</a>
+      <a class="topnav-subtab" :class="{ active: getMaintenanceTab(activeAppType) === 'cleanup' }"
+         :href="navHref('maintenance', { maintenanceTab: 'cleanup' })">Cleanup</a>
+    </div>
   </div>
 
 {{end}}

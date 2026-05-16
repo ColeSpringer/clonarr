@@ -93,6 +93,10 @@ export default function baseState() {
     // Section merges the former 'quality-size' + 'naming' top-level pages so
     // *arr-savvy users find both under the same "Media Management" heading.
     mediaTabs: {},
+    // Per app-type Maintenance sub-tab: { radarr: 'backup' | 'cleanup', sonarr: ... }.
+    // Splits the long Backup & Maintenance page into focused workflows —
+    // Backup & Restore (data preservation) vs Cleanup (data hygiene).
+    maintenanceTabs: {},
     compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
     syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
     syncRulesSort: { col: '', dir: 'asc' },
