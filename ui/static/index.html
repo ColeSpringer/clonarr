@@ -49,9 +49,10 @@
      in main.js (CSP-tightening compatibility — no inline onclick). -->
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'" :data-content-align="contentAlign">
+<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'" :data-content-align="contentAlign" :data-nav-style="navStyle">
 
   {{template "layout/sidebar" .}}
+  {{template "layout/top-nav" .}}
   <main id="main-content" tabindex="-1">
   {{template "layout/app-banner" .}}
   {{template "sections/app-pages" .}}

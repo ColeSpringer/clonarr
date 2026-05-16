@@ -382,6 +382,18 @@
               <div class="setting-help" style="flex-basis:100%;margin-top:4px">Centered keeps content balanced in the page. Left-aligned anchors it next to the sidebar — useful on widescreen monitors where the centered version has a long gap between sidebar and content.</div>
             </div>
           </div>
+          <div class="setting-row">
+            <div class="setting-label">Navigation style</div>
+            <div class="setting-value" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <template x-for="opt in [{label:'Sidebar',value:'sidebar'},{label:'Top navigation',value:'topnav'}]" :key="opt.value">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="navStyle" :value="opt.value" :checked="navStyle === opt.value" @change="setNavStyle(opt.value)" style="accent-color:var(--accent-blue)">
+                  <span x-text="opt.label" :style="navStyle === opt.value ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"></span>
+                </label>
+              </template>
+              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Sidebar keeps navigation on the left edge with an app switcher (Radarr/Sonarr) and grouped sections. Top navigation uses a horizontal bar across the top — closer to classic *arr-style layouts. Both modes use the same app-color theming.</div>
+            </div>
+          </div>
         </div>
 
         <!-- ===== Security ===== -->

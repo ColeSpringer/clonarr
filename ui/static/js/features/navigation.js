@@ -102,6 +102,7 @@ export default {
       const app = this.activeAppType;
       let hash = '#' + app + '/' + s;
       if (s === 'profiles') hash += '/' + (this.getProfileTab(app) || 'trash-profiles');
+      else if (s === 'media-management') hash += '/' + (this.getMediaTab(app) || 'quality');
       else if (s === 'advanced') hash += '/' + (this.advancedTab || 'builder');
       return hash;
     },
@@ -122,6 +123,8 @@ export default {
       let hash = '#' + app + '/' + section;
       if (section === 'profiles') {
         hash += '/' + (opts.profileTab || this.getProfileTab(app) || 'trash-profiles');
+      } else if (section === 'media-management') {
+        hash += '/' + (opts.mediaTab || this.getMediaTab(app) || 'quality');
       } else if (section === 'advanced') {
         hash += '/' + (opts.advancedTab || this.advancedTab || 'builder');
       }
@@ -166,12 +169,13 @@ export default {
       // when the hash already matches the state we'd produce.
       if (hash === this.buildNavHash()) return true;
       const parts = hash.replace(/^#/, '').split('/');
-      const validSections = ['profiles','custom-formats','quality-size','naming','maintenance','advanced','settings','about'];
+      const validSections = ['profiles','custom-formats','media-management','quality-size','naming','maintenance','advanced','settings','about'];
       const validSettings = ['instances','trash','prowlarr','notifications','display','security','advanced'];
       // v3: 'trash-sync' kept as a legacy alias of 'trash-profiles' so old
       // bookmarks and hashes keep working after the sub-tab split. Mapped
       // during hash restore below.
       const validProfileTabs = ['trash-profiles','sync-rules','history','compare','trash-sync'];
+      const validMediaTabs = ['quality','naming'];
       const validAdvancedTabs = ['builder','group-builder','scoring','import'];
       this._navSkipPush = true;
       try {
@@ -185,6 +189,16 @@ export default {
           if (appType === 'radarr' || appType === 'sonarr') this.activeAppType = appType;
           if (parts[1] && validSections.includes(parts[1])) this.currentSection = parts[1];
           else return false;
+          // Legacy aliases: old 'quality-size' and 'naming' top-level
+          // sections folded into 'media-management' with sub-tabs. Old
+          // bookmarks stay working.
+          if (this.currentSection === 'quality-size') {
+            this.currentSection = 'media-management';
+            this.setMediaTab(this.activeAppType, 'quality');
+          } else if (this.currentSection === 'naming') {
+            this.currentSection = 'media-management';
+            this.setMediaTab(this.activeAppType, 'naming');
+          }
           if (parts[2]) {
             if (this.currentSection === 'profiles' && validProfileTabs.includes(parts[2])) {
               // Legacy alias: pre-v3 hashes used 'trash-sync' for what now
@@ -192,6 +206,9 @@ export default {
               // on the profile-browser tab (the more discoverable side).
               const tab = parts[2] === 'trash-sync' ? 'trash-profiles' : parts[2];
               this.setProfileTab(this.activeAppType, tab);
+            }
+            else if (this.currentSection === 'media-management' && validMediaTabs.includes(parts[2])) {
+              this.setMediaTab(this.activeAppType, parts[2]);
             }
             else if (this.currentSection === 'advanced' && validAdvancedTabs.includes(parts[2])) this.advancedTab = parts[2];
           }
@@ -215,6 +232,15 @@ export default {
 
     setProfileTab(appType, tab) {
       this.profileTabs = { ...this.profileTabs, [appType]: tab };
+    },
+
+    // Media Management sub-tabs — same per-app pattern as profileTabs.
+    // Default sub-tab is 'quality' (the higher-traffic page).
+    getMediaTab(appType) {
+      return this.mediaTabs[appType] || 'quality';
+    },
+    setMediaTab(appType, tab) {
+      this.mediaTabs = { ...this.mediaTabs, [appType]: tab };
     },
 
     getCompareInstanceId(appType) {
@@ -246,8 +272,7 @@ export default {
       const sectionLabels = {
         'profiles': 'Profiles',
         'custom-formats': 'Custom Formats',
-        'quality-size': 'Quality Definitions',
-        'naming': 'File Naming',
+        'media-management': 'Media Management',
         'maintenance': 'Maintenance',
         'advanced': 'Advanced',
         'settings': 'Settings',
@@ -259,6 +284,12 @@ export default {
       if (this.currentSection === 'profiles') {
         const tab = this.getProfileTab(this.activeAppType);
         const tabLabel = { 'trash-profiles': 'TRaSH Profiles', 'sync-rules': 'Sync Rules', 'history': 'History', 'compare': 'Compare' }[tab] || '';
+        return tabLabel ? `${section} / ${tabLabel}` : section;
+      }
+      if (this.currentSection === 'media-management') {
+        const tab = this.getMediaTab(this.activeAppType);
+        const namingLabel = this.activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming';
+        const tabLabel = { 'quality': 'Quality Definitions', 'naming': namingLabel }[tab] || '';
         return tabLabel ? `${section} / ${tabLabel}` : section;
       }
       if (this.currentSection === 'advanced') {

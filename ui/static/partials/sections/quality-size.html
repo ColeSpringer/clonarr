@@ -1,6 +1,6 @@
 {{define "sections/quality-size"}}
-      <!-- ===== Quality Definitions sub-tab ===== -->
-      <div class="page" x-show="currentSection === 'quality-size'">
+      <!-- ===== Quality Definitions sub-tab (under Media Management) ===== -->
+      <div class="page" x-show="currentSection === 'media-management' && getMediaTab(activeAppType) === 'quality'">
         <div style="font-size:18px;font-weight:600;margin-bottom:4px">Quality Definitions</div>
         <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">TRaSH recommended file sizes (MB per minute of video) for each quality. These limits help Radarr/Sonarr choose the right quality when multiple releases are available. Select an instance to compare current values and sync.</div>
         <template x-if="getQualitySizes(activeAppType).length > 0">

@@ -344,6 +344,19 @@ export default {
       localStorage.setItem('clonarr-content-align', this.contentAlign);
     },
 
+    // v3 navigation-style toggle — applies immediately, persists to
+    // localStorage. Switches between sidebar (default) and topnav (classic
+    // horizontal bar with v3 color treatment). The x-if templates in
+    // index.html swap the layout in/out; CSS rule in layout.css reads
+    // [data-nav-style="topnav"] on the x-data wrapper to suppress the
+    // sidebar grid + collapse it back to a vertical stack.
+    setNavStyle(value) {
+      this.navStyle = (value === 'topnav') ? 'topnav' : 'sidebar';
+      localStorage.setItem('clonarr-nav-style', this.navStyle);
+      // Close the sub-nav popup if it was open from the sidebar.
+      this.sidebarSubnavPopup = '';
+    },
+
     async checkCleanupEvents() {
       try {
         const r = await fetch('/api/cleanup-events');

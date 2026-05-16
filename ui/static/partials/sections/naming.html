@@ -1,7 +1,10 @@
 {{define "sections/naming"}}
-      <!-- ===== File Naming section ===== -->
-      <div class="page" x-show="currentSection === 'naming'">
-        <div style="font-size:18px;font-weight:600;margin-bottom:4px">File Naming</div>
+      <!-- ===== Naming sub-tab (under Media Management) — label adapts
+           per active app: "Movie Naming" (Radarr) vs "Episode Naming"
+           (Sonarr) to match *arr terminology. ===== -->
+      <div class="page" x-show="currentSection === 'media-management' && getMediaTab(activeAppType) === 'naming'">
+        <div style="font-size:18px;font-weight:600;margin-bottom:4px"
+             x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></div>
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">TRaSH recommended naming schemes for folders and files. Select a media server tab and an instance to compare and apply.</div>
         <!-- Shared info cards — text sourced verbatim from TRaSH-Guides:
              includes/starr/renaming-description-faq.md

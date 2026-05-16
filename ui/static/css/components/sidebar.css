@@ -11,32 +11,39 @@
    flipped by [data-app="sonarr"] on the x-data wrapper. Both sidebar and
    the main-pane banner pick it up via inheritance. */
 
-/* Make the root layout a sidebar+main grid. When the v3 sidebar is in the
-   DOM, the body's top-level child stack (sidebar + main) flows as a CSS
-   grid. Classic top-nav users see no change since they don't render the
-   sidebar partial. Modals + overlays (other direct children) use
-   position:fixed so they're not affected by grid placement. */
-body:has(.sidebar) [x-data="clonarr"] {
+/* Make the root layout a sidebar+main grid — only when navStyle is
+   "sidebar". The topnav mode (data-nav-style="topnav") falls back to the
+   default block stack so the topnav + main flow as a normal vertical
+   column. Modals + overlays (other direct children) use position:fixed
+   so they're not affected by grid placement. */
+[x-data="clonarr"][data-nav-style="sidebar"] {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   grid-template-rows: auto 1fr;
   min-height: 100vh;
   transition: grid-template-columns 0.22s ease;
 }
-body:has(.sidebar) [x-data="clonarr"]:has(.sidebar.collapsed) {
+[x-data="clonarr"][data-nav-style="sidebar"]:has(.sidebar.collapsed) {
   grid-template-columns: var(--sidebar-w-collapsed) 1fr;
 }
-body:has(.sidebar) [x-data="clonarr"] > .noauth-banner {
+[x-data="clonarr"][data-nav-style="sidebar"] > .noauth-banner {
   grid-row: 1;
   grid-column: 1 / -1;
 }
-body:has(.sidebar) [x-data="clonarr"] > .sidebar {
+[x-data="clonarr"][data-nav-style="sidebar"] > .sidebar {
   grid-row: 2;
   grid-column: 1;
 }
-body:has(.sidebar) [x-data="clonarr"] > main {
+[x-data="clonarr"][data-nav-style="sidebar"] > main {
   grid-row: 2;
   grid-column: 2;
+}
+/* Topnav mode — the .topnav element is always in the DOM, but x-show
+   collapses it to display:none in sidebar mode. Same for the sidebar in
+   topnav mode. */
+[x-data="clonarr"][data-nav-style="topnav"] {
+  display: block;
+  min-height: 100vh;
 }
 
 .sidebar {
@@ -484,9 +491,12 @@ body:has(.sidebar.collapsed) .sidebar-trash-popover {
   cursor: pointer;
 }
 
-/* Hide the top-nav when the sidebar is in the DOM (defensive — index.html
-   only renders one or the other based on which template is loaded). */
-body:has(.sidebar) .topnav { display: none; }
+/* Defensive: keep the sidebar visually muted if both nav partials accidentally
+   render with the same visibility. The topnav/sidebar swap is now driven by
+   x-show on each root + the [data-nav-style="..."] grid rules above, so this
+   block is intentionally empty — the old `body:has(.sidebar) .topnav { display:none }`
+   broke the new opt-in topnav by hiding it whenever the sidebar partial was
+   in the DOM (always). */
 
 /* Collapsed-sidebar sub-nav flyout. Rendered as a sibling of <aside>
    (NOT inside it) so .sidebar's overflow:hidden does not clip the popup.

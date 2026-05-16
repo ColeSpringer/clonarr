@@ -89,6 +89,10 @@ export default function baseState() {
     pulling: false,
     trashResetting: false,
     profileTabs: {},  // per app-type profile tab: { radarr: 'trash-profiles', sonarr: 'sync-rules', ... }
+    // Per app-type Media Management sub-tab: { radarr: 'quality' | 'naming', sonarr: ... }.
+    // Section merges the former 'quality-size' + 'naming' top-level pages so
+    // *arr-savvy users find both under the same "Media Management" heading.
+    mediaTabs: {},
     compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
     syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
     syncRulesSort: { col: '', dir: 'asc' },
@@ -379,6 +383,11 @@ export default function baseState() {
     // v3 content alignment — 'center' (default, balanced) or 'left'
     // (anchored next to the sidebar, shorter mouse travel on widescreen).
     contentAlign: localStorage.getItem('clonarr-content-align') || 'center',
+    // v3 navigation style — 'sidebar' (default) or 'topnav'. Some beta
+    // testers prefer the classic horizontal navigation; the topnav variant
+    // is v3-styled (app-color underline, app pill, 4-sub-tab Profiles
+    // split) so it carries the same visual language as the sidebar.
+    navStyle: localStorage.getItem('clonarr-nav-style') || 'sidebar',
     // v3 Sync Rules — per-rule customization-count cache. Keyed by rule
     // ID, populated by loadRuleCustomizations() when the Sync Rules tab
     // mounts. Each entry: { quality, extraCFs, customScores, general, total }.
