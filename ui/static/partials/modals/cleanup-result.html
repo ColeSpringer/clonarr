@@ -48,11 +48,25 @@
                   <!-- Detailed list for scan operations -->
                   <template x-if="!['delete-cfs-and-scores','delete-cfs-keep-scores'].includes(cleanupResult.action)">
                     <div>
+                      <!-- Action-specific summary line. Duplicates and orphaned/reset scores
+                           have different semantics than "unmanaged" (used for unused-by-clonarr). -->
                       <div style="font-size:13px;color:var(--text-primary);margin-bottom:12px">
-                        Found <strong x-text="cleanupResult.affectCount"></strong> unmanaged items out of <span x-text="cleanupResult.totalCount"></span> total CFs.
-                        <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag)">
-                          <span style="color:var(--text-muted)">
-                            (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> tagged for filename rendering — see info below)
+                        <template x-if="cleanupResult.action === 'duplicates'">
+                          <span>Found <strong x-text="cleanupResult.affectCount"></strong> duplicate <span x-text="cleanupResult.affectCount === 1 ? 'CF' : 'CFs'"></span> out of <span x-text="cleanupResult.totalCount"></span> total. The first occurrence in each group is kept; the rest are flagged for removal.</span>
+                        </template>
+                        <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
+                          <span>Found <strong x-text="cleanupResult.affectCount"></strong> <span x-text="cleanupResult.affectCount === 1 ? 'CF with a non-zero score' : 'CFs with non-zero scores'"></span> that aren't part of any synced profile. Scores will be reset to 0.</span>
+                        </template>
+                        <template x-if="cleanupResult.action === 'orphaned-scores'">
+                          <span>Found <strong x-text="cleanupResult.affectCount"></strong> orphaned score <span x-text="cleanupResult.affectCount === 1 ? 'entry' : 'entries'"></span> pointing at deleted CFs. Will be reset to 0.</span>
+                        </template>
+                        <template x-if="cleanupResult.action === 'unused-by-clonarr'">
+                          <span>Found <strong x-text="cleanupResult.affectCount"></strong> unmanaged items out of <span x-text="cleanupResult.totalCount"></span> total CFs.
+                            <template x-if="cleanupResult.items.some(i => i.renamingFlag)">
+                              <span style="color:var(--text-muted)">
+                                (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> tagged for filename rendering — see info below)
+                              </span>
+                            </template>
                           </span>
                         </template>
                       </div>
@@ -93,13 +107,42 @@
                         </div>
                       </template>
 
-                      <!-- Items table — unmanaged + rename-flagged variants -->
-                      <template x-if="cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed'">
+                      <!-- Duplicate-specific table: pair each removable duplicate
+                           with the original being kept, side-by-side. Backend ships
+                           "Duplicate of {name}" in the detail field — we strip the
+                           prefix client-side for the right column. -->
+                      <template x-if="cleanupResult.action === 'duplicates'">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px">
+                          <thead>
+                            <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500">Will be removed</th>
+                              <th style="padding:6px 8px;font-weight:500;width:24px;text-align:center"></th>
+                              <th style="padding:6px 8px;font-weight:500">Kept as original</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <template x-for="item in cleanupResult.items" :key="item.id">
+                              <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;color:var(--text-primary);font-family:'SF Mono',Monaco,monospace;font-size:11.5px" x-text="item.name"></td>
+                                <td style="padding:6px 8px;color:var(--text-muted);text-align:center">&rarr;</td>
+                                <td style="padding:6px 8px;color:var(--text-secondary);font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
+                                    x-text="(item.detail || '').replace(/^Duplicate of /, '')"></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </template>
+
+                      <!-- Default items table — used by unused-by-clonarr (rename-flag
+                           Tag column matters there) and the score-reset actions. -->
+                      <template x-if="cleanupResult.action !== 'duplicates' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
                               <th style="padding:6px 8px;font-weight:500">Custom Format</th>
-                              <th style="padding:6px 8px;font-weight:500;width:120px">Tag</th>
+                              <template x-if="cleanupResult.action === 'unused-by-clonarr'">
+                                <th style="padding:6px 8px;font-weight:500;width:120px">Tag</th>
+                              </template>
                             </tr>
                           </thead>
                           <tbody>
@@ -109,11 +152,13 @@
                                   <span x-text="item.name"></span>
                                   <span x-show="item.detail" style="color:var(--text-muted);display:block;font-size:11px;margin-top:2px" x-text="item.detail"></span>
                                 </td>
-                                <td style="padding:6px 8px">
-                                  <template x-if="item.renamingFlag">
-                                    <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'includeCustomFormatWhenRenaming=true on this CF'">rename tag</span>
-                                  </template>
-                                </td>
+                                <template x-if="cleanupResult.action === 'unused-by-clonarr'">
+                                  <td style="padding:6px 8px">
+                                    <template x-if="item.renamingFlag">
+                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'includeCustomFormatWhenRenaming=true on this CF'">rename tag</span>
+                                    </template>
+                                  </td>
+                                </template>
                               </tr>
                             </template>
                           </tbody>
