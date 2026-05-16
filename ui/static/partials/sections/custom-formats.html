@@ -71,61 +71,61 @@
                           <div x-show="cat.trashDescription" class="group-desc-html"
                                style="padding:6px 16px 8px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
                                x-html="sanitizeHTML(cat.trashDescription)"></div>
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div class="cf-row cf-row-compact">
-                              <div class="cf-name">
-                                <span class="cf-name-text" x-text="cf.name"></span>
-                                <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
-                                <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
-                                <a x-show="!cf.isCustom"
+                          <div class="cf-grid">
+                            <template x-for="cf in group.cfs" :key="cf.trashId">
+                              <div class="cf-row cf-row-compact">
+                                <div class="cf-cell-name">
+                                  <span class="cf-name-text" x-text="cf.name"></span>
+                                  <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
+                                </div>
+                                <span class="cf-cell-info cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
+                                <a class="cf-cell-guide cf-trash-link" x-show="!cf.isCustom"
                                    :href="trashCFGuideUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
-                                   class="cf-trash-link"
                                    @click.stop>guide</a>
-                                <a x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
+                                <a class="cf-cell-json cf-trash-link" x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
                                    :href="trashCFJsonUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
-                                   class="cf-trash-link"
                                    @click.stop>json</a>
+                                <div class="cf-cell-edit cf-edit-actions" x-show="cf.isCustom">
+                                  <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
+                                  <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
+                                </div>
+                                <div class="cf-cell-score cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
+                                     x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
                               </div>
-                              <div class="cf-edit-actions" x-show="cf.isCustom">
-                                <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
-                              </div>
-                              <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                   x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                            </div>
-                          </template>
+                            </template>
+                          </div>
                         </div>
                       </template>
                       <!-- Single-CF group in multi-group category: show inline -->
                       <template x-if="cat.groups.length > 1 && group.cfs.length === 1">
                         <div>
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div class="cf-row cf-row-compact">
-                              <div class="cf-name">
-                                <span class="cf-name-text" x-text="cf.name"></span>
-                                <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
-                                <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
-                                <a x-show="!cf.isCustom"
+                          <div class="cf-grid">
+                            <template x-for="cf in group.cfs" :key="cf.trashId">
+                              <div class="cf-row cf-row-compact">
+                                <div class="cf-cell-name">
+                                  <span class="cf-name-text" x-text="cf.name"></span>
+                                  <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
+                                </div>
+                                <span class="cf-cell-info cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
+                                <a class="cf-cell-guide cf-trash-link" x-show="!cf.isCustom"
                                    :href="trashCFGuideUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
-                                   class="cf-trash-link"
                                    @click.stop>guide</a>
-                                <a x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
+                                <a class="cf-cell-json cf-trash-link" x-show="!cf.isCustom && trashCFJsonUrl(cf, activeAppType)"
                                    :href="trashCFJsonUrl(cf, activeAppType)"
                                    target="_blank" rel="noopener"
-                                   class="cf-trash-link"
                                    @click.stop>json</a>
+                                <div class="cf-cell-edit cf-edit-actions" x-show="cf.isCustom">
+                                  <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
+                                  <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
+                                </div>
+                                <div class="cf-cell-score cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
+                                     x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
                               </div>
-                              <div class="cf-edit-actions" x-show="cf.isCustom">
-                                <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
-                              </div>
-                              <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                   x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                            </div>
-                          </template>
+                            </template>
+                          </div>
                         </div>
                       </template>
                       <!-- Multi-CF group: collapsible sub-headers -->
@@ -146,25 +146,26 @@
                             <div x-show="cat.trashDescription" class="group-desc-html"
                                  style="padding:6px 16px 8px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
                                  x-html="sanitizeHTML(cat.trashDescription)"></div>
-                            <template x-for="cf in group.cfs" :key="cf.trashId">
-                              <div class="cf-row cf-row-compact">
-                                <div class="cf-name">
-                                  <span class="cf-name-text" x-text="cf.name"></span>
-                                  <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
-                                  <a :href="trashCFGuideUrl(cf, activeAppType)"
+                            <div class="cf-grid">
+                              <template x-for="cf in group.cfs" :key="cf.trashId">
+                                <div class="cf-row cf-row-compact">
+                                  <div class="cf-cell-name">
+                                    <span class="cf-name-text" x-text="cf.name"></span>
+                                  </div>
+                                  <span class="cf-cell-info cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()" x-tt="'Description'">ⓘ</span>
+                                  <a class="cf-cell-guide cf-trash-link"
+                                     :href="trashCFGuideUrl(cf, activeAppType)"
                                      target="_blank" rel="noopener"
-                                     class="cf-trash-link"
                                      @click.stop>guide</a>
-                                  <a x-show="trashCFJsonUrl(cf, activeAppType)"
+                                  <a class="cf-cell-json cf-trash-link" x-show="trashCFJsonUrl(cf, activeAppType)"
                                      :href="trashCFJsonUrl(cf, activeAppType)"
                                      target="_blank" rel="noopener"
-                                     class="cf-trash-link"
                                      @click.stop>json</a>
+                                  <div class="cf-cell-score cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
+                                       x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
                                 </div>
-                                <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                     x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                              </div>
-                            </template>
+                              </template>
+                            </div>
                           </div>
                         </div>
                       </template>
