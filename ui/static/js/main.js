@@ -591,6 +591,15 @@ export function clonarr() {
           if (this.advancedTab === 'group-builder') this.cfgbLoad(appType);
           else if (this.advancedTab === 'scoring') this.loadSandbox(appType);
         }
+        // Media Management — ensure the new app's Quality + Naming
+        // instance data is loaded whenever we switch app types. Without
+        // this, switching Radarr→Sonarr (or vice-versa) on Naming/
+        // Quality showed an empty "Currently on instance" card until
+        // the user clicked the picker.
+        if (this.mediaInstanceId[appType]) {
+          this.loadInstanceQS(appType, this.mediaInstanceId[appType]);
+          this.loadInstanceNaming(appType);
+        }
         ensureHistory();
       });
       await this.loadConfig();
