@@ -50,14 +50,6 @@
    v3 Sprint 3 — Sync Rules tab (per-instance compact layout)
    ============================================================ */
 
-.v3-paused-banner {
-  display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px;
-  background: var(--accent-orange-bg); border: 1px solid var(--accent-orange); border-radius: 6px;
-  color: var(--cat-hq-release-groups); font-size: 13px;
-}
-
-.v3-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-
 /* Per-instance card */
 .v3-inst-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 7px; margin-bottom: 12px; overflow: hidden; }
 .v3-inst-header {
@@ -73,15 +65,32 @@
 }
 .v3-inst-name { color: var(--app-color); }
 .v3-inst-count { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11.5px; margin-left: 4px; }
-.v3-inst-actions { margin-left: auto; }
+.v3-inst-actions { margin-left: auto; display: flex; gap: 6px; }
 .v3-inst-action { padding: 3px 9px; background: transparent; border: 1px solid var(--border-subtle); border-radius: 3px; color: var(--text-secondary); font-size: 11.5px; cursor: pointer; font-family: inherit; }
 .v3-inst-action:hover { color: var(--app-color); border-color: var(--app-color); }
+/* Resume button — uses --app-color so it visually belongs to the same
+   theme as everything else in the card. The label change (Pause →
+   Resume) carries the state semantics; color stays app-consistent. */
+.v3-inst-action-resume { color: var(--app-color); border-color: var(--app-color); }
+.v3-inst-action-resume:hover { color: var(--app-color); border-color: var(--app-color); background: var(--app-glow); }
+/* Paused chip — sits inline in the header, follows --app-color so it
+   reads as "this app's paused state" rather than a generic warning. */
+.v3-inst-paused-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 10px;
+  background: var(--app-glow);
+  color: var(--app-color);
+  border: 1px solid var(--app-color);
+  font-size: 10.5px; font-weight: 600;
+  text-transform: none; letter-spacing: 0;
+  margin-left: 6px;
+}
 
 /* Column grid — shared by header + rows.
-   TRaSH | → | Arr | Last sync | Status | Auto-sync | Customizations | Actions */
+   TRaSH | → | ID | Arr | Last sync | Status | Auto-sync | Customizations | Actions */
 .v3-rule-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) 18px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
+  grid-template-columns: minmax(160px, 1.4fr) 18px 50px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
   align-items: center; gap: 10px;
 }
 .v3-col-header {
@@ -121,6 +130,17 @@
 .v3-prof-arr-rename { background: none; border: 0; padding: 0; color: var(--text-primary); font-weight: 500; cursor: pointer; font: inherit; border-bottom: 1px dashed transparent; }
 .v3-prof-arr-rename:hover { border-bottom-color: var(--border-subtle); }
 .v3-prof-arr-id { color: var(--text-muted); font-weight: 400; font-size: 11.5px; margin-left: 4px; }
+/* Standalone ID cell (column between → and Arr Profile). Compact,
+   muted, no "ID " prefix needed since the column header already says
+   ID. Fixed-width keeps IDs vertically aligned across rows so the eye
+   can scan without distraction. */
+.v3-id-cell {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 4px;
+}
 .v3-prof-arr-orph { color: var(--text-muted); text-decoration: line-through; }
 .v3-prof-arr-orph-tag { background: var(--accent-orange-bg); border: 1px solid var(--accent-orange); color: var(--cat-hq-release-groups); padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 500; margin-left: 6px; }
 
@@ -180,3 +200,170 @@
 .v3-action-icon:hover { color: var(--app-color); border-color: var(--app-color); }
 .v3-action-icon.danger:hover { color: var(--accent-red); border-color: var(--accent-red); }
 .v3-action-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ============================================================
+   v3 Sprint 3 slice 3 — History tab (per-instance + neutral palette)
+   ============================================================ */
+
+/* Column grid — TRaSH | → | ID | Arr | Last changed | Events | Last changes */
+.v3-hist-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) 18px 50px minmax(160px, 1.4fr) 100px 60px minmax(140px, 1fr);
+  align-items: center; gap: 10px;
+}
+
+/* Profile row */
+.v3-hist-row {
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.v3-hist-row:last-child { border-bottom: 0; }
+.v3-hist-row:hover,
+.v3-hist-row.expanded { background: var(--bg-elevated); }
+
+/* Expand chevron — rotates when row is open */
+.v3-hist-chev {
+  color: var(--text-muted); font-size: 10px;
+  display: inline-block; transition: transform 0.15s;
+  margin-right: 6px;
+}
+.v3-hist-chev.open { transform: rotate(90deg); color: var(--app-color); }
+
+/* Events count pill — single neutral chip */
+.v3-hist-events {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  color: var(--text-body);
+  font-size: 11px; font-weight: 500;
+  min-width: 26px; text-align: center;
+}
+.v3-hist-events.zero {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Last changes — single neutral pill (no rainbow) with breakdown in tooltip */
+.v3-hist-changes {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  color: var(--text-body);
+  font-size: 11px; font-weight: 500;
+  white-space: nowrap;
+}
+.v3-hist-empty {
+  color: var(--text-muted); font-size: 11px; font-style: italic;
+}
+
+/* Expanded events panel — sits under the profile row */
+.v3-hist-events-panel {
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-muted);
+}
+.v3-hist-events-panel:last-child { border-bottom: 0; }
+
+/* Orphaned warning banner */
+.v3-hist-orphan {
+  margin: 0 0 10px 0;
+  padding: 8px 12px;
+  background: var(--accent-orange-bg);
+  border: 1px solid var(--accent-orange);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--cat-hq-release-groups);
+  line-height: 1.55;
+}
+
+/* Single event row in timeline */
+.v3-hist-event {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.v3-hist-event:last-of-type { border-bottom: 0; }
+.v3-hist-event:hover,
+.v3-hist-event.expanded { background: var(--bg-card); }
+.v3-hist-event-chev {
+  color: var(--text-muted); font-size: 10px;
+  display: inline-block; transition: transform 0.15s;
+  width: 10px; flex-shrink: 0;
+}
+.v3-hist-event-chev.open { transform: rotate(90deg); color: var(--app-color); }
+/* Status icon — ✓ green check, the only colored element on the row.
+   History only logs successful syncs (failures don't change state, so
+   nothing to roll back to); every event is a success by construction. */
+.v3-hist-event-status {
+  width: 14px; flex-shrink: 0; text-align: center;
+  font-size: 12px; font-weight: 700;
+  color: var(--accent-green);
+}
+.v3-hist-event-time {
+  width: 130px; flex-shrink: 0;
+  color: var(--text-primary); font-weight: 500;
+}
+.v3-hist-event-summary {
+  flex: 1; min-width: 0;
+  display: flex; align-items: baseline; gap: 6px;
+  overflow: hidden;
+}
+/* Count badge — neutral pill, fixed-shrink so the preview takes the
+   leftover space. Bolder weight than preview text so the eye lands on
+   the total first. */
+.v3-hist-event-count {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.v3-hist-event-preview {
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+
+/* Rollback button — neutral until hover (Sync Rules action-icon pattern) */
+.v3-hist-rollback {
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font: inherit; font-size: 11.5px;
+  cursor: pointer; flex-shrink: 0;
+}
+.v3-hist-rollback:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
+.v3-hist-rollback:disabled { opacity: 0.4; cursor: not-allowed; color: var(--text-muted); border-color: var(--border-muted); }
+
+/* Expanded event detail — neutral monochrome text (no rainbow) */
+.v3-hist-event-detail {
+  margin: 4px 0 8px 24px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border-left: 2px solid var(--border-muted);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.v3-hist-detail-label {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+.v3-hist-detail-line {
+  color: var(--text-body);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 11.5px;
+}
