@@ -155,47 +155,59 @@
                             </template>
                           </div>
 
-                          <!-- table-layout:fixed forces the browser to respect column
-                               widths from the first row instead of auto-shrinking each
-                               column to its content. Widths go directly on the <th> in
-                               the first row — colgroup was unreliable because <template>
-                               inside <colgroup> gets sanitized by the browser parser. -->
-                          <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-                            <thead>
-                              <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
-                                <th style="padding:6px 8px;font-weight:500">Profile</th>
-                                <th style="padding:6px 8px;font-weight:500;text-align:right;width:60px">ID</th>
-                                <th style="padding:6px 8px;font-weight:500;text-align:right;width:90px" x-text="activeAppType === 'sonarr' ? 'Series' : 'Movies'"></th>
-                                <th style="padding:6px 8px;font-weight:500;text-align:right;width:110px">Import lists</th>
-                                <template x-if="activeAppType === 'radarr'">
-                                  <th style="padding:6px 8px;font-weight:500;text-align:right;width:100px">Collections</th>
-                                </template>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <template x-for="item in (cleanupFilter === 'managed' ? (cleanupResult.managedItems || []) : cleanupResult.items)" :key="item.id">
-                                <tr style="border-bottom:1px solid var(--bg-muted)">
-                                  <td style="padding:6px 8px;color:var(--text-primary);font-weight:500" x-text="item.name"></td>
-                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px;color:var(--text-muted)" x-text="'#' + item.id"></td>
-                                  <!-- :style MUST be object syntax so it merges with the inline
-                                       style. Alpine's string :style REPLACES the entire style
-                                       attribute, wiping the padding / text-align / font-family
-                                       we set inline. -->
-                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                      :style="{ color: ((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
-                                      x-text="(item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0"></td>
-                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                      :style="{ color: ((item.usage || {}).importLists || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
-                                      x-text="(item.usage || {}).importLists || 0"></td>
-                                  <template x-if="activeAppType === 'radarr'">
-                                    <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
-                                        :style="{ color: ((item.usage || {}).collections || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }"
-                                        x-text="(item.usage || {}).collections || 0"></td>
+                          <!-- Compact one-line-per-profile layout. Click to expand
+                               shows the usage breakdown as chips. Avoids the table-
+                               layout struggles entirely — each row sizes naturally to
+                               profile name length, no column-width juggling. -->
+                          <div style="display:flex;flex-direction:column;gap:4px">
+                            <template x-for="item in (cleanupFilter === 'managed' ? (cleanupResult.managedItems || []) : cleanupResult.items)" :key="item.id"
+                                      x-data="{ open: false }">
+                              <div style="border:1px solid var(--border-muted);border-radius:5px;background:var(--bg-card)">
+                                <button type="button"
+                                        style="display:flex;align-items:center;gap:10px;width:100%;padding:7px 12px;background:transparent;border:0;cursor:pointer;font:inherit;text-align:left;color:inherit"
+                                        @click="open = !open">
+                                  <span style="color:var(--text-primary);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="item.name"></span>
+                                  <span style="color:var(--text-muted);font-family:'SF Mono',Monaco,monospace;font-size:11.5px;flex-shrink:0" x-text="'#' + item.id"></span>
+                                  <!-- Total usage count + chevron. Unused-tab items are
+                                       all zero — show "No usage" (italic muted) with no
+                                       chevron since there's nothing to expand. -->
+                                  <template x-if="(((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) === 0">
+                                    <span style="color:var(--text-muted);font-size:11.5px;font-style:italic;flex-shrink:0">No usage</span>
                                   </template>
-                                </tr>
-                              </template>
-                            </tbody>
-                          </table>
+                                  <template x-if="(((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) > 0">
+                                    <span style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                                      <span style="color:var(--text-secondary);font-size:11.5px" x-text="(((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) + ' uses'"></span>
+                                      <span style="color:var(--text-muted);font-size:10px;display:inline-block;transition:transform 0.15s" :style="{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }">&#9654;</span>
+                                    </span>
+                                  </template>
+                                </button>
+                                <!-- Expanded breakdown — usage chips. Only shows axes with
+                                     non-zero counts so 0-rows aren't padded with empty info. -->
+                                <div x-show="open && (((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) > 0"
+                                     x-cloak
+                                     style="padding:6px 12px 10px;border-top:1px solid var(--border-muted);display:flex;flex-wrap:wrap;gap:6px">
+                                  <template x-if="((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) > 0">
+                                    <span style="background:var(--bg-elevated);border:1px solid var(--border-muted);color:var(--text-body);padding:2px 8px;border-radius:10px;font-size:11.5px">
+                                      <strong x-text="(item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies']"></strong>
+                                      <span style="color:var(--text-muted)" x-text="' ' + (activeAppType === 'sonarr' ? 'series' : 'movies')"></span>
+                                    </span>
+                                  </template>
+                                  <template x-if="((item.usage || {}).importLists || 0) > 0">
+                                    <span style="background:var(--bg-elevated);border:1px solid var(--border-muted);color:var(--text-body);padding:2px 8px;border-radius:10px;font-size:11.5px">
+                                      <strong x-text="(item.usage || {}).importLists"></strong>
+                                      <span style="color:var(--text-muted)" x-text="' import ' + ((item.usage || {}).importLists === 1 ? 'list' : 'lists')"></span>
+                                    </span>
+                                  </template>
+                                  <template x-if="activeAppType === 'radarr' && ((item.usage || {}).collections || 0) > 0">
+                                    <span style="background:var(--bg-elevated);border:1px solid var(--border-muted);color:var(--text-body);padding:2px 8px;border-radius:10px;font-size:11.5px">
+                                      <strong x-text="(item.usage || {}).collections"></strong>
+                                      <span style="color:var(--text-muted)" x-text="' ' + ((item.usage || {}).collections === 1 ? 'collection' : 'collections')"></span>
+                                    </span>
+                                  </template>
+                                </div>
+                              </div>
+                            </template>
+                          </div>
                         </div>
                       </template>
 
