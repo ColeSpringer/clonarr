@@ -586,6 +586,9 @@ func scanOrphanedScores(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 			Profiles: profs,
 		})
 	}
+	// Stable order — Go map iteration is randomised, so without this two
+	// consecutive scans would surface the same orphans in different rows.
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 
 	return &CleanupScanResult{
 		Action:        "orphaned-scores",
@@ -715,16 +718,19 @@ func scanUnusedProfiles(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 
 // --- Apply helpers ---
 
-// applyDeleteProfiles deletes the requested quality profile IDs. Race-
-// safe: every ID is re-verified against current usage right before the
-// delete call. If anything has referenced a profile since the scan
-// (movie added to it, import list re-pointed), that profile is skipped
-// rather than deleted out from under whatever started referencing it.
+// applyDeleteProfiles deletes the requested quality profile IDs. Re-
+// verifies usage from a fresh library/import-list/collection snapshot
+// taken once at the top of the call, then checks each ID against that
+// snapshot before deleting. Narrows the scan→delete race window to the
+// few hundred ms between snapshot and per-ID delete, but does not
+// eliminate it. Any axis lookup that fails is a hard error — proceeding
+// with partial usage data could silently delete a profile that is in
+// fact still referenced by the unread axis (Arr does not block deletes
+// on import-list / collection wiring).
 func applyDeleteProfiles(client *arr.ArrClient, inst core.Instance, ids []int) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	// Fresh usage snapshot for race-safe verification
 	wanted := make(map[int]bool, len(ids))
 	for _, id := range ids {
 		wanted[id] = true
@@ -746,19 +752,23 @@ func applyDeleteProfiles(client *arr.ArrClient, inst core.Instance, ids []int) (
 			usageNow[pid]++
 		}
 	}
-	if listIDs, err := client.ListImportListProfileIDs(); err == nil {
-		for _, pid := range listIDs {
-			if wanted[pid] {
-				usageNow[pid]++
-			}
+	listIDs, err := client.ListImportListProfileIDs()
+	if err != nil {
+		return 0, fmt.Errorf("re-list import lists for usage check: %w", err)
+	}
+	for _, pid := range listIDs {
+		if wanted[pid] {
+			usageNow[pid]++
 		}
 	}
 	if inst.Type == "radarr" {
-		if colIDs, err := client.ListCollectionProfileIDs(); err == nil {
-			for _, pid := range colIDs {
-				if wanted[pid] {
-					usageNow[pid]++
-				}
+		colIDs, err := client.ListCollectionProfileIDs()
+		if err != nil {
+			return 0, fmt.Errorf("re-list collections for usage check: %w", err)
+		}
+		for _, pid := range colIDs {
+			if wanted[pid] {
+				usageNow[pid]++
 			}
 		}
 	}
@@ -977,9 +987,14 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 	// non-zero score (i.e. actively influences release decisions in that
 	// profile). Score-zero entries are omitted because they're inert
 	// padding — every Arr profile contains every CF at score 0 by default.
-	// Soft-fail: empty map if the profile list can't be fetched.
+	// profileUsageOK tracks whether the lookup succeeded; if not, we
+	// must NOT label any CF rename-only (an empty map would otherwise
+	// silently mark every flagged scoring-CF as deletable rename-tag and
+	// reintroduce the bug the score==0 guard was added to fix).
 	profileUsage := make(map[int][]string)
+	profileUsageOK := false
 	if profiles, err := client.ListProfiles(); err == nil {
+		profileUsageOK = true
 		for _, p := range profiles {
 			for _, fi := range p.FormatItems {
 				if fi.Score != 0 {
@@ -987,29 +1002,31 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 				}
 			}
 		}
+	} else {
+		log.Printf("CLEANUP: ListProfiles failed in scanUnusedByClonarr on %s — rename-only badges disabled this scan: %v", inst.Name, err)
 	}
 
 	// Walk the Arr CF list once: split into unmanaged (Items — delete
 	// candidates) and managed (ManagedItems — display only). Keep-list
 	// CFs are skipped from both buckets — they're explicit user-protected.
 	//
-	// RenamingFlag now requires BOTH the Arr per-CF flag
-	// (IncludeCustomFormatWhenRenaming) AND zero score across every
-	// quality profile. The Arr flag alone is misleading: TRaSH CFs like
-	// Repack 1/2/3, CC (Comedy Central), and streaming-service variants
-	// all have the flag set on top of meaningful scores, so they're
-	// scoring CFs first, rename contributors second. Labelling them
-	// "rename tag" implied they were safe-to-delete-as-rename-only,
-	// which they're not — deleting them changes scoring decisions.
-	// profileUsage[cf.ID] is the list of profile names where this CF
-	// has non-zero score; empty slice == score 0 everywhere.
+	// RenamingFlag requires THREE conditions: profile lookup succeeded,
+	// the Arr per-CF flag (IncludeCustomFormatWhenRenaming), AND zero
+	// score across every quality profile. The Arr flag alone is
+	// misleading: TRaSH CFs like Repack 1/2/3, CC (Comedy Central), and
+	// streaming-service variants all have the flag set on top of
+	// meaningful scores, so they're scoring CFs first, rename contributors
+	// second. Labelling them "rename tag" implied they were safe-to-
+	// delete-as-rename-only, which they're not — deleting them changes
+	// scoring decisions. profileUsage[cf.ID] is the list of profile names
+	// where this CF has non-zero score; empty slice == score 0 everywhere.
 	var items []CleanupItem
 	var managedItems []ManagedCFRef
 	for _, cf := range cfs {
 		if keepSet[cf.Name] {
 			continue
 		}
-		isRenameOnly := cf.IncludeCustomFormatWhenRenaming && len(profileUsage[cf.ID]) == 0
+		isRenameOnly := profileUsageOK && cf.IncludeCustomFormatWhenRenaming && len(profileUsage[cf.ID]) == 0
 		if managedNames[cf.Name] {
 			managedItems = append(managedItems, ManagedCFRef{
 				ID:             cf.ID,

@@ -337,9 +337,11 @@ func (c *ArrClient) ListMovieProfileIDs() ([]int, error) {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, fmt.Errorf("parse movies: %w", err)
 	}
-	out := make([]int, len(items))
-	for i, m := range items {
-		out[i] = m.QualityProfileID
+	out := make([]int, 0, len(items))
+	for _, m := range items {
+		if m.QualityProfileID > 0 {
+			out = append(out, m.QualityProfileID)
+		}
 	}
 	return out, nil
 }
@@ -358,9 +360,11 @@ func (c *ArrClient) ListSeriesProfileIDs() ([]int, error) {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, fmt.Errorf("parse series: %w", err)
 	}
-	out := make([]int, len(items))
-	for i, s := range items {
-		out[i] = s.QualityProfileID
+	out := make([]int, 0, len(items))
+	for _, s := range items {
+		if s.QualityProfileID > 0 {
+			out = append(out, s.QualityProfileID)
+		}
 	}
 	return out, nil
 }
@@ -379,9 +383,11 @@ func (c *ArrClient) ListImportListProfileIDs() ([]int, error) {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, fmt.Errorf("parse import lists: %w", err)
 	}
-	out := make([]int, len(items))
-	for i, l := range items {
-		out[i] = l.QualityProfileID
+	out := make([]int, 0, len(items))
+	for _, l := range items {
+		if l.QualityProfileID > 0 {
+			out = append(out, l.QualityProfileID)
+		}
 	}
 	return out, nil
 }
@@ -401,9 +407,11 @@ func (c *ArrClient) ListCollectionProfileIDs() ([]int, error) {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, fmt.Errorf("parse collections: %w", err)
 	}
-	out := make([]int, len(items))
-	for i, c := range items {
-		out[i] = c.QualityProfileID
+	out := make([]int, 0, len(items))
+	for _, c := range items {
+		if c.QualityProfileID > 0 {
+			out = append(out, c.QualityProfileID)
+		}
 	}
 	return out, nil
 }
