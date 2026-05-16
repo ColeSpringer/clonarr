@@ -240,7 +240,12 @@ export default function baseState() {
     qualitySizesPerApp: {},
     qsExpanded: {},
     selectedQSType: {},  // per app-type: index into quality sizes array
-    qsInstanceId: {},    // per app-type: selected instance ID for comparison
+    // Per app-type Media Management instance picker. Shared by both
+    // Quality Definitions and Movie/Episode Naming sub-tabs so the
+    // picker stays at the same position when the user switches
+    // sub-tabs — previously each sub-tab had its own picker that
+    // jittered between them.
+    mediaInstanceId: {},
     qsInstanceDefs: {},  // per app-type: current instance quality definitions
     qsOverrides: {},     // per app-type: { qualityName: { min, preferred, max } }
     qsSyncing: {},       // per app-type: boolean

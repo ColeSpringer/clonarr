@@ -1,7 +1,6 @@
 export default {
   state: {
     namingData: {},
-    namingSelectedInstance: {},
     namingInstanceData: {},
     namingApplyResult: {},
     namingMediaServer: {},
@@ -278,7 +277,7 @@ export default {
     },
 
     async loadInstanceNaming(appType) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) {
         this.namingInstanceData = { ...this.namingInstanceData, [appType]: null };
         return;
@@ -398,7 +397,7 @@ export default {
     // multiple schemes against the current instance state before deciding
     // which to apply.
     compareNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -429,7 +428,7 @@ export default {
     // Per feedback_dryrun_preview: destructive-ish UI ops should show a
     // concrete preview, not just "Are you sure?".
     confirmApplyNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -453,7 +452,7 @@ export default {
     },
 
     async applyNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       // Maps section keys to the request-body field expected by handleApplyNaming

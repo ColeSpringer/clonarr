@@ -107,31 +107,9 @@
         </div>
         <template x-if="getNaming(activeAppType)">
           <div>
-            <!-- Naming card: instance + tabs + content -->
-            <div class="card" style="margin:16px 0 0;overflow:visible">
-              <!-- Instance selector -->
-              <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--bg-muted)">
-                <span style="font-size:13px;color:var(--text-muted)">Instance:</span>
-                <select class="input" style="width:200px;font-size:13px;padding:4px 8px"
-                  @change="namingSelectedInstance = { ...namingSelectedInstance, [activeAppType]: $event.target.value }; if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); } loadInstanceNaming(activeAppType)">
-                  <option value="" :selected="!namingSelectedInstance[activeAppType]">Select instance...</option>
-                  <template x-for="inst in instancesOfType(activeAppType)" :key="inst.id">
-                    <option :value="inst.id" x-text="inst.name" :selected="namingSelectedInstance[activeAppType] === inst.id"></option>
-                  </template>
-                </select>
-                <template x-if="namingSelectedInstance[activeAppType] && instanceStatus[namingSelectedInstance[activeAppType]] === 'connected'">
-                  <span style="font-size:13px;color:var(--accent-green)">Connected</span>
-                </template>
-                <template x-if="namingSelectedInstance[activeAppType] && instanceStatus[namingSelectedInstance[activeAppType]] === 'failed'">
-                  <span style="font-size:13px;color:var(--accent-red)">Connection failed</span>
-                </template>
-                <template x-if="namingSelectedInstance[activeAppType] && !instanceStatus[namingSelectedInstance[activeAppType]]">
-                  <span style="font-size:13px;color:var(--accent-orange)">Not tested</span>
-                </template>
-                <template x-if="!namingSelectedInstance[activeAppType]">
-                  <span style="font-size:13px;color:var(--text-muted)">Select an instance to enable sync</span>
-                </template>
-              </div>
+            {{template "layout/media-management-header" .}}
+            <!-- Naming card: tabs + content (instance picker moved to shared header) -->
+            <div class="card" style="margin:0;overflow:visible">
               <div style="padding:16px">
                 <!-- Current naming on the connected Arr instance — rendered as a small card inside
                      the same padded content area as the scheme list, so it shares the same indentation
@@ -230,12 +208,12 @@
                             <span style="font-size:12px;font-weight:600;color:var(--text-body)" x-text="scheme.label"></span>
                             <span style="margin-left:auto;display:flex;gap:10px;align-items:center">
                               <button type="button" class="inline-action" style="font-size:11px;color:var(--accent-blue)" @click="copyToClipboard(scheme.pattern)">Copy</button>
-                              <template x-if="namingSelectedInstance[activeAppType]">
+                              <template x-if="mediaInstanceId[activeAppType]">
                                 <button type="button" class="inline-action" style="font-size:11px;color:var(--text-secondary)"
                                   @click="compareNamingScheme(activeAppType, section.key, scheme)"
                                   x-tt="'Compare this scheme with what is currently set on the instance — view diff without applying'">Compare</button>
                               </template>
-                              <template x-if="namingSelectedInstance[activeAppType]">
+                              <template x-if="mediaInstanceId[activeAppType]">
                                 <button type="button" class="inline-action" style="font-size:11px;color:var(--accent-orange)"
                                   @click="confirmApplyNamingScheme(activeAppType, section.key, scheme)">Sync</button>
                               </template>

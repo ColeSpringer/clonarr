@@ -667,8 +667,7 @@ export function clonarr() {
       this.checkCleanupEvents();
       // Auto-select instance if only one per type (no need to choose)
       // Build auto-select maps, then assign all at once for Alpine reactivity
-      const autoQs = {};
-      const autoNaming = {};
+      const autoMedia = {};
       const autoCompare = {};
       const autoLoads = [];
       for (const type of ['radarr', 'sonarr']) {
@@ -676,15 +675,17 @@ export function clonarr() {
         if (typeInsts.length === 1) {
           const inst = typeInsts[0];
           autoCompare[type] = inst.id;
-          autoQs[type] = inst.id;
-          autoNaming[type] = inst.id;
+          autoMedia[type] = inst.id;
           autoLoads.push({ type, inst });
         }
       }
       // Assign entire objects to trigger Alpine reactivity
       if (Object.keys(autoCompare).length) this.compareInstanceIds = { ...this.compareInstanceIds, ...autoCompare };
-      if (Object.keys(autoQs).length) this.qsInstanceId = { ...this.qsInstanceId, ...autoQs };
-      if (Object.keys(autoNaming).length) this.namingSelectedInstance = { ...this.namingSelectedInstance, ...autoNaming };
+      // v3 — Quality Definitions and Movie/Episode Naming share one
+      // instance picker (mediaInstanceId) instead of separate qsInstanceId
+      // and namingSelectedInstance, so the picker stays put when the
+      // user switches between Media Management sub-tabs.
+      if (Object.keys(autoMedia).length) this.mediaInstanceId = { ...this.mediaInstanceId, ...autoMedia };
       // Load data for auto-selected instances
       for (const { type, inst } of autoLoads) {
         this.loadInstanceProfiles(inst);
