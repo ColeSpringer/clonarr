@@ -238,10 +238,15 @@
             </div>
           </template>
           <template x-if="!(cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag))">
-            <button class="btn" :class="['delete-cfs-and-scores','delete-cfs-keep-scores','unused-by-clonarr'].includes(cleanupResult.action) ? 'btn-danger' : 'btn-primary'"
+            <button class="btn"
+              :class="['delete-cfs-and-scores','delete-cfs-keep-scores','unused-by-clonarr','duplicates'].includes(cleanupResult.action) ? 'btn-danger' : 'btn-primary'"
               @click="cleanupApply()" :disabled="cleanupApplying">
               <span x-show="cleanupApplying" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
-              <span x-show="!cleanupApplying" x-text="((cleanupResult.action?.startsWith('delete') || cleanupResult.action === 'unused-by-clonarr') ? 'Delete' : 'Apply') + ' (' + cleanupResult.affectCount + ' items)'"></span>
+              <!-- Verb matches the action's semantics:
+                   - "Remove" for duplicates (originals stay; only the redundant copies go)
+                   - "Delete" for CFs that disappear entirely (unused-by-clonarr, delete-all variants)
+                   - "Apply" for non-destructive value changes (score resets) -->
+              <span x-show="!cleanupApplying" x-text="(cleanupResult.action === 'duplicates' ? 'Remove' : (cleanupResult.action?.startsWith('delete') || cleanupResult.action === 'unused-by-clonarr') ? 'Delete' : 'Apply') + ' (' + cleanupResult.affectCount + ' items)'"></span>
             </button>
           </template>
         </div>
