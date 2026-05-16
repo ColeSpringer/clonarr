@@ -89,20 +89,30 @@
      a profile-detail sub-row) and tightens vertical padding. */
   .cf-row-compact { padding: 4px 14px; }
 
-  /* TRaSH-Guides external link — small icon next to the CF name on
-     TRaSH CFs (custom CFs have no upstream source, so the icon hides
-     there). Points at the canonical JSON file on GitHub. */
+  /* TRaSH-Guides external links — small text pills next to the CF
+     name on TRaSH CFs (custom CFs have no upstream, so the wrapper
+     hides there). "guide" jumps to the docs page anchor; "json" opens
+     the canonical JSON file on GitHub. Tiny, muted, app-color on
+     hover so they don't compete with the CF name. */
+  .cf-trash-links {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
   .cf-trash-link {
     color: var(--text-muted);
     text-decoration: none;
-    font-size: 11px;
-    padding: 0 3px;
-    border-radius: 2px;
-    line-height: 1;
-    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 1px 5px;
+    border: 1px solid var(--border-muted);
+    border-radius: 3px;
+    line-height: 1.3;
+    text-transform: lowercase;
   }
   .cf-trash-link:hover {
     color: var(--app-color);
+    border-color: var(--app-color);
     background: var(--app-glow);
   }
   .cf-trash-link:focus-visible {

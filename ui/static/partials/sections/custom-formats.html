@@ -72,13 +72,19 @@
                             <div class="cf-row cf-row-compact">
                               <div class="cf-name" style="flex:1">
                                 <span x-text="cf.name"></span>
-                                <a x-show="!cf.isCustom"
-                                   :href="'https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/' + activeAppType + '/cf/' + cf.trashId + '.json'"
-                                   target="_blank" rel="noopener"
-                                   class="cf-trash-link"
-                                   x-tt="'Open this CF on TRaSH-Guides GitHub'"
-                                   @click.stop
-                                   aria-label="View on TRaSH-Guides GitHub">&#8599;</a>
+                                <span x-show="!cf.isCustom" class="cf-trash-links">
+                                  <a :href="trashCFGuideUrl(cf, activeAppType)"
+                                     target="_blank" rel="noopener"
+                                     class="cf-trash-link"
+                                     x-tt="'Open this CF on the TRaSH-Guides docs page'"
+                                     @click.stop>guide</a>
+                                  <a x-show="trashCFJsonUrl(cf, activeAppType)"
+                                     :href="trashCFJsonUrl(cf, activeAppType)"
+                                     target="_blank" rel="noopener"
+                                     class="cf-trash-link"
+                                     x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
+                                     @click.stop>json</a>
+                                </span>
                                 <span x-show="cf.isCustom" style="font-size:12px;color:var(--accent-orange);border:1px solid var(--accent-orange);border-radius:3px;padding:0 4px;margin-left:6px">Custom</span>
                                 <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
                                 <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-blue);margin-left:6px" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
@@ -97,13 +103,19 @@
                             <div class="cf-row cf-row-compact">
                               <div class="cf-name" style="flex:1">
                                 <span x-text="cf.name"></span>
-                                <a x-show="!cf.isCustom"
-                                   :href="'https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/' + activeAppType + '/cf/' + cf.trashId + '.json'"
-                                   target="_blank" rel="noopener"
-                                   class="cf-trash-link"
-                                   x-tt="'Open this CF on TRaSH-Guides GitHub'"
-                                   @click.stop
-                                   aria-label="View on TRaSH-Guides GitHub">&#8599;</a>
+                                <span x-show="!cf.isCustom" class="cf-trash-links">
+                                  <a :href="trashCFGuideUrl(cf, activeAppType)"
+                                     target="_blank" rel="noopener"
+                                     class="cf-trash-link"
+                                     x-tt="'Open this CF on the TRaSH-Guides docs page'"
+                                     @click.stop>guide</a>
+                                  <a x-show="trashCFJsonUrl(cf, activeAppType)"
+                                     :href="trashCFJsonUrl(cf, activeAppType)"
+                                     target="_blank" rel="noopener"
+                                     class="cf-trash-link"
+                                     x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
+                                     @click.stop>json</a>
+                                </span>
                                 <span x-show="cf.isCustom" style="font-size:12px;color:var(--accent-orange);border:1px solid var(--accent-orange);border-radius:3px;padding:0 4px;margin-left:6px">Custom</span>
                                 <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
                                 <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-blue);margin-left:6px" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
@@ -137,12 +149,19 @@
                               <div class="cf-row cf-row-compact">
                                 <div class="cf-name" style="flex:1">
                                   <span x-text="cf.name"></span>
-                                  <a :href="'https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/' + activeAppType + '/cf/' + cf.trashId + '.json'"
-                                     target="_blank" rel="noopener"
-                                     class="cf-trash-link"
-                                     x-tt="'Open this CF on TRaSH-Guides GitHub'"
-                                     @click.stop
-                                     aria-label="View on TRaSH-Guides GitHub">&#8599;</a>
+                                  <span class="cf-trash-links">
+                                    <a :href="trashCFGuideUrl(cf, activeAppType)"
+                                       target="_blank" rel="noopener"
+                                       class="cf-trash-link"
+                                       x-tt="'Open this CF on the TRaSH-Guides docs page'"
+                                       @click.stop>guide</a>
+                                    <a x-show="trashCFJsonUrl(cf, activeAppType)"
+                                       :href="trashCFJsonUrl(cf, activeAppType)"
+                                       target="_blank" rel="noopener"
+                                       class="cf-trash-link"
+                                       x-tt="'Open this CF\\'s JSON file on TRaSH-Guides GitHub'"
+                                       @click.stop>json</a>
+                                  </span>
                                   <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
                                 </div>
                                 <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"

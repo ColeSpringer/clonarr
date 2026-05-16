@@ -55,6 +55,39 @@ export default {
         .filter(Boolean);
     },
 
+    // TRaSH name → kebab-case slug used in both the docs anchors and
+    // the GitHub JSON filenames. "1.0 Mono" → "10-mono", "5.1 Surround"
+    // → "51-surround", "BR-DISK" → "br-disk". Rules: lowercase, drop
+    // dots, every non-alphanumeric run collapses to one dash, trim
+    // leading/trailing dashes.
+    _cfSlug(name) {
+      return (name || '').toLowerCase()
+        .replace(/\./g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    },
+
+    // Links a CF to the TRaSH-Guides docs collection page with an
+    // anchor that scrolls to the CF section. Falls back to the
+    // collection landing page if the slug can't be derived. Empty for
+    // custom CFs (no upstream).
+    trashCFGuideUrl(cf, appType) {
+      if (!cf || cf.isCustom) return '';
+      const slug = this._cfSlug(cf.name);
+      const app = appType === 'sonarr' ? 'Sonarr' : 'Radarr';
+      return `https://trash-guides.info/${app}/${app}-collection-of-custom-formats/${slug ? '#' + slug : ''}`;
+    },
+
+    // Links a CF to the raw JSON file on TRaSH-Guides GitHub. TRaSH
+    // names files by the kebab-case slug, not trash_id.
+    trashCFJsonUrl(cf, appType) {
+      if (!cf || cf.isCustom) return '';
+      const slug = this._cfSlug(cf.name);
+      if (!slug) return '';
+      const app = (appType === 'sonarr' || appType === 'radarr') ? appType : 'radarr';
+      return `https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/${app}/cf/${slug}.json`;
+    },
+
     // Category-snippet helper for the collapsed-card preview line.
     // Strips TRaSH's HTML description down to plain text and truncates to
     // ~120 chars so the user can see what a category covers at a glance
