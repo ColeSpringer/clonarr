@@ -10,6 +10,7 @@ export default {
         'reset-unsynced-scores': 'Reset Non-Synced Scores',
         'orphaned-scores': 'Orphaned Scores',
         'unused-by-clonarr': 'Unused Custom Formats (Clonarr-managed)',
+        'unused-profiles': 'Unused Quality Profiles',
       };
       return labels[action] || action;
     },

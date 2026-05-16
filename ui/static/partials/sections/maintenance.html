@@ -169,6 +169,16 @@
                     </div>
                   </div>
 
+                  <div class="card maintenance-card">
+                    <div class="maintenance-card-body">
+                      <div>
+                        <div class="maintenance-card-title">Unused Quality Profiles</div>
+                        <div class="maintenance-card-desc">Lists every quality profile on this instance with usage counts across <span x-text="activeAppType === 'sonarr' ? 'series' : 'movies'"></span>, import lists<span x-show="activeAppType === 'radarr'">, and collections</span>. Profiles with zero usage everywhere can be safely removed. Arr refuses to delete profiles still in use anywhere — those show up as in-use with their usage breakdown.</div>
+                      </div>
+                      <button class="qs-mode-btn" @click="cleanupScan('unused-profiles')" :disabled="cleanupScanning">Scan</button>
+                    </div>
+                  </div>
+
                   <!-- ===== Destructive actions — both Delete All buttons share the RED treatment ===== -->
                   <div class="maintenance-section-label maintenance-section-danger">Destructive actions</div>
 

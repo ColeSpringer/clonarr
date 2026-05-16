@@ -54,6 +54,9 @@
                         <template x-if="cleanupResult.action === 'duplicates'">
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> duplicate <span x-text="cleanupResult.affectCount === 1 ? 'CF' : 'CFs'"></span> out of <span x-text="cleanupResult.totalCount"></span> total. The first occurrence in each group is kept; the rest are flagged for removal.</span>
                         </template>
+                        <template x-if="cleanupResult.action === 'unused-profiles'">
+                          <span><strong x-text="cleanupResult.affectCount"></strong> of <span x-text="cleanupResult.totalCount"></span> quality <span x-text="cleanupResult.totalCount === 1 ? 'profile' : 'profiles'"></span> on this instance <span x-text="cleanupResult.affectCount === 1 ? 'is' : 'are'"></span> not in use anywhere and can be removed. Arr refuses to delete profiles still in use — see the "In use" tab for the usage breakdown.</span>
+                        </template>
                         <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> <span x-text="cleanupResult.affectCount === 1 ? 'CF with a non-zero score' : 'CFs with non-zero scores'"></span> that aren't part of any synced profile. Scores will be reset to 0.</span>
                         </template>
@@ -133,6 +136,55 @@
                         </table>
                       </template>
 
+                      <!-- Unused Profiles — filter tabs (Unused / In use) + dedicated table
+                           with per-axis usage chips. Radarr shows Collections column; Sonarr
+                           drops it via x-show on the column. -->
+                      <template x-if="cleanupResult.action === 'unused-profiles'">
+                        <div>
+                          <!-- Filter tabs — same pattern as unused-by-clonarr -->
+                          <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+                            <button class="btn"
+                              :style="cleanupFilter === 'all' ? 'background:var(--accent-blue-strong);border-color:var(--accent-blue-strong);color:var(--text-on-accent)' : ''"
+                              @click="cleanupFilter = 'all'"
+                              x-text="'Unused (' + cleanupResult.items.length + ')'"></button>
+                            <template x-if="(cleanupResult.managedItems || []).length > 0">
+                              <button class="btn"
+                                :style="cleanupFilter === 'managed' ? 'background:var(--accent-green-strong);border-color:var(--accent-green-strong);color:var(--text-on-accent)' : ''"
+                                @click="cleanupFilter = 'managed'"
+                                x-text="'In use (' + (cleanupResult.managedItems || []).length + ')'"></button>
+                            </template>
+                          </div>
+
+                          <table style="width:100%;border-collapse:collapse;font-size:12px">
+                            <thead>
+                              <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                                <th style="padding:6px 8px;font-weight:500">Profile</th>
+                                <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right" x-text="activeAppType === 'sonarr' ? 'Series' : 'Movies'"></th>
+                                <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right">Import lists</th>
+                                <th style="padding:6px 8px;font-weight:500;width:90px;text-align:right" x-show="activeAppType === 'radarr'">Collections</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template x-for="item in (cleanupFilter === 'managed' ? (cleanupResult.managedItems || []) : cleanupResult.items)" :key="item.id">
+                                <tr style="border-bottom:1px solid var(--bg-muted)">
+                                  <td style="padding:6px 8px;color:var(--text-primary);font-weight:500" x-text="item.name"></td>
+                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
+                                      :style="((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                      x-text="(item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0"></td>
+                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
+                                      :style="((item.usage || {}).importLists || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                      x-text="(item.usage || {}).importLists || 0"></td>
+                                  <td style="padding:6px 8px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
+                                      :style="((item.usage || {}).collections || 0) > 0 ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"
+                                      x-show="activeAppType === 'radarr'"
+                                      x-text="(item.usage || {}).collections || 0"></td>
+                                </tr>
+                              </template>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
+
                       <!-- Reset Non-Synced Scores — dedicated table with score chips per profile. -->
                       <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -190,7 +242,7 @@
 
                       <!-- Default items table — used by unused-by-clonarr (rename-flag
                            Tag column matters there). -->
-                      <template x-if="cleanupResult.action !== 'duplicates' && cleanupResult.action !== 'reset-unsynced-scores' && cleanupResult.action !== 'orphaned-scores' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
+                      <template x-if="cleanupResult.action !== 'duplicates' && cleanupResult.action !== 'reset-unsynced-scores' && cleanupResult.action !== 'orphaned-scores' && cleanupResult.action !== 'unused-profiles' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
@@ -284,7 +336,7 @@
             </div>
           </template>
         </div>
-        <div class="modal-footer" x-show="cleanupResult.applied === undefined && cleanupResult.affectCount > 0 && !(cleanupResult.action === 'unused-by-clonarr' && cleanupFilter === 'managed')">
+        <div class="modal-footer" x-show="cleanupResult.applied === undefined && cleanupResult.affectCount > 0 && !(cleanupResult.action === 'unused-by-clonarr' && cleanupFilter === 'managed') && !(cleanupResult.action === 'unused-profiles' && cleanupFilter === 'managed')">
           <button class="btn" @click="cleanupResult = null">Cancel</button>
           <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag)">
             <div style="display:flex;gap:6px">
@@ -300,14 +352,15 @@
           </template>
           <template x-if="!(cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag))">
             <button class="btn"
-              :class="['delete-cfs-and-scores','delete-cfs-keep-scores','unused-by-clonarr','duplicates'].includes(cleanupResult.action) ? 'btn-danger' : 'btn-primary'"
+              :class="['delete-cfs-and-scores','delete-cfs-keep-scores','unused-by-clonarr','duplicates','unused-profiles'].includes(cleanupResult.action) ? 'btn-danger' : 'btn-primary'"
               @click="cleanupApply()" :disabled="cleanupApplying">
               <span x-show="cleanupApplying" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
               <!-- Verb matches the action's semantics:
                    - "Remove" for duplicates (originals stay; only the redundant copies go)
-                   - "Delete" for CFs that disappear entirely (unused-by-clonarr, delete-all variants)
+                   - "Delete" for items that disappear entirely (unused-by-clonarr,
+                     unused-profiles, delete-all variants)
                    - "Apply" for non-destructive value changes (score resets) -->
-              <span x-show="!cleanupApplying" x-text="(cleanupResult.action === 'duplicates' ? 'Remove' : (cleanupResult.action?.startsWith('delete') || cleanupResult.action === 'unused-by-clonarr') ? 'Delete' : 'Apply') + ' (' + cleanupResult.affectCount + ' items)'"></span>
+              <span x-show="!cleanupApplying" x-text="(cleanupResult.action === 'duplicates' ? 'Remove' : (cleanupResult.action?.startsWith('delete') || cleanupResult.action === 'unused-by-clonarr' || cleanupResult.action === 'unused-profiles') ? 'Delete' : 'Apply') + ' (' + cleanupResult.affectCount + ' items)'"></span>
             </button>
           </template>
         </div>
