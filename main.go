@@ -180,6 +180,9 @@ func main() {
 			app.MigratePriorAvailableGroups()
 			app.MigratePriorSyncedCFs()
 			app.MigrateExcludedCFs()
+			// v3 — convert the deprecated global AutoSync.Paused flag
+			// to per-instance Instance.AutoSyncPaused. Idempotent.
+			app.MigrateGlobalPauseToInstances()
 		}
 
 		if (cfg.PullInterval == "0" || cfg.PullInterval == "specific") && repoCloned {

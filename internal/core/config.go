@@ -314,6 +314,13 @@ type Instance struct {
 	Type   string `json:"type"` // "radarr" or "sonarr"
 	URL    string `json:"url"`
 	APIKey string `json:"apiKey"`
+	// AutoSyncPaused, when true, skips non-user-initiated sync for this
+	// instance only. AutoSyncAfterPull, ForceSyncAllRules, and the
+	// sync-schedule timer all silently drop rules belonging to a paused
+	// instance. Manual actions ("Sync now", "Sync all", "Save & Sync"
+	// from the profile editor) are unaffected. Default false. Replaces
+	// the prior global AutoSync.Paused flag — see migrateGlobalPauseToInstances.
+	AutoSyncPaused bool `json:"autoSyncPaused,omitempty"`
 }
 
 // TrashRepo holds TRaSH Guides repository settings.

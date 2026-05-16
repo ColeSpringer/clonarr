@@ -35,21 +35,22 @@ func autoSyncRuleEquivalent(a, b core.AutoSyncRule) bool {
 }
 
 // handleGetAutoSyncSettings returns the minimal auto-sync config (notification
-// agents are served by handleListNotificationAgents).
+// agents are served by handleListNotificationAgents). The legacy
+// `paused` field has moved to per-instance (Instance.AutoSyncPaused);
+// see PUT /api/instances/{id}/auto-sync-paused.
 func (s *Server) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
 	writeJSON(w, map[string]any{
 		"enabled": cfg.AutoSync.Enabled,
-		"paused":  cfg.AutoSync.Paused,
 	})
 }
 
-// handleSaveAutoSyncSettings updates the top-level enabled and paused flags.
+// handleSaveAutoSyncSettings updates the top-level enabled flag.
 // Notification agents are managed via /api/auto-sync/notification-agents.
+// Pause is per-instance now — see handleSetInstanceAutoSyncPaused.
 func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeJSON[struct {
 		Enabled *bool `json:"enabled,omitempty"`
-		Paused  *bool `json:"paused,omitempty"`
 	}](w, r, 4096)
 	if !ok {
 		return
@@ -57,9 +58,6 @@ func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reque
 	if err := s.Core.Config.Update(func(cfg *core.Config) {
 		if req.Enabled != nil {
 			cfg.AutoSync.Enabled = *req.Enabled
-		}
-		if req.Paused != nil {
-			cfg.AutoSync.Paused = *req.Paused
 		}
 	}); err != nil {
 		log.Printf("Error saving auto-sync settings: %v", err)

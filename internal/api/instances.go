@@ -112,6 +112,40 @@ func (s *Server) handleUpdateInstance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, updated)
 }
 
+// handleSetInstanceAutoSyncPaused toggles the per-instance auto-sync
+// pause flag. Replaces the global AutoSync.Paused setting for v3 —
+// each instance can be paused independently while manual sync actions
+// remain available regardless of pause state.
+func (s *Server) handleSetInstanceAutoSyncPaused(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, 400, "Missing instance ID")
+		return
+	}
+	req, ok := decodeJSON[struct {
+		Paused bool `json:"paused"`
+	}](w, r, 256)
+	if !ok {
+		return
+	}
+	if err := s.Core.Config.Update(func(cfg *core.Config) {
+		for i := range cfg.Instances {
+			if cfg.Instances[i].ID == id {
+				cfg.Instances[i].AutoSyncPaused = req.Paused
+				return
+			}
+		}
+	}); err != nil {
+		writeError(w, 500, "Failed to update instance")
+		return
+	}
+	if _, found := s.Core.Config.GetInstance(id); !found {
+		writeError(w, 404, "Instance not found")
+		return
+	}
+	writeJSON(w, map[string]any{"id": id, "autoSyncPaused": req.Paused})
+}
+
 func (s *Server) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {

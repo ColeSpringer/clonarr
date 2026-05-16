@@ -50,16 +50,12 @@ func (app *App) AutoSyncAfterPull(trigger string) {
 	app.MigrateExcludedCFs()
 
 	cfg := app.Config.Get()
-	if cfg.AutoSync.Paused {
-		// Global pause is on — skip all auto-driven sync. Manual actions
-		// ("Sync All", per-rule Sync now, Save & Sync from a profile) are
-		// unaffected.
-		app.DebugLog.Logf(LogAutoSync, "Auto-sync paused globally — skipping AutoSyncAfterPull")
-		return
-	}
 	if len(cfg.AutoSync.Rules) == 0 {
 		return
 	}
+	// Per-instance pause is checked inside runRulesPerInstance — that path
+	// has the resolved Instance struct on hand. The pre-pass global pause
+	// check is gone now that pause is instance-scoped (v3 Sprint 3).
 
 	if trigger == "" {
 		trigger = SourceAutoPullInterval
@@ -132,13 +128,10 @@ func (app *App) ForceSyncAllRules() {
 	app.MigrateExcludedCFs()
 
 	cfg := app.Config.Get()
-	if cfg.AutoSync.Paused {
-		app.DebugLog.Logf(LogAutoSync, "Auto-sync paused globally — skipping ForceSyncAllRules")
-		return
-	}
 	if len(cfg.AutoSync.Rules) == 0 {
 		return
 	}
+	// Per-instance pause check happens inside runRulesPerInstance.
 
 	commitShort := currentCommit
 	if len(currentCommit) > 7 {
@@ -197,6 +190,15 @@ func (app *App) runRulesPerInstance(rules []AutoSyncRule, currentCommit string, 
 					app.UpdateAutoSyncRuleError(r.ID, "instance not found: "+instID)
 				}
 				results <- p
+				return
+			}
+			// Per-instance auto-sync pause — silently skip every rule on
+			// this instance without touching reachability, error counters,
+			// or notifications. Manual actions on the rule remain
+			// available (those don't go through this code path).
+			if inst.AutoSyncPaused {
+				app.DebugLog.Logf(LogAutoSync, "Auto-sync paused for instance %s — skipping %d rule(s)", inst.Name, len(instRules))
+				results <- partial{}
 				return
 			}
 			// Pre-flight reachability check (~30 min budget) — one per
@@ -1202,6 +1204,41 @@ func ComputeRuleCounts(rule AutoSyncRule, detail *ProfileDetailResult) (override
 	return overrides, optional
 }
 
+
+// MigrateGlobalPauseToInstances converts the deprecated global
+// AutoSync.Paused flag to per-instance Instance.AutoSyncPaused. Runs
+// once on startup: if global pause was true, every instance is marked
+// paused so the user's pause state is preserved across the upgrade
+// from pre-v3 (global pause) to v3 (per-instance pause). Clears the
+// global flag after the conversion so the migration is idempotent.
+//
+// No-op when global pause is false, when there are no instances, or
+// when the user has already explicitly paused individual instances
+// post-migration (the global flag is cleared on first migration tick).
+func (app *App) MigrateGlobalPauseToInstances() {
+	cfg := app.Config.Get()
+	if !cfg.AutoSync.Paused {
+		return
+	}
+	if len(cfg.Instances) == 0 {
+		// No instances to mark — just clear the legacy flag so we don't
+		// look at it again.
+		_ = app.Config.Update(func(c *Config) {
+			c.AutoSync.Paused = false
+		})
+		return
+	}
+	if err := app.Config.Update(func(c *Config) {
+		for i := range c.Instances {
+			c.Instances[i].AutoSyncPaused = true
+		}
+		c.AutoSync.Paused = false
+	}); err != nil {
+		log.Printf("MigrateGlobalPauseToInstances: failed to save: %v", err)
+		return
+	}
+	log.Printf("MigrateGlobalPauseToInstances: marked %d instance(s) as paused (global pause was on)", len(cfg.Instances))
+}
 
 // MigratePriorAvailableGroups scans all rules and populates
 // PriorAvailableGroups for any rule that has a LastSyncCommit but no

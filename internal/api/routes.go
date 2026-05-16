@@ -17,6 +17,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/instances", s.handleCreateInstance)
 	mux.HandleFunc("PUT /api/instances/{id}", s.handleUpdateInstance)
 	mux.HandleFunc("DELETE /api/instances/{id}", s.handleDeleteInstance)
+	mux.HandleFunc("PUT /api/instances/{id}/auto-sync-paused", s.handleSetInstanceAutoSyncPaused)
 	mux.HandleFunc("POST /api/instances/{id}/test", s.handleTestInstance)
 	mux.HandleFunc("POST /api/test-connection", s.handleTestConnection)
 	mux.HandleFunc("GET /api/instances/{id}/profiles", s.handleInstanceProfiles)

@@ -1,6 +1,6 @@
 export default {
   state: {
-    autoSyncSettings: { enabled: false, paused: false },
+    autoSyncSettings: { enabled: false },
     autoSyncRules: [],
     autoSyncRuleForSync: null,
   },
@@ -23,25 +23,35 @@ export default {
       } catch (e) { console.error('saveAutoSyncSettings:', e); }
     },
 
-    // Toggle the global pause flag. Scheduled syncs are skipped while manual
-    // sync actions remain available.
-    async setAutoSyncPaused(paused) {
-      const previous = this.autoSyncSettings;
-      this.autoSyncSettings = { ...this.autoSyncSettings, paused };
+    // Per-instance pause toggle (v3 — replaces the prior global pause).
+    // Optimistically flips the local instance.autoSyncPaused so the UI
+    // updates immediately; rolls back on error and surfaces a toast.
+    // Scheduled + after-pull syncs for this instance are skipped while
+    // paused; manual sync actions remain available regardless.
+    async setInstancePaused(instanceId, paused) {
+      const inst = this.instances.find(i => i.id === instanceId);
+      if (!inst) return;
+      const previous = inst.autoSyncPaused;
+      inst.autoSyncPaused = paused;
       try {
-        const r = await fetch('/api/auto-sync/settings', {
+        const r = await fetch(`/api/instances/${encodeURIComponent(instanceId)}/auto-sync-paused`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paused })
         });
         if (!r.ok) {
-          this.autoSyncSettings = previous;
+          inst.autoSyncPaused = previous;
           throw new Error('HTTP ' + r.status);
         }
-        this.showToast(paused ? 'Auto-sync paused — manual syncs still work' : 'Auto-sync resumed', paused ? 'warning' : 'success', 4000);
+        const label = inst.name || (inst.type === 'sonarr' ? 'Sonarr' : 'Radarr');
+        this.showToast(
+          paused ? `Auto-sync paused for ${label} — manual syncs still work` : `Auto-sync resumed for ${label}`,
+          paused ? 'warning' : 'success',
+          4000
+        );
       } catch (e) {
-        console.error('setAutoSyncPaused:', e);
-        this.autoSyncSettings = previous;
+        console.error('setInstancePaused:', e);
+        inst.autoSyncPaused = previous;
         this.showToast('Failed to update auto-sync state', 'error', 6000);
       }
     },
