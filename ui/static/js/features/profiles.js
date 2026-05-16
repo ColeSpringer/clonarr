@@ -355,6 +355,14 @@ export default {
       localStorage.setItem('clonarr-nav-style', this.navStyle);
       // Close the sub-nav popup if it was open from the sidebar.
       this.sidebarSubnavPopup = '';
+      // Reset sidebar to expanded on every nav-style switch. Without
+      // this, a user who collapses the sidebar, switches to topnav,
+      // then switches back finds an unexpectedly-collapsed sidebar
+      // (the collapsed flag persists in localStorage).
+      if (this.sidebarCollapsed) {
+        this.sidebarCollapsed = false;
+        localStorage.setItem('clonarr-sidebar-collapsed', '0');
+      }
     },
 
     async checkCleanupEvents() {

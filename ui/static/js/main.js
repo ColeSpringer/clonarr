@@ -607,7 +607,20 @@ export function clonarr() {
         const savedSection = localStorage.getItem('clonarr_section');
         const savedAppType = localStorage.getItem('clonarr_appType');
         if (savedSection) {
-          this.currentSection = savedSection;
+          // Legacy alias: pre-v3 the Quality Definitions and File Naming
+          // sections were top-level. v3 folds both into Media Management
+          // with sub-tabs. A stored section value of 'quality-size' or
+          // 'naming' now has no matching nav-item and would render a blank
+          // page (gates check `currentSection === 'media-management'`).
+          // Map to media-management and seed the corresponding sub-tab.
+          // Mirrors the restoreFromHash() alias logic at navigation.js:195.
+          if (savedSection === 'quality-size' || savedSection === 'naming') {
+            this.currentSection = 'media-management';
+            const seedAppType = savedAppType || (this.instances[0] && this.instances[0].type) || 'radarr';
+            this.setMediaTab(seedAppType, savedSection === 'naming' ? 'naming' : 'quality');
+          } else {
+            this.currentSection = savedSection;
+          }
         } else if (oldTab === 'settings' || oldTab === 'about') {
           this.currentSection = oldTab;
         }

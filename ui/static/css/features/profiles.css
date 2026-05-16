@@ -90,7 +90,7 @@
    TRaSH | → | ID | Arr | Last sync | Status | Auto-sync | Customizations | Actions */
 .v3-rule-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) 18px 50px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
+  grid-template-columns: minmax(160px, 1.4fr) 18px 60px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
   align-items: center; gap: 10px;
 }
 .v3-col-header {
@@ -208,7 +208,7 @@
 /* Column grid — TRaSH | → | ID | Arr | Last changed | Events | Last changes */
 .v3-hist-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) 18px 50px minmax(160px, 1.4fr) 100px 60px minmax(140px, 1fr);
+  grid-template-columns: minmax(160px, 1.4fr) 18px 60px minmax(160px, 1.4fr) 100px 60px minmax(140px, 1fr);
   align-items: center; gap: 10px;
 }
 

@@ -169,6 +169,11 @@ export default {
       // when the hash already matches the state we'd produce.
       if (hash === this.buildNavHash()) return true;
       const parts = hash.replace(/^#/, '').split('/');
+      // 'quality-size' and 'naming' kept in this whitelist only so the
+      // alias branch below can rewrite them to 'media-management' with
+      // the matching sub-tab — they're no longer real top-level
+      // sections in v3. Old bookmarks pointing to those hashes stay
+      // working as a result.
       const validSections = ['profiles','custom-formats','media-management','quality-size','naming','maintenance','advanced','settings','about'];
       const validSettings = ['instances','trash','prowlarr','notifications','display','security','advanced'];
       // v3: 'trash-sync' kept as a legacy alias of 'trash-profiles' so old

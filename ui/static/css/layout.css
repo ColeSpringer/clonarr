@@ -24,10 +24,18 @@
   .topnav-row-utility {
     display: flex; align-items: center;
     padding: 0 16px;
-    height: 40px;
+    min-height: 40px;
     gap: 12px;
     border-bottom: 1px solid var(--border-muted);
+    /* Allow wrap on narrow viewports so admin chip + TRaSH status don't
+       clip past the right edge. Each child still flex-shrink: 0 so they
+       stay readable; wrap moves them onto a second line instead of
+       hiding them. */
+    flex-wrap: wrap;
   }
+  /* Make the TRaSH label string able to ellipsis if needed (full text
+     stays available in the dropdown). */
+  .topnav-trash { min-width: 0; }
   .topnav-row-nav {
     display: flex; align-items: stretch;
     padding: 0 16px;
@@ -102,7 +110,9 @@
     color: var(--app-color);
     border-bottom-color: var(--app-color);
   }
-  .topnav-tab:focus-visible { outline-offset: -2px; }
+  /* Focus ring sits outside the cell so the 2px app-color underline on
+     active tabs isn't covered by the ring's bottom segment. */
+  .topnav-tab:focus-visible { outline-offset: 0; }
 
   /* TRaSH sync block — compact: dot + relative time + Pull. Full info
      (commit, next pull, changelog) lives in the dropdown opened by
@@ -170,7 +180,10 @@
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
     box-shadow: 0 6px 20px var(--alpha-shadow);
-    z-index: 200; padding: 4px;
+    /* Stays below modal overlay (z-index 100) so an open modal isn't
+       partially obscured by a leftover dropdown. Sits above sticky
+       topnav (z-index 50). */
+    z-index: 80; padding: 4px;
   }
   .topnav-user-logout-form { margin: 0; }
   .topnav-user-logout {
@@ -229,7 +242,9 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     box-shadow: 0 8px 24px var(--alpha-shadow);
-    z-index: 200; max-height: 420px; overflow-y: auto;
+    /* Same layering as topnav-user-menu — below modal overlay (100),
+       above sticky topnav (50). */
+    z-index: 80; max-height: 420px; overflow-y: auto;
   }
 
   /* App switcher pill sits inside the nav row (44px) but should stay

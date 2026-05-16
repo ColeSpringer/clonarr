@@ -128,6 +128,13 @@ func (s *Server) handleSetInstanceAutoSyncPaused(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
+	// Validate before touching disk — a bogus ID used to slip past
+	// Config.Update (no-op closure) and trigger an unnecessary disk
+	// flush before the 404 was returned.
+	if _, found := s.Core.Config.GetInstance(id); !found {
+		writeError(w, 404, "Instance not found")
+		return
+	}
 	if err := s.Core.Config.Update(func(cfg *core.Config) {
 		for i := range cfg.Instances {
 			if cfg.Instances[i].ID == id {
@@ -137,10 +144,6 @@ func (s *Server) handleSetInstanceAutoSyncPaused(w http.ResponseWriter, r *http.
 		}
 	}); err != nil {
 		writeError(w, 500, "Failed to update instance")
-		return
-	}
-	if _, found := s.Core.Config.GetInstance(id); !found {
-		writeError(w, 404, "Instance not found")
 		return
 	}
 	writeJSON(w, map[string]any{"id": id, "autoSyncPaused": req.Paused})

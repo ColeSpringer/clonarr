@@ -1216,28 +1216,30 @@ func ComputeRuleCounts(rule AutoSyncRule, detail *ProfileDetailResult) (override
 // when the user has already explicitly paused individual instances
 // post-migration (the global flag is cleared on first migration tick).
 func (app *App) MigrateGlobalPauseToInstances() {
-	cfg := app.Config.Get()
-	if !cfg.AutoSync.Paused {
-		return
-	}
-	if len(cfg.Instances) == 0 {
-		// No instances to mark — just clear the legacy flag so we don't
-		// look at it again.
-		_ = app.Config.Update(func(c *Config) {
-			c.AutoSync.Paused = false
-		})
-		return
-	}
+	// Everything runs inside a single Config.Update so the
+	// (paused?, len(Instances), per-instance write, clear-legacy-flag)
+	// sequence is atomic — no window for a concurrent AddInstance to
+	// land between the read and the write and silently lose the user's
+	// pause state.
+	var migrated int
+	var ranBefore bool
 	if err := app.Config.Update(func(c *Config) {
+		if !c.AutoSync.Paused {
+			return
+		}
+		ranBefore = true
 		for i := range c.Instances {
 			c.Instances[i].AutoSyncPaused = true
 		}
+		migrated = len(c.Instances)
 		c.AutoSync.Paused = false
 	}); err != nil {
 		log.Printf("MigrateGlobalPauseToInstances: failed to save: %v", err)
 		return
 	}
-	log.Printf("MigrateGlobalPauseToInstances: marked %d instance(s) as paused (global pause was on)", len(cfg.Instances))
+	if ranBefore {
+		log.Printf("MigrateGlobalPauseToInstances: marked %d instance(s) as paused (global pause was on)", migrated)
+	}
 }
 
 // MigratePriorAvailableGroups scans all rules and populates
