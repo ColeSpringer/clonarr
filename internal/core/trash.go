@@ -1064,7 +1064,9 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 			for _, cmd := range []*exec.Cmd{
 				exec.Command("git", "-C", ts.dataDir, "config", "core.sparseCheckout", "true"),
 				exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
-					"docs/json/", "docs/updates.txt", "includes/cf-descriptions/"),
+					"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
+					"docs/Radarr/radarr-setup-quality-profiles.md",
+					"docs/Sonarr/sonarr-setup-quality-profiles.md"),
 			} {
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -1107,7 +1109,9 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 			return fmt.Errorf("git clone: %w", err)
 		}
 		cmd = exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
-			"docs/json/", "docs/updates.txt", "includes/cf-descriptions/")
+			"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
+			"docs/Radarr/radarr-setup-quality-profiles.md",
+			"docs/Sonarr/sonarr-setup-quality-profiles.md")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

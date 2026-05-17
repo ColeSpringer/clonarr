@@ -297,3 +297,25 @@ func (s *Server) handleTrashProfiles(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, items)
 }
+
+// handleTrashProfileDescriptions returns the auto-derived rich descriptions
+// for every TRaSH profile in the app. Built by combining profile JSON +
+// cf-group includes + per-app setup-quality-profiles.md sections. The result
+// drives the new v3 TRaSH Profiles browse view (compact card layout).
+func (s *Server) handleTrashProfileDescriptions(w http.ResponseWriter, r *http.Request) {
+	appType := r.PathValue("app")
+	if appType != "radarr" && appType != "sonarr" {
+		writeError(w, 400, "app must be 'radarr' or 'sonarr'")
+		return
+	}
+	descriptions, err := s.Core.Trash.DescribeProfiles(appType)
+	if err != nil {
+		writeError(w, 500, "describe profiles: "+err.Error())
+		return
+	}
+	if descriptions == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, descriptions)
+}
