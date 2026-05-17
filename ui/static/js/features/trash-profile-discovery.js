@@ -141,14 +141,17 @@ export default {
       return d.axes?.audio?.scored ? 'Lossless audio' : '';
     },
 
-    // tpdHDRPillText returns the HDR pill label with an opt-in hint when the
-    // profile has DV / HDR10+ variants available, empty string when HDR isn't
-    // scored at all.
+    // tpdHDRPillText returns the SHORT HDR pill label — full opt-in
+    // enumeration goes in the Highlights bullet list, not on the pill
+    // (where long strings break the visual rhythm). Just "HDR" when no
+    // variants are available; "HDR · DV available" when at least one
+    // Dolby Vision opt-in exists (DV being the most "brag-worthy"
+    // optional, more than HDR10+ for most users).
     tpdHDRPillText(d) {
       const hdr = d.axes?.hdr;
       if (!hdr?.scored) return '';
-      if (hdr.optIns && hdr.optIns.length > 0) {
-        return `HDR · ${hdr.optIns.join('/')} opt-in`;
+      if (hdr.optIns && hdr.optIns.some(o => o.startsWith('DV'))) {
+        return 'HDR · DV available';
       }
       return 'HDR';
     },

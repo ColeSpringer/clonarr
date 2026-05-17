@@ -497,11 +497,13 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 		out = append(out, src)
 	}
 
-	// 2) Audio + HDR features when scored
+	// 2) Audio + HDR features when scored. Full opt-in enumeration goes
+	//    here (not on the pill, which only shows the short "HDR" label
+	//    plus "DV available" hint when DV opt-ins exist).
 	if axes.HDR.Scored {
 		hdr := "HDR scoring (HDR10 by default)"
 		if len(axes.HDR.OptIns) > 0 {
-			hdr += " — " + strings.Join(axes.HDR.OptIns, " / ") + " available as opt-in"
+			hdr += " — opt-in available for " + strings.Join(axes.HDR.OptIns, ", ")
 		}
 		out = append(out, hdr)
 	}
@@ -527,6 +529,14 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 	//    it so users understand re-releases get caught
 	if hasRepackScoring(profile) {
 		out = append(out, "Auto-upgrade to Repacks / Propers when re-released")
+	}
+
+	// 5) Typical file size — too verbose for a pill, but useful here as a
+	//    last bullet ("Typical size: 6-15 GB per movie depending on
+	//    running time"). Skipped when markdown didn't ship a size for this
+	//    profile (anime / SQP / foreign variants).
+	if axes.AvgSize != "" {
+		out = append(out, "Typical size: "+axes.AvgSize)
 	}
 
 	return out
