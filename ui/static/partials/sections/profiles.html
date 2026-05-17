@@ -228,54 +228,15 @@
                         <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
                           <p class="tpd-card-tagline" x-show="d.tagline" x-text="d.tagline"></p>
                           <div class="tpd-pills">
-                            <span class="tpd-pill" x-text="d.axes?.resolution || 'unknown'"></span>
-                            <template x-for="src in (d.axes?.sources || [])" :key="src">
-                              <span class="tpd-pill" x-text="src"></span>
-                            </template>
-                            <span class="tpd-pill" x-show="d.axes?.codec" x-text="d.axes.codec"></span>
-                            <span :class="tpdAxisAudioClass(d)" x-text="tpdAxisAudioLabel(d)"></span>
-                            <span :class="tpdAxisHDRClass(d)" x-text="tpdAxisHDRLabel(d)"></span>
-                            <span class="tpd-pill" x-show="d.axes?.cutoff">Cutoff: <span x-text="d.axes.cutoff"></span></span>
+                            <span class="tpd-pill" x-text="tpdResolutionLabel(d)"></span>
+                            <span class="tpd-pill" x-text="tpdSourceLabel(d)"></span>
+                            <span class="tpd-pill aud" x-show="d.axes?.audio?.scored" x-text="tpdAudioPillText(d)"></span>
+                            <span class="tpd-pill vid" x-show="d.axes?.hdr?.scored" x-text="tpdHDRPillText(d)"></span>
                             <span class="tpd-pill" x-show="d.axes?.avgSize" x-text="d.axes.avgSize"></span>
                           </div>
                           <p class="tpd-note" x-show="d.trashNote">
                             <strong>TRaSH note:</strong> <span x-text="d.trashNote"></span>
                           </p>
-                          <details class="tpd-collapsible" x-show="(d.builtInGroups?.length || 0) + (d.optInGroups?.length || 0) > 0">
-                            <summary>
-                              Custom Format groups
-                              (<span x-text="(d.builtInGroups || []).length"></span> built-in,
-                              <span x-text="(d.optInGroups || []).length"></span> opt-in)
-                            </summary>
-                            <div class="tpd-collapsible-body">
-                              <div x-show="d.builtInGroups?.length">
-                                <div class="tpd-cfg-sub-label">Built-in (applied when synced)</div>
-                                <div class="tpd-cfg-list">
-                                  <template x-for="g in (d.builtInGroups || [])" :key="g.trashId">
-                                    <span class="tpd-cfg-pill" x-text="g.name"></span>
-                                  </template>
-                                </div>
-                              </div>
-                              <div x-show="d.optInGroups?.length">
-                                <div class="tpd-cfg-sub-label">Opt-in (available, not enabled by default)</div>
-                                <div class="tpd-cfg-list">
-                                  <template x-for="g in (d.optInGroups || [])" :key="g.trashId">
-                                    <span class="tpd-cfg-pill optional" x-text="g.name"></span>
-                                  </template>
-                                </div>
-                              </div>
-                            </div>
-                          </details>
-                          <details class="tpd-collapsible" x-show="d.workflowSteps && d.workflowSteps.length > 0">
-                            <summary>Workflow logic</summary>
-                            <div class="tpd-collapsible-body">
-                              <ol class="tpd-workflow">
-                                <template x-for="(step, idx) in (d.workflowSteps || [])" :key="idx">
-                                  <li x-text="step"></li>
-                                </template>
-                              </ol>
-                            </div>
-                          </details>
                           <div class="tpd-card-footer">
                             <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use →</button>
                             <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">📖 TRaSH guide</a>

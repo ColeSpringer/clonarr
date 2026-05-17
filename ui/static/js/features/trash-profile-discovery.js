@@ -129,30 +129,61 @@ export default {
       });
     },
 
-    // --- Pill-rendering helpers (so templates stay readable) ---
+    // --- Pill-rendering helpers ---
+    // Principle: only ASSERT positive features. Don't render pills for
+    // missing features ("No HDR", "Lossy audio") — they were called out as
+    // visual noise. A card with fewer pills correctly signals fewer
+    // differentiators.
 
-    tpdAxisAudioLabel(d) {
-      return d.axes?.audio?.scored ? 'Lossless audio' : 'Lossy audio';
+    // tpdAudioPillText returns the lossless-audio pill label if the profile
+    // scores audio formats, empty string otherwise (template hides via x-show).
+    tpdAudioPillText(d) {
+      return d.axes?.audio?.scored ? 'Lossless audio' : '';
     },
-    tpdAxisAudioMuted(d) {
-      return !d.axes?.audio?.scored;
-    },
-    tpdAxisHDRLabel(d) {
+
+    // tpdHDRPillText returns the HDR pill label with an opt-in hint when the
+    // profile has DV / HDR10+ variants available, empty string when HDR isn't
+    // scored at all.
+    tpdHDRPillText(d) {
       const hdr = d.axes?.hdr;
-      if (!hdr?.scored) return 'No HDR';
+      if (!hdr?.scored) return '';
       if (hdr.optIns && hdr.optIns.length > 0) {
         return `HDR · ${hdr.optIns.join('/')} opt-in`;
       }
       return 'HDR';
     },
-    tpdAxisHDRMuted(d) {
-      return !d.axes?.hdr?.scored;
+
+    // tpdSourceLabel reduces the raw items[] source list (which may have 6+
+    // entries including HDTV / DVD / fallbacks that nobody cares about) to a
+    // single canonical label per profile family. Derived from the cutoff so
+    // the label always matches the profile's PRIMARY intent, not its
+    // fallback options.
+    //
+    //   Bluray-XXXXp cutoff      → "Bluray + WEB"
+    //   Bluray-2160p cutoff      → "UHD Bluray + WEB"
+    //   Remux-1080p cutoff       → "Bluray Remux + WEB"
+    //   Remux-2160p cutoff       → "UHD Remux + WEB"
+    //   WEB 1080p / 2160p cutoff → "WEB-DL"
+    //   anything else            → first 2 sources joined (fallback)
+    tpdSourceLabel(d) {
+      const cutoff = d.axes?.cutoff || '';
+      if (cutoff === 'Remux-2160p') return 'UHD Remux + WEB';
+      if (cutoff === 'Remux-1080p') return 'Bluray Remux + WEB';
+      if (cutoff === 'Bluray-2160p') return 'UHD Bluray + WEB';
+      if (cutoff.startsWith('Bluray-')) return 'Bluray + WEB';
+      if (cutoff.startsWith('WEB ') || cutoff.startsWith('WEBDL')) return 'WEB-DL';
+      const srcs = d.axes?.sources || [];
+      return srcs.slice(0, 2).join(' + ') || 'Mixed sources';
     },
-    tpdAxisHDRClass(d) {
-      return d.axes?.hdr?.scored ? 'pill vid' : 'pill muted';
-    },
-    tpdAxisAudioClass(d) {
-      return d.axes?.audio?.scored ? 'pill aud' : 'pill muted';
+
+    // tpdResolutionLabel returns just the primary resolution token (1080p /
+    // 2160p / 720p). Strips the verbose fallback chain ("720p, 576p, 480p
+    // fallback") that exposes raw items[] data nobody cares about for
+    // card-level scanning.
+    tpdResolutionLabel(d) {
+      const raw = d.axes?.resolution || '';
+      const m = raw.match(/^(\d+p)/);
+      return m ? m[1] : raw;
     },
 
     // Click-handler for the primary "Use →" CTA on a card. Opens the
