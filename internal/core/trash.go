@@ -1057,22 +1057,24 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 			log.Printf("Warning: failed to disable git gc.auto: %v", err)
 		}
 
-		// Enable sparse-checkout on existing full clones (migration)
-		sparseFile := filepath.Join(ts.dataDir, ".git", "info", "sparse-checkout")
-		if _, serr := os.Stat(sparseFile); serr != nil {
-			log.Printf("Migrating existing clone to sparse-checkout")
-			for _, cmd := range []*exec.Cmd{
-				exec.Command("git", "-C", ts.dataDir, "config", "core.sparseCheckout", "true"),
-				exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
-					"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
-					"docs/Radarr/radarr-setup-quality-profiles.md",
-					"docs/Sonarr/sonarr-setup-quality-profiles.md"),
-			} {
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					log.Printf("Warning: sparse-checkout migration: %v", err)
-				}
+		// Ensure sparse-checkout config matches the current clonarr version's
+		// expected pattern. Runs unconditionally — git's sparse-checkout set
+		// is idempotent (no-op if already matches), and the cost of always
+		// running it is negligible (~10ms). Without this, upgrades that need
+		// new files (e.g. v3-Sprint-4 added the setup-quality-profiles.md
+		// files for auto-derived profile descriptions) wouldn't pick them up
+		// on existing clones — only fresh clones get the new pattern.
+		for _, cmd := range []*exec.Cmd{
+			exec.Command("git", "-C", ts.dataDir, "config", "core.sparseCheckout", "true"),
+			exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
+				"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
+				"docs/Radarr/radarr-setup-quality-profiles.md",
+				"docs/Sonarr/sonarr-setup-quality-profiles.md"),
+		} {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				log.Printf("Warning: sparse-checkout sync: %v", err)
 			}
 		}
 
