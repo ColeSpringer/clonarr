@@ -97,25 +97,36 @@ export default {
     },
 
     // Group filtered profiles by their groupName (Standard, SQP, Anime, …).
-    // Returns [{ name, profiles[] }] ordered by groupName from the existing
-    // trashProfiles list (so display order matches the rest of the UI).
+    // Returns [{ name, profiles[] }] sorted by the same rule as the classic
+    // groupedProfiles() helper: by min `group` integer ascending (TRaSH's
+    // own ordering hint), then alpha for ties. Profiles within each group
+    // sorted alphabetically so display order is stable regardless of which
+    // order the backend returned them in.
     tpdGrouped(appType) {
       const filtered = this.tpdFiltered(appType);
-      const groupOrder = []; // preserve first-seen order
-      const buckets = {};
-      // Pull groupName from the existing profile list keyed by trashId, so
-      // we reuse the same grouping/coloring as the classic TRaSH tab.
+      // Lookup table from the classic profile list for groupName + group int
       const meta = this.trashProfiles[appType] || [];
-      const groupOf = id => (meta.find(p => p.trashId === id)?.groupName) || 'Other';
+      const metaById = new Map();
+      for (const p of meta) metaById.set(p.trashId, p);
+
+      const groups = {};
       for (const d of filtered) {
-        const g = groupOf(d.trashId);
-        if (!buckets[g]) {
-          buckets[g] = [];
-          groupOrder.push(g);
+        const m = metaById.get(d.trashId);
+        const groupName = (m && m.groupName) || 'Other';
+        const groupInt = (m && typeof m.group === 'number') ? m.group : Infinity;
+        if (!groups[groupName]) {
+          groups[groupName] = { name: groupName, profiles: [], minGroup: Infinity };
         }
-        buckets[g].push(d);
+        groups[groupName].profiles.push(d);
+        if (groupInt < groups[groupName].minGroup) groups[groupName].minGroup = groupInt;
       }
-      return groupOrder.map(name => ({ name, profiles: buckets[name] }));
+      for (const g of Object.values(groups)) {
+        g.profiles.sort((a, b) => a.name.localeCompare(b.name));
+      }
+      return Object.values(groups).sort((a, b) => {
+        if (a.minGroup !== b.minGroup) return a.minGroup - b.minGroup;
+        return a.name.localeCompare(b.name);
+      });
     },
 
     // --- Pill-rendering helpers (so templates stay readable) ---
