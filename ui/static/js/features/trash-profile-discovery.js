@@ -155,24 +155,28 @@ export default {
 
     // tpdSourceLabel reduces the raw items[] source list (which may have 6+
     // entries including HDTV / DVD / fallbacks that nobody cares about) to a
-    // single canonical label per profile family. Derived from the cutoff so
-    // the label always matches the profile's PRIMARY intent, not its
-    // fallback options.
+    // single canonical label per profile family.
     //
-    //   Bluray-XXXXp cutoff      → "Bluray + WEB"
-    //   Bluray-2160p cutoff      → "UHD Bluray + WEB"
-    //   Remux-1080p cutoff       → "Bluray Remux + WEB"
-    //   Remux-2160p cutoff       → "UHD Remux + WEB"
-    //   WEB 1080p / 2160p cutoff → "WEB-DL"
-    //   anything else            → first 2 sources joined (fallback)
+    // Derived from the SOURCES list (not cutoff) — cutoff naming differs
+    // between standard ("Remux-1080p"), anime ("Remux 1080p", space), and
+    // Sonarr ("WEB 1080p") profiles. The sources list normalises via
+    // extractSource() in the backend so the same set of labels appears
+    // regardless of which profile family we're rendering. Priority order:
+    //   UHD Remux  > Bluray Remux  > UHD Bluray  > Bluray  > WEB-DL only
+    // and "+ WEB" suffix added whenever WEB sources are also accepted, so
+    // a Remux profile that also accepts WEB-DL reads as "Bluray Remux + WEB"
+    // — matches how users think about the profile.
     tpdSourceLabel(d) {
-      const cutoff = d.axes?.cutoff || '';
-      if (cutoff === 'Remux-2160p') return 'UHD Remux + WEB';
-      if (cutoff === 'Remux-1080p') return 'Bluray Remux + WEB';
-      if (cutoff === 'Bluray-2160p') return 'UHD Bluray + WEB';
-      if (cutoff.startsWith('Bluray-')) return 'Bluray + WEB';
-      if (cutoff.startsWith('WEB ') || cutoff.startsWith('WEBDL')) return 'WEB-DL';
       const srcs = d.axes?.sources || [];
+      const set = new Set(srcs);
+      const hasWeb = set.has('WEB-DL') || set.has('WEBRip');
+      const webSuffix = hasWeb ? ' + WEB' : '';
+      if (set.has('UHD Bluray Remux')) return 'UHD Remux' + webSuffix;
+      if (set.has('Bluray Remux'))     return 'Bluray Remux' + webSuffix;
+      if (set.has('UHD Bluray'))       return 'UHD Bluray' + webSuffix;
+      if (set.has('Bluray'))           return 'Bluray' + webSuffix;
+      if (hasWeb)                       return 'WEB-DL';
+      // Truly unusual profile — just show first 2 sources so we don't lie
       return srcs.slice(0, 2).join(' + ') || 'Mixed sources';
     },
 
