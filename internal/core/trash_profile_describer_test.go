@@ -70,15 +70,6 @@ func TestParseProfileMarkdown_TaglineSizeNoteWorkflow(t *testing.T) {
 	if strings.Contains(hd.Note, "`") {
 		t.Errorf("note should have backticks stripped; got %q", hd.Note)
 	}
-	if len(hd.WorkflowSteps) != 3 {
-		t.Errorf("workflow step count = %d, want 3; got %v", len(hd.WorkflowSteps), hd.WorkflowSteps)
-	}
-	if !strings.Contains(hd.WorkflowSteps[0], "WEB-1080p") {
-		t.Errorf("workflow[0] = %q, want WEB-1080p reference", hd.WorkflowSteps[0])
-	}
-	if strings.Contains(strings.Join(hd.WorkflowSteps, " "), "`") {
-		t.Errorf("workflow steps should have backticks stripped")
-	}
 }
 
 func TestParseProfileMarkdown_NoNoteProfile(t *testing.T) {
@@ -92,9 +83,6 @@ func TestParseProfileMarkdown_NoNoteProfile(t *testing.T) {
 	}
 	if uhd.SizeText != "20-60 GB for a Bluray-2160p depending on the running time" {
 		t.Errorf("UHD size text mismatch: %q", uhd.SizeText)
-	}
-	if len(uhd.WorkflowSteps) != 2 {
-		t.Errorf("UHD workflow steps = %d, want 2", len(uhd.WorkflowSteps))
 	}
 }
 
@@ -225,12 +213,6 @@ func TestDescribeProfile_AudioScoredFromCFGroupInclude(t *testing.T) {
 	}
 	if len(desc.Axes.HDR.OptIns) != 1 || desc.Axes.HDR.OptIns[0] != "DV Boost" {
 		t.Errorf("HDR OptIns = %v, want [DV Boost]", desc.Axes.HDR.OptIns)
-	}
-	if len(desc.BuiltInGroups) != 2 {
-		t.Errorf("BuiltInGroups count = %d, want 2", len(desc.BuiltInGroups))
-	}
-	if len(desc.OptInGroups) != 1 {
-		t.Errorf("OptInGroups count = %d, want 1", len(desc.OptInGroups))
 	}
 	if desc.Axes.Codec != "x265" {
 		t.Errorf("Codec = %q, want x265 for 2160p", desc.Axes.Codec)

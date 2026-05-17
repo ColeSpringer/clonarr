@@ -234,6 +234,22 @@
                             <span class="tpd-pill vid" x-show="d.axes?.hdr?.scored" x-text="tpdHDRPillText(d)"></span>
                             <span class="tpd-pill" x-show="d.axes?.avgSize" x-text="d.axes.avgSize"></span>
                           </div>
+                          <div class="tpd-section" x-show="d.highlights && d.highlights.length">
+                            <div class="tpd-section-label">What you get</div>
+                            <ul class="tpd-section-list">
+                              <template x-for="(h, idx) in (d.highlights || [])" :key="idx">
+                                <li x-text="h"></li>
+                              </template>
+                            </ul>
+                          </div>
+                          <div class="tpd-section" x-show="d.bestFor && d.bestFor.length">
+                            <div class="tpd-section-label">Best for</div>
+                            <ul class="tpd-section-list">
+                              <template x-for="(b, idx) in (d.bestFor || [])" :key="idx">
+                                <li x-text="b"></li>
+                              </template>
+                            </ul>
+                          </div>
                           <p class="tpd-note" x-show="d.trashNote">
                             <strong>TRaSH note:</strong> <span x-text="d.trashNote"></span>
                           </p>

@@ -15,23 +15,30 @@ import (
 //
 //  1. Profile JSON (quality-profiles/X.json) — items[], cutoff, formatItems
 //  2. CF-group JSONs (cf-groups/*.json) — quality_profiles.include maps,
-//     default flag tells built-in vs opt-in
+//     default flag tells whether HDR/Audio scoring is enabled by default
+//     and which HDR variants (DV Boost, HDR10+ Boost) are available as
+//     opt-ins. The cf-group lists themselves aren't stored — only the
+//     boolean conclusions on Axes.HDR / Axes.Audio.
 //  3. Profile markdown section (docs/<App>/<app>-setup-quality-profiles.md) —
-//     tagline ("If you prefer ..."), size ("_Size: X-Y GB..._"), optional
-//     Note, optional Workflow Logic block
+//     tagline ("If you prefer ..."), size ("_Size: X-Y GB..._"), optional Note
+//
+// On top of those raw fields, two composed bullet-lists give the editorial
+// framing TRaSH itself doesn't ship: Highlights ("what you get") and
+// BestFor ("who it suits"). Both are derived from axes + formatItems
+// patterns + the profile-name prefix — no invented prose, every bullet
+// asserts a fact the data supports.
 //
 // New profiles TRaSH adds get described automatically on the next pull.
 type ProfileDescription struct {
-	TrashID       string       `json:"trashId"`
-	Name          string       `json:"name"`
-	App           string       `json:"app"` // "radarr" | "sonarr"
-	Tagline       string       `json:"tagline,omitempty"`
-	Axes          ProfileAxes  `json:"axes"`
-	BuiltInGroups []CFGroupRef `json:"builtInGroups"`
-	OptInGroups   []CFGroupRef `json:"optInGroups"`
-	TrashNote     string       `json:"trashNote,omitempty"`
-	WorkflowSteps []string     `json:"workflowSteps,omitempty"`
-	TrashURL      string       `json:"trashUrl,omitempty"`
+	TrashID    string      `json:"trashId"`
+	Name       string      `json:"name"`
+	App        string      `json:"app"` // "radarr" | "sonarr"
+	Tagline    string      `json:"tagline,omitempty"`
+	Axes       ProfileAxes `json:"axes"`
+	Highlights []string    `json:"highlights,omitempty"`
+	BestFor    []string    `json:"bestFor,omitempty"`
+	TrashNote  string      `json:"trashNote,omitempty"`
+	TrashURL   string      `json:"trashUrl,omitempty"`
 }
 
 // ProfileAxes is the 7-row quick-fact summary shown as pills on the profile card.
@@ -58,22 +65,13 @@ type ProfileAudioSummary struct {
 	Scored bool `json:"scored"`
 }
 
-// CFGroupRef is a lightweight reference to a TRaSH cf-group that includes the
-// profile in its quality_profiles.include map. Used for built-in and opt-in
-// lists shown in the profile card's collapsible.
-type CFGroupRef struct {
-	Name    string `json:"name"`
-	TrashID string `json:"trashId"`
-}
-
 // ProfileMarkdownSection is the parsed per-profile section of TRaSH's
 // docs/<App>/<app>-setup-quality-profiles.md file. All fields are optional —
-// not every profile has a Note or a Workflow Logic block.
+// not every profile has a Note.
 type ProfileMarkdownSection struct {
-	Tagline       string
-	SizeText      string
-	Note          string
-	WorkflowSteps []string
+	Tagline  string
+	SizeText string
+	Note     string
 }
 
 // DescribeProfiles returns ProfileDescription for every profile in the app's
@@ -162,8 +160,6 @@ func LoadProfileMarkdown(dataDir, app string) (map[string]ProfileMarkdownSection
 //   - Note = lines starting with "Note:" (single-line; if TRaSH adds
 //     multi-line notes later, this captures only the first line — defensible
 //     since all current notes are single-line)
-//   - WorkflowSteps = bullet items inside the ??? abstract "Workflow Logic"
-//     block, until that block's blank-line terminator
 func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]ProfileMarkdownSection {
 	sections := map[string]ProfileMarkdownSection{}
 	scanner := bufio.NewScanner(r)
@@ -172,14 +168,10 @@ func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]P
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var (
-		currentProfile  string
-		inWorkflowBlock bool
-		workflowIndent  int
-		taglineSeen     bool
+		currentProfile string
+		taglineSeen    bool
 	)
 	sizeRe := regexp.MustCompile(`^[-*]\s*_Size:\s*(.+?)\.?_\s*$`)
-	workflowStartRe := regexp.MustCompile(`^(\s*)\?\?\?\s+abstract\s+"Workflow Logic`)
-	workflowBulletRe := regexp.MustCompile(`^\s*-\s+(.+)$`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -187,52 +179,18 @@ func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]P
 		if strings.HasPrefix(line, "### ") {
 			currentProfile = strings.TrimSpace(strings.TrimPrefix(line, "### "))
 			sections[currentProfile] = ProfileMarkdownSection{}
-			inWorkflowBlock = false
 			taglineSeen = false
 			continue
 		}
 		// New top-level section ends the current profile context
 		if strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "### ") {
 			currentProfile = ""
-			inWorkflowBlock = false
 			continue
 		}
 		if currentProfile == "" {
 			continue
 		}
 		sec := sections[currentProfile]
-
-		// Workflow block — capture bullet items inside the ??? abstract block
-		if !inWorkflowBlock {
-			if m := workflowStartRe.FindStringSubmatch(line); m != nil {
-				inWorkflowBlock = true
-				workflowIndent = len(m[1])
-				continue
-			}
-		} else {
-			// Block ends when we hit a line at <= the opening indent that
-			// isn't blank and isn't a continuation bullet/text
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				// blank line — could continue (extended ??? block)
-				continue
-			}
-			lineIndent := len(line) - len(strings.TrimLeft(line, " "))
-			if lineIndent <= workflowIndent {
-				// dedented back to or above the ??? line — block ended
-				inWorkflowBlock = false
-				// fall through to normal handling
-			} else {
-				if bm := workflowBulletRe.FindStringSubmatch(line); bm != nil {
-					step := strings.TrimSpace(bm[1])
-					// Replace markdown backticks with plain text
-					step = strings.ReplaceAll(step, "`", "")
-					sec.WorkflowSteps = append(sec.WorkflowSteps, step)
-					sections[currentProfile] = sec
-				}
-				continue
-			}
-		}
 
 		// Tagline — first non-blank prose line after header
 		trimmed := strings.TrimSpace(line)
@@ -270,7 +228,8 @@ func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]P
 // matching markdown section.
 //
 // Falls back to JSON-only data when markdown is missing or the section is
-// absent — UI gets empty Tagline/Note/WorkflowSteps and still renders the axes.
+// absent — UI gets empty Tagline/Note and still renders the axes + composed
+// Highlights / BestFor (which only need JSON-derivable facts).
 func describeProfile(
 	app string,
 	profile *TrashQualityProfile,
@@ -290,49 +249,39 @@ func describeProfile(
 			Cutoff:     profile.Cutoff,
 			AvgSize:    mdSec.SizeText,
 		},
-		TrashNote:     mdSec.Note,
-		WorkflowSteps: mdSec.WorkflowSteps,
+		TrashNote: mdSec.Note,
 	}
 
-	// Walk cf-groups: any group whose quality_profiles.include map contains
-	// this profile's name is associated with the profile. Split by group
-	// default=true (built-in when synced) vs default=false (opt-in available).
-	var builtIn, optIn []CFGroupRef
+	// Walk cf-groups looking for HDR/Audio scoring inclusion. The cf-group
+	// LISTS themselves aren't stored — only the boolean conclusions on
+	// Axes.HDR.Scored / Axes.Audio.Scored / Axes.HDR.OptIns. That info
+	// drives the pills + the composer.
 	var hdrOptIns []string
 	for _, g := range allGroups {
 		if _, ok := g.QualityProfiles.Include[profile.Name]; !ok {
 			continue
 		}
-		ref := CFGroupRef{Name: g.Name, TrashID: g.TrashID}
-		if strings.ToLower(g.Default) == "true" {
-			builtIn = append(builtIn, ref)
-			// Audio detection — Audio Formats group included with default=true
+		isDefault := strings.ToLower(g.Default) == "true"
+		if isDefault {
 			if g.TrashID == audioFormatsTrashID(app) {
 				out.Axes.Audio.Scored = true
 			}
-			// HDR detection — primary HDR Formats group
 			if g.TrashID == hdrFormatsTrashID(app) {
 				out.Axes.HDR.Scored = true
 			}
-		} else {
-			optIn = append(optIn, ref)
-			// HDR variant opt-ins — flag them on the axes so the pill can
-			// show "HDR · DV/HDR10+ opt-in" without consulting the cf-group
-			// list separately
-			if isHDRVariantGroup(g.Name) {
-				short := shortHDRVariantName(g.Name)
-				if short != "" {
-					hdrOptIns = append(hdrOptIns, short)
-				}
+		} else if isHDRVariantGroup(g.Name) {
+			// default=false HDR variant — surface as opt-in on the pill
+			if short := shortHDRVariantName(g.Name); short != "" {
+				hdrOptIns = append(hdrOptIns, short)
 			}
 		}
 	}
-	sort.Slice(builtIn, func(i, j int) bool { return builtIn[i].Name < builtIn[j].Name })
-	sort.Slice(optIn, func(i, j int) bool { return optIn[i].Name < optIn[j].Name })
 	sort.Strings(hdrOptIns)
-	out.BuiltInGroups = builtIn
-	out.OptInGroups = optIn
 	out.Axes.HDR.OptIns = hdrOptIns
+
+	// Compose editorial sections from the now-populated axes + profile data.
+	out.Highlights = composeHighlights(profile, out.Axes)
+	out.BestFor = composeBestFor(profile, out.Axes)
 	return out
 }
 
@@ -526,4 +475,197 @@ func shortHDRVariantName(name string) string {
 		return "" // omit from axis pill — too niche
 	}
 	return short
+}
+
+// --- Editorial composers (auto-derived "what you get" + "best for") ---
+//
+// composeHighlights and composeBestFor turn the raw axes + formatItems +
+// profile name into bullet-list editorial framing TRaSH itself doesn't
+// ship. The rule is strict: each bullet must assert a FACT the data
+// supports. No invented use-cases, no aspirational marketing copy. If a
+// profile's data doesn't justify a bullet, we leave it out — sparse cards
+// are fine.
+
+// composeHighlights returns "What you get" bullets describing what scoring
+// + sources + variant-tuning the profile applies.
+func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string {
+	var out []string
+
+	// 1) Source statement — most important fact, always first
+	src := sourceHighlight(axes.Sources)
+	if src != "" {
+		out = append(out, src)
+	}
+
+	// 2) Audio + HDR features when scored
+	if axes.HDR.Scored {
+		hdr := "HDR scoring (HDR10 by default)"
+		if len(axes.HDR.OptIns) > 0 {
+			hdr += " — " + strings.Join(axes.HDR.OptIns, " / ") + " available as opt-in"
+		}
+		out = append(out, hdr)
+	}
+	if axes.Audio.Scored {
+		out = append(out, "Lossless audio prioritized (Atmos / DTS-X / TrueHD / DTS-HD MA)")
+	}
+
+	// 3) Variant-specific tuning recognized by profile name + formatItems
+	if hasAnimeTuning(profile) {
+		out = append(out, "Anime release-group tier scoring (BD Tier 1-8, Web Tier 1-6)")
+		if _, ok := profile.FormatItems["Anime Dual Audio"]; ok {
+			out = append(out, "Multi-language audio scoring (dual-audio preferred)")
+		}
+	}
+	if vlabel := languageVariantHighlight(profile.Name); vlabel != "" {
+		out = append(out, vlabel)
+	}
+	if isSQPProfile(profile.Name) {
+		out = append(out, "Streaming Quality Profile — stricter tier-based scoring than standard WEB-DL profiles")
+	}
+
+	// 4) Repack/Proper auto-upgrade is universal in TRaSH profiles, mention
+	//    it so users understand re-releases get caught
+	if hasRepackScoring(profile) {
+		out = append(out, "Auto-upgrade to Repacks / Propers when re-released")
+	}
+
+	return out
+}
+
+// composeBestFor returns "Best for" bullets — audience hints inferred from
+// what the profile actually does. Conservative: only state implications
+// that follow directly from features.
+func composeBestFor(profile *TrashQualityProfile, axes ProfileAxes) []string {
+	var out []string
+
+	// Display tier inferred from primary resolution + HDR scoring
+	is4K := strings.Contains(axes.Resolution, "2160p")
+	if is4K && axes.HDR.Scored {
+		out = append(out, "4K HDR-capable TVs")
+	} else if is4K {
+		out = append(out, "4K TVs")
+	} else {
+		out = append(out, "1080p TVs")
+	}
+
+	// Audio gear suggestion when lossless is prioritized
+	if axes.Audio.Scored {
+		out = append(out, "Sound systems that benefit from lossless audio (Atmos / DTS-X / TrueHD)")
+	}
+
+	// Storage caveat for the heavy profiles
+	if isLargeFootprint(axes) {
+		out = append(out, "Setups with storage to spare — see the size estimate above")
+	}
+
+	// Variant-specific audience
+	if hasAnimeTuning(profile) {
+		out = append(out, "Anime collections (multi-audio support if dual-audio scoring is enabled)")
+	}
+	if isFrenchVariant(profile.Name) {
+		out = append(out, "French-speaking users wanting French audio or subtitles")
+	}
+	if isGermanVariant(profile.Name) {
+		out = append(out, "German-speaking users wanting German audio")
+	}
+
+	return out
+}
+
+// sourceHighlight returns the canonical source-description bullet derived
+// from the normalised source list (same source classification used by the
+// frontend's tpdSourceLabel pill, just expanded into a sentence).
+func sourceHighlight(sources []string) string {
+	set := map[string]bool{}
+	for _, s := range sources {
+		set[s] = true
+	}
+	hasWeb := set["WEB-DL"] || set["WEBRip"]
+	webSuffix := ""
+	if hasWeb {
+		webSuffix = " with WEB-DL fallback"
+	}
+	switch {
+	case set["UHD Bluray Remux"]:
+		return "Uncompressed 4K Bluray Remux (disc-perfect picture)" + webSuffix
+	case set["Bluray Remux"]:
+		return "Uncompressed 1080p Bluray Remux (disc-perfect picture)" + webSuffix
+	case set["UHD Bluray"]:
+		return "4K Bluray encodes from vetted release groups" + webSuffix
+	case set["Bluray"]:
+		return "1080p Bluray encodes from vetted release groups" + webSuffix
+	case hasWeb:
+		return "Streaming WEB-DL releases from vetted release groups"
+	}
+	return ""
+}
+
+// hasAnimeTuning is true when the profile uses TRaSH's anime-specific
+// scoring system. Detected by either the [Anime] name prefix or the
+// presence of any Anime Tier CF in formatItems (covers both Sonarr and
+// Radarr anime profiles).
+func hasAnimeTuning(p *TrashQualityProfile) bool {
+	if strings.HasPrefix(p.Name, "[Anime]") {
+		return true
+	}
+	for name := range p.FormatItems {
+		if strings.HasPrefix(name, "Anime BD Tier") || strings.HasPrefix(name, "Anime Web Tier") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasRepackScoring is true when the profile scores TRaSH's Repack/Proper
+// CFs (the standard re-release auto-upgrade mechanism). Universal in
+// TRaSH profiles today; guarded so a future profile without it doesn't
+// claim the feature.
+func hasRepackScoring(p *TrashQualityProfile) bool {
+	for name := range p.FormatItems {
+		if name == "Repack/Proper" || name == "Repack2" || name == "Repack3" {
+			return true
+		}
+	}
+	return false
+}
+
+// languageVariantHighlight returns a one-line variant description for
+// recognised French/German naming prefixes. These prefixes encode well-
+// documented torrenting-community conventions, not editorial speculation:
+//
+//   [French MULTi.VF]  — multi-audio with French dub (Version Française)
+//   [French MULTi.VO]  — multi-audio with original audio (e.g. English)
+//   [French VOSTFR]    — original audio with French subtitles
+//   [German]           — German-audio variant of the same base profile
+//
+// Returns empty for unrecognised prefixes — caller skips the bullet.
+func languageVariantHighlight(name string) string {
+	switch {
+	case strings.HasPrefix(name, "[French MULTi.VF]"):
+		return "Multi-audio with French dub (VF) preferred"
+	case strings.HasPrefix(name, "[French MULTi.VO]"):
+		return "Multi-audio with original audio (VO) preferred over French dubs"
+	case strings.HasPrefix(name, "[French VOSTFR]"):
+		return "Original audio with French subtitles (VOSTFR)"
+	case strings.HasPrefix(name, "[German]"):
+		return "German audio preferred (variant of the same-named base profile)"
+	}
+	return ""
+}
+
+func isFrenchVariant(name string) bool { return strings.HasPrefix(name, "[French ") }
+func isGermanVariant(name string) bool { return strings.HasPrefix(name, "[German]") }
+func isSQPProfile(name string) bool    { return strings.HasPrefix(name, "[SQP]") }
+
+// isLargeFootprint is true when the profile's source mix puts file sizes
+// in the "noticeably big" tier — Remux of any resolution, or anything
+// 2160p. The cards already show the actual size estimate; this just
+// triggers the storage caveat bullet.
+func isLargeFootprint(axes ProfileAxes) bool {
+	for _, s := range axes.Sources {
+		if strings.Contains(s, "Remux") {
+			return true
+		}
+	}
+	return strings.Contains(axes.Resolution, "2160p")
 }
