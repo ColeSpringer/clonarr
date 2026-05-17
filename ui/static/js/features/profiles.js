@@ -536,6 +536,8 @@ export default {
             }
             this.loadTrashProfiles('radarr');
             this.loadTrashProfiles('sonarr');
+            this.loadTrashProfileDescriptions('radarr');
+            this.loadTrashProfileDescriptions('sonarr');
             this.loadQualitySizes('radarr');
             this.loadQualitySizes('sonarr');
             this.loadCFBrowse('radarr');

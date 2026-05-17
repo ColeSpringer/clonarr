@@ -1,0 +1,167 @@
+// trash-profile-discovery.js — drives the v3 TRaSH Profiles browse tab.
+// Renders rich auto-derived descriptions (axes + cf-groups + markdown notes
+// + workflow logic) so users can pick a profile without entering the editor.
+//
+// Data flow: GET /api/trash/{app}/profiles/descriptions returns
+// ProfileDescription[] (see internal/core/trash_profile_describer.go for the
+// schema). We cache per-app, re-fetch on TRaSH pull-complete.
+//
+// View modes: 'grid' (default — 3-col auto-fill, all cards expanded) and
+// 'list' (vertical compact rows, click-to-expand). Filter chips narrow
+// the set by HDR/audio/in-use/etc; search narrows by name + tagline.
+
+export default {
+  state: {
+    // app → ProfileDescription[]
+    trashProfileDescriptions: { radarr: [], sonarr: [] },
+    // app → bool (in-flight request)
+    tpdLoading: { radarr: false, sonarr: false },
+    // 'grid' | 'list' (per-browser localStorage)
+    tpdView: localStorage.getItem('clonarr_tpdView') || 'grid',
+    // filter chip — 'all' | 'hd' | 'uhd' | 'hdr' | 'lossless' | 'in-use'
+    tpdFilter: 'all',
+    tpdSearch: '',
+    // trash_id → bool (which cards are expanded in list view)
+    tpdOpenIds: {},
+  },
+
+  methods: {
+    async loadTrashProfileDescriptions(appType) {
+      if (!appType) return;
+      if (this.tpdLoading[appType]) return;
+      this.tpdLoading = { ...this.tpdLoading, [appType]: true };
+      try {
+        const r = await fetch(`/api/trash/${appType}/profiles/descriptions`);
+        if (!r.ok) {
+          // 4xx/5xx — clear cached list so empty-state renders
+          this.trashProfileDescriptions = { ...this.trashProfileDescriptions, [appType]: [] };
+          return;
+        }
+        const data = await r.json();
+        this.trashProfileDescriptions = { ...this.trashProfileDescriptions, [appType]: data || [] };
+      } catch (e) {
+        console.error('loadTrashProfileDescriptions:', e);
+        this.trashProfileDescriptions = { ...this.trashProfileDescriptions, [appType]: [] };
+      } finally {
+        this.tpdLoading = { ...this.tpdLoading, [appType]: false };
+      }
+    },
+
+    tpdSetView(view) {
+      if (view !== 'grid' && view !== 'list') return;
+      this.tpdView = view;
+      localStorage.setItem('clonarr_tpdView', view);
+    },
+
+    tpdSetFilter(filter) {
+      this.tpdFilter = filter;
+    },
+
+    tpdToggleOpen(trashId) {
+      this.tpdOpenIds = { ...this.tpdOpenIds, [trashId]: !this.tpdOpenIds[trashId] };
+    },
+
+    tpdIsOpen(trashId) {
+      return !!this.tpdOpenIds[trashId];
+    },
+
+    // True when at least one auto-sync rule references this trash_id on any
+    // instance of the same app type. Drives the "in use" badge.
+    tpdProfileInUse(appType, trashId) {
+      const rules = this.autoSyncRules || [];
+      const instIds = new Set(this.instancesOfType(appType).map(i => i.id));
+      return rules.some(r => instIds.has(r.instanceId) && r.trashProfileId === trashId);
+    },
+
+    // Apply search + filter chip to the description list. Returns a new
+    // array — original state isn't mutated.
+    tpdFiltered(appType) {
+      const all = this.trashProfileDescriptions[appType] || [];
+      const q = (this.tpdSearch || '').toLowerCase().trim();
+      const f = this.tpdFilter || 'all';
+      return all.filter(d => {
+        if (q) {
+          const hay = (d.name + ' ' + (d.tagline || '')).toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        switch (f) {
+          case 'all': return true;
+          case 'hd':       return (d.axes?.resolution || '').includes('1080p') && !(d.axes?.resolution || '').includes('2160p');
+          case 'uhd':      return (d.axes?.resolution || '').includes('2160p');
+          case 'hdr':      return !!d.axes?.hdr?.scored;
+          case 'lossless': return !!d.axes?.audio?.scored;
+          case 'in-use':   return this.tpdProfileInUse(appType, d.trashId);
+        }
+        return true;
+      });
+    },
+
+    // Group filtered profiles by their groupName (Standard, SQP, Anime, …).
+    // Returns [{ name, profiles[] }] ordered by groupName from the existing
+    // trashProfiles list (so display order matches the rest of the UI).
+    tpdGrouped(appType) {
+      const filtered = this.tpdFiltered(appType);
+      const groupOrder = []; // preserve first-seen order
+      const buckets = {};
+      // Pull groupName from the existing profile list keyed by trashId, so
+      // we reuse the same grouping/coloring as the classic TRaSH tab.
+      const meta = this.trashProfiles[appType] || [];
+      const groupOf = id => (meta.find(p => p.trashId === id)?.groupName) || 'Other';
+      for (const d of filtered) {
+        const g = groupOf(d.trashId);
+        if (!buckets[g]) {
+          buckets[g] = [];
+          groupOrder.push(g);
+        }
+        buckets[g].push(d);
+      }
+      return groupOrder.map(name => ({ name, profiles: buckets[name] }));
+    },
+
+    // --- Pill-rendering helpers (so templates stay readable) ---
+
+    tpdAxisAudioLabel(d) {
+      return d.axes?.audio?.scored ? 'Lossless audio' : 'Lossy audio';
+    },
+    tpdAxisAudioMuted(d) {
+      return !d.axes?.audio?.scored;
+    },
+    tpdAxisHDRLabel(d) {
+      const hdr = d.axes?.hdr;
+      if (!hdr?.scored) return 'No HDR';
+      if (hdr.optIns && hdr.optIns.length > 0) {
+        return `HDR · ${hdr.optIns.join('/')} opt-in`;
+      }
+      return 'HDR';
+    },
+    tpdAxisHDRMuted(d) {
+      return !d.axes?.hdr?.scored;
+    },
+    tpdAxisHDRClass(d) {
+      return d.axes?.hdr?.scored ? 'pill vid' : 'pill muted';
+    },
+    tpdAxisAudioClass(d) {
+      return d.axes?.audio?.scored ? 'pill aud' : 'pill muted';
+    },
+
+    // Click-handler for the primary "Use →" CTA on a card. Opens the
+    // existing sync-rule editor for this profile on the first instance
+    // of the active app type. Falls back to instance picker when there
+    // are 2+ instances (not implemented in this slice — defers to existing
+    // openProfileDetail flow which prompts).
+    tpdUseProfile(appType, trashId) {
+      const insts = this.instancesOfType(appType);
+      if (insts.length === 0) {
+        this.showToast(`Add a ${appType} instance first to use this profile`, 'error', 6000);
+        return;
+      }
+      // Look up the classic profile object — openProfileDetail expects it
+      const profile = (this.trashProfiles[appType] || []).find(p => p.trashId === trashId);
+      if (!profile) {
+        this.showToast('Profile not found in TRaSH data', 'error', 6000);
+        return;
+      }
+      this.openProfileDetail(insts[0], profile);
+    },
+  },
+};

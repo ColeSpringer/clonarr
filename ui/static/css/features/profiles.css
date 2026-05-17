@@ -365,3 +365,133 @@
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
   font-size: 11.5px;
 }
+
+/* ============================================================
+   v3 TRaSH Profile Discovery — compact cards with pill axes
+   ============================================================
+   Drives /profiles → TRaSH Profiles tab in the v3 Modern UI.
+   Card content is auto-derived (see internal/core/trash_profile_describer.go);
+   layout switches between grid (all-expanded) and list (click-expand) via
+   the .tpd-view-grid / .tpd-view-list class on the page container. */
+
+.tpd-page { padding: 16px 22px 32px; max-width: 1500px; }
+.tpd-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 18px; }
+.tpd-search {
+  flex: 1; max-width: 320px;
+  padding: 6px 11px; border: 1px solid var(--border-subtle); border-radius: 5px;
+  background: var(--bg-elevated); color: var(--text-body); font-size: 12.5px;
+}
+.tpd-chip {
+  padding: 4px 11px; border: 1px solid var(--border-subtle); border-radius: 12px;
+  font-size: 11.5px; color: var(--text-secondary); background: transparent; cursor: pointer;
+}
+.tpd-chip.active { background: var(--app-color); color: var(--text-on-accent); border-color: var(--app-color); font-weight: 500; }
+.tpd-view-toggle {
+  margin-left: auto; display: inline-flex; border: 1px solid var(--border-subtle);
+  border-radius: 5px; overflow: hidden; background: var(--bg-elevated);
+}
+.tpd-view-btn {
+  padding: 5px 12px; background: transparent; border: 0; color: var(--text-secondary);
+  font-size: 12px; cursor: pointer; border-right: 1px solid var(--border-subtle);
+}
+.tpd-view-btn:last-child { border-right: 0; }
+.tpd-view-btn.active { background: var(--bg-elevated-hover); color: var(--text-primary); }
+
+.tpd-cat { margin-bottom: 24px; }
+.tpd-cat-head {
+  display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border-muted);
+}
+.tpd-cat-name { font-size: 13px; font-weight: 600; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.6px; }
+.tpd-cat-count { margin-left: auto; color: var(--text-muted); font-size: 11.5px; }
+
+/* === Pills (axis-row) — almost monochrome, subtle hints for HDR/Audio === */
+.tpd-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.tpd-pill {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+  background: rgba(139, 147, 158, 0.10); border: 1px solid rgba(139, 147, 158, 0.20);
+  color: var(--text-secondary); white-space: nowrap;
+}
+.tpd-pill.vid { color: #a08fcc; }     /* HDR / DV — muted violet */
+.tpd-pill.aud { color: #69a87a; }     /* Lossless audio — muted green */
+.tpd-pill.muted { color: var(--text-muted); opacity: 0.7; }
+
+.tpd-used-mark {
+  font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
+  color: var(--accent-green); background: rgba(63, 185, 80, 0.10);
+  border: 1px solid rgba(63, 185, 80, 0.30);
+}
+
+/* === Card content (shared base) === */
+.tpd-card-title { font-size: 14.5px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.tpd-card-title-row { display: flex; align-items: center; gap: 8px; }
+.tpd-card-tagline { color: var(--text-secondary); font-size: 12.5px; font-style: italic; margin: 0; }
+.tpd-card-list-tagline { color: var(--text-muted); font-size: 12px; font-style: italic; }
+.tpd-card-list-tagline::before { content: " — "; }
+
+.tpd-note {
+  padding: 6px 10px; background: var(--bg-elevated);
+  border-left: 3px solid #a08fcc; border-radius: 3px;
+  font-size: 11.5px; color: var(--text-secondary); line-height: 1.45;
+}
+.tpd-note strong { color: var(--text-body); font-weight: 500; }
+
+.tpd-collapsible summary {
+  cursor: pointer; color: var(--text-secondary); font-weight: 500;
+  font-size: 11.5px; list-style: none; padding: 4px 0;
+}
+.tpd-collapsible summary::-webkit-details-marker { display: none; }
+.tpd-collapsible summary::before { content: "▸ "; color: var(--text-muted); font-size: 9px; }
+.tpd-collapsible[open] summary::before { content: "▾ "; }
+.tpd-collapsible-body { padding: 6px 0 8px 16px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
+.tpd-cfg-list { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0 6px; }
+.tpd-cfg-pill {
+  font-size: 10.5px; padding: 2px 7px; border-radius: 3px;
+  background: var(--bg-elevated); border: 1px solid var(--border-muted); color: var(--text-secondary);
+}
+.tpd-cfg-pill.optional { opacity: 0.65; border-style: dashed; }
+.tpd-cfg-sub-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text-muted); margin: 4px 0 3px;
+}
+.tpd-workflow { margin: 4px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 1.55; }
+
+.tpd-card-footer {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 6px; border-top: 1px solid var(--border-muted); margin-top: auto;
+}
+.tpd-trash-link { margin-left: auto; font-size: 11.5px; color: var(--text-muted); text-decoration: none; }
+.tpd-trash-link:hover { color: var(--app-color); }
+
+/* === GRID VIEW === */
+.tpd-view-grid .tpd-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+.tpd-view-grid .tpd-card {
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 7px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+  transition: border-color 120ms ease;
+}
+.tpd-view-grid .tpd-card.in-use { border-color: rgba(63, 185, 80, 0.45); }
+.tpd-view-grid .tpd-card-chevron,
+.tpd-view-grid .tpd-card-list-tagline { display: none; }
+
+/* === LIST VIEW === */
+.tpd-view-list .tpd-grid { display: block; }
+.tpd-view-list .tpd-card {
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;
+  margin-bottom: 5px;
+}
+.tpd-view-list .tpd-card.in-use { border-color: rgba(63, 185, 80, 0.45); }
+.tpd-view-list .tpd-card-title-row {
+  padding: 9px 14px; cursor: pointer; user-select: none;
+  display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+}
+.tpd-view-list .tpd-card-title-row:hover { background: var(--bg-row-hover, var(--bg-elevated)); }
+.tpd-view-list .tpd-card-chevron {
+  color: var(--text-muted); font-size: 9px; transition: transform 150ms;
+}
+.tpd-view-list .tpd-card.open > .tpd-card-title-row .tpd-card-chevron { transform: rotate(90deg); }
+.tpd-view-list .tpd-card-body { display: none; padding: 4px 14px 10px 28px; }
+.tpd-view-list .tpd-card.open .tpd-card-body { display: flex; flex-direction: column; gap: 8px; }

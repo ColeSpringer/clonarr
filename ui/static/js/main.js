@@ -23,6 +23,7 @@ import profiles from './features/profiles.js';
 import qualitySizes from './features/quality-sizes.js';
 import scoring from './features/scoring.js';
 import toasts from './features/toasts.js';
+import trashProfileDiscovery from './features/trash-profile-discovery.js';
 
 const featureModules = [
   navigation,
@@ -40,6 +41,7 @@ const featureModules = [
   maintenance,
   backupRestore,
   profiles,
+  trashProfileDiscovery,
   scoring,
   cfGroupBuilder,
 ];
@@ -651,6 +653,8 @@ export function clonarr() {
       }
       this.loadTrashProfiles('radarr');
       this.loadTrashProfiles('sonarr');
+      this.loadTrashProfileDescriptions('radarr');
+      this.loadTrashProfileDescriptions('sonarr');
       this.loadQualitySizes('radarr');
       this.loadQualitySizes('sonarr');
       this.loadCFBrowse('radarr');

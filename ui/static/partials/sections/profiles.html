@@ -178,49 +178,129 @@
         <!-- end Sync Rules tab -->
 
         <!-- ===== TRaSH Profiles tab ===== -->
-        <div class="page" x-show="getProfileTab(activeAppType) === 'trash-profiles'">
+        <div class="page tpd-page"
+             :class="tpdView === 'list' ? 'tpd-view-list' : 'tpd-view-grid'"
+             x-show="getProfileTab(activeAppType) === 'trash-profiles'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">TRaSH Profiles</div>
-          <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            Browse the TRaSH Guides quality profile catalog. Click a profile to view its custom formats and scoring, then sync it to your <span x-text="activeAppLabel"></span> instance to create a new rule.
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">
+            Browse TRaSH-Guides quality profiles. Each card describes what the profile gives you — pick one, then click "Use →" to set up a sync rule for your <span x-text="activeAppLabel"></span> instance.
           </div>
 
-          <!-- TRaSH Profiles list -->
-          <template x-if="trashProfiles[activeAppType] && trashProfiles[activeAppType].length > 0">
-          <div>
-            <template x-for="group in groupedProfiles(activeAppType)" :key="group.name">
-              <div class="card" :class="'grp-' + group.name.toLowerCase().replace(/[^a-z]/g, '')">
-                <button type="button" class="profile-group-header" @click="toggleProfileGroup(activeAppType, group.name)"
-                        :aria-expanded="isProfileGroupExpanded(activeAppType, group.name)">
-                  <span class="profile-group-chevron" :class="{ open: isProfileGroupExpanded(activeAppType, group.name) }">&#9654;</span>
-                  <span x-text="group.name"></span>
-                  <span class="profile-group-count" x-text="group.profiles.length + (group.profiles.length === 1 ? ' profile' : ' profiles')"></span>
-                </button>
-                <div x-show="isProfileGroupExpanded(activeAppType, group.name)">
-                  <template x-for="p in group.profiles" :key="p.trashId">
-                    <div class="profile-row">
-                      <div class="profile-name">
-                        <a class="profile-name-link" @click.stop="instancesOfType(activeAppType)[0] && openProfileDetail(instancesOfType(activeAppType)[0], p)" x-text="p.name"></a>
-                        <span class="sqp-badge" x-show="p.trashScoreSet?.startsWith('sqp')">SQP</span>
-                        <span x-show="p.trashDescription" class="cf-info"
-                              @mouseenter="showCFTooltip($event, p.trashDescription)"
-                              @mouseleave="hideCFTooltip()">&#9432;</span>
-                      </div>
-                      <div style="display:flex;align-items:center;gap:8px">
-                        <span style="font-size:12px;background:var(--bg-muted);color:var(--text-muted);padding:2px 8px;border-radius:3px" x-text="p.cfCount + ' CFs'"></span>
-                      </div>
-                    </div>
-                  </template>
+          <template x-if="trashProfileDescriptions[activeAppType] && trashProfileDescriptions[activeAppType].length > 0">
+            <div>
+              <!-- Toolbar: search + filters + view toggle -->
+              <div class="tpd-toolbar">
+                <input class="tpd-search" placeholder="Search profiles…" x-model="tpdSearch">
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'all' }" @click="tpdSetFilter('all')">All</button>
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'hd' }" @click="tpdSetFilter('hd')">1080p</button>
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'uhd' }" @click="tpdSetFilter('uhd')">4K / UHD</button>
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'hdr' }" @click="tpdSetFilter('hdr')">HDR</button>
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'lossless' }" @click="tpdSetFilter('lossless')">Lossless audio</button>
+                <button class="tpd-chip" :class="{ active: tpdFilter === 'in-use' }" @click="tpdSetFilter('in-use')">In use</button>
+                <div class="tpd-view-toggle" role="group" aria-label="View mode">
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'grid' }" @click="tpdSetView('grid')">Grid</button>
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'list' }" @click="tpdSetView('list')">List</button>
                 </div>
               </div>
-            </template>
-          </div>
-        </template>
-        <template x-if="!trashProfiles[activeAppType] || trashProfiles[activeAppType].length === 0">
-          <div class="empty-state">
-            <div class="desc">Pull TRaSH data to see available profiles. Click the Pull button in the header bar.</div>
-          </div>
-        </template>
 
+              <!-- Category sections -->
+              <template x-for="cat in tpdGrouped(activeAppType)" :key="cat.name">
+                <section class="tpd-cat">
+                  <div class="tpd-cat-head">
+                    <span class="tpd-cat-name" x-text="cat.name"></span>
+                    <span class="tpd-cat-count" x-text="cat.profiles.length + (cat.profiles.length === 1 ? ' profile' : ' profiles')"></span>
+                  </div>
+                  <div class="tpd-grid">
+                    <template x-for="d in cat.profiles" :key="d.trashId">
+                      <article class="tpd-card"
+                               :class="{
+                                 'in-use': tpdProfileInUse(activeAppType, d.trashId),
+                                 'open': tpdIsOpen(d.trashId)
+                               }">
+                        <div class="tpd-card-title-row" @click="tpdView === 'list' && tpdToggleOpen(d.trashId)">
+                          <span class="tpd-card-chevron">&#9654;</span>
+                          <h3 class="tpd-card-title" x-text="d.name"></h3>
+                          <span x-show="tpdView === 'list'" class="tpd-card-list-tagline"
+                                x-text="(d.tagline || '') + (d.axes?.avgSize ? ' · ' + d.axes.avgSize : '')"></span>
+                          <span class="tpd-used-mark" x-show="tpdProfileInUse(activeAppType, d.trashId)">in use</span>
+                        </div>
+
+                        <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
+                          <p class="tpd-card-tagline" x-show="d.tagline" x-text="d.tagline"></p>
+                          <div class="tpd-pills">
+                            <span class="tpd-pill" x-text="d.axes?.resolution || 'unknown'"></span>
+                            <template x-for="src in (d.axes?.sources || [])" :key="src">
+                              <span class="tpd-pill" x-text="src"></span>
+                            </template>
+                            <span class="tpd-pill" x-show="d.axes?.codec" x-text="d.axes.codec"></span>
+                            <span :class="tpdAxisAudioClass(d)" x-text="tpdAxisAudioLabel(d)"></span>
+                            <span :class="tpdAxisHDRClass(d)" x-text="tpdAxisHDRLabel(d)"></span>
+                            <span class="tpd-pill" x-show="d.axes?.cutoff">Cutoff: <span x-text="d.axes.cutoff"></span></span>
+                            <span class="tpd-pill" x-show="d.axes?.avgSize" x-text="d.axes.avgSize"></span>
+                          </div>
+                          <p class="tpd-note" x-show="d.trashNote">
+                            <strong>TRaSH note:</strong> <span x-text="d.trashNote"></span>
+                          </p>
+                          <details class="tpd-collapsible" x-show="(d.builtInGroups?.length || 0) + (d.optInGroups?.length || 0) > 0">
+                            <summary>
+                              Custom Format groups
+                              (<span x-text="(d.builtInGroups || []).length"></span> built-in,
+                              <span x-text="(d.optInGroups || []).length"></span> opt-in)
+                            </summary>
+                            <div class="tpd-collapsible-body">
+                              <div x-show="d.builtInGroups?.length">
+                                <div class="tpd-cfg-sub-label">Built-in (applied when synced)</div>
+                                <div class="tpd-cfg-list">
+                                  <template x-for="g in (d.builtInGroups || [])" :key="g.trashId">
+                                    <span class="tpd-cfg-pill" x-text="g.name"></span>
+                                  </template>
+                                </div>
+                              </div>
+                              <div x-show="d.optInGroups?.length">
+                                <div class="tpd-cfg-sub-label">Opt-in (available, not enabled by default)</div>
+                                <div class="tpd-cfg-list">
+                                  <template x-for="g in (d.optInGroups || [])" :key="g.trashId">
+                                    <span class="tpd-cfg-pill optional" x-text="g.name"></span>
+                                  </template>
+                                </div>
+                              </div>
+                            </div>
+                          </details>
+                          <details class="tpd-collapsible" x-show="d.workflowSteps && d.workflowSteps.length > 0">
+                            <summary>Workflow logic</summary>
+                            <div class="tpd-collapsible-body">
+                              <ol class="tpd-workflow">
+                                <template x-for="(step, idx) in (d.workflowSteps || [])" :key="idx">
+                                  <li x-text="step"></li>
+                                </template>
+                              </ol>
+                            </div>
+                          </details>
+                          <div class="tpd-card-footer">
+                            <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use →</button>
+                            <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">📖 TRaSH guide</a>
+                          </div>
+                        </div>
+                      </article>
+                    </template>
+                  </div>
+                </section>
+              </template>
+
+              <!-- Empty filter result -->
+              <template x-if="tpdFiltered(activeAppType).length === 0">
+                <div class="empty-state">
+                  <div class="desc">No profiles match the current filters. Clear the filter or search to see all profiles.</div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="!trashProfileDescriptions[activeAppType] || trashProfileDescriptions[activeAppType].length === 0">
+            <div class="empty-state">
+              <div class="desc">Pull TRaSH data to see available profiles. Click the Pull button in the header bar.</div>
+            </div>
+          </template>
         </div>
         <!-- end TRaSH Profiles tab -->
 
