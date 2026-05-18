@@ -339,13 +339,18 @@ func deriveResolution(items []QualityItem) string {
 	// classify by resolution (extracted from names like "Bluray-1080p",
 	// "WEB 2160p"). Items appear top-down by preference, so the first
 	// resolution mentioned is the target; lower resolutions are fallbacks.
+	//
+	// "Merged QPs" profiles (typically German UHD variants) wrap resolution
+	// items inside a generic parent like {name: "Merged QPs", items:
+	// ["Bluray-2160p", "WEBDL-2160p"]}. Falling back to scan nested items
+	// when the parent name has no resolution token covers that case.
 	resOrder := []string{}
 	seen := map[string]bool{}
 	for _, it := range items {
 		if !it.Allowed {
 			continue
 		}
-		res := extractResolution(it.Name)
+		res := itemResolution(it)
 		if res == "" {
 			continue
 		}
@@ -388,6 +393,22 @@ func deriveSources(items []QualityItem) []string {
 	return out
 }
 
+// itemResolution returns the resolution token for a quality item, falling
+// back to nested items[] when the parent name has no resolution (Merged
+// QPs profiles). Used by both deriveResolution and fallbackHighlight so
+// the single-level vs nested-children behavior stays consistent.
+func itemResolution(it QualityItem) string {
+	if res := extractResolution(it.Name); res != "" {
+		return res
+	}
+	for _, sub := range it.Items {
+		if res := extractResolution(sub); res != "" {
+			return res
+		}
+	}
+	return ""
+}
+
 // deriveCodec returns the dominant codec for the resolution range of the profile.
 // HD = x264 (industry standard for Bluray/WEB-DL HD). UHD = x265/HEVC (industry
 // standard for 4K Bluray/WEB-DL). Mixed profiles default to the highest-resolution
@@ -398,8 +419,16 @@ func deriveCodec(items []QualityItem) string {
 		if !it.Allowed {
 			continue
 		}
-		if strings.Contains(it.Name, "2160p") || strings.Contains(strings.ToLower(it.Name), "uhd") {
-			hasUHD = true
+		// Check parent name + nested items[] (Merged QPs profiles wrap
+		// the resolution tokens one level deeper)
+		names := append([]string{it.Name}, it.Items...)
+		for _, n := range names {
+			if strings.Contains(n, "2160p") || strings.Contains(strings.ToLower(n), "uhd") {
+				hasUHD = true
+				break
+			}
+		}
+		if hasUHD {
 			break
 		}
 	}
@@ -748,7 +777,7 @@ func fallbackHighlight(items []QualityItem) string {
 		if !it.Allowed {
 			continue
 		}
-		res := extractResolution(it.Name)
+		res := itemResolution(it)
 		if res == "" || seen[res] {
 			continue
 		}
