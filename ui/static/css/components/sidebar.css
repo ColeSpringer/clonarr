@@ -491,12 +491,19 @@ body:has(.sidebar.collapsed) .sidebar-trash-popover {
   cursor: pointer;
 }
 
-/* Defensive: keep the sidebar visually muted if both nav partials accidentally
-   render with the same visibility. The topnav/sidebar swap is now driven by
-   x-show on each root + the [data-nav-style="..."] grid rules above, so this
-   block is intentionally empty — the old `body:has(.sidebar) .topnav { display:none }`
-   broke the new opt-in topnav by hiding it whenever the sidebar partial was
-   in the DOM (always). */
+/* Defensive: belt-and-suspenders for the topnav/sidebar swap. x-show
+   on each root should already hide the inactive one, but a user reported
+   seeing the TRaSH-sync indicator from .topnav rendering above the
+   sidebar+app-banner in sidebar mode. Forcing display:none on the
+   inactive nav via the data-nav-style attribute on the x-data root
+   guarantees mutual exclusion even if Alpine x-show ever flickers (init
+   race, scope quirk, anything). Gated on the attribute (NOT on element
+   existence) so the old `body:has(.sidebar)` over-match doesn't recur —
+   when the user switches to topnav, data-nav-style becomes "topnav" and
+   this rule simply stops matching. */
+[x-data="clonarr"][data-nav-style="sidebar"] > .topnav { display: none !important; }
+[x-data="clonarr"][data-nav-style="topnav"] > .sidebar,
+[x-data="clonarr"][data-nav-style="topnav"] > main > .app-banner { display: none !important; }
 
 /* Collapsed-sidebar sub-nav flyout. Rendered as a sibling of <aside>
    (NOT inside it) so .sidebar's overflow:hidden does not clip the popup.
