@@ -340,15 +340,14 @@ export default {
     // manual /api/sync/apply, Restore, etc.). LastSyncTime / LastSyncError
     // in the backend don't distinguish trigger, so neither does this chip.
     // Two states, no chip otherwise:
-    //   ok      — green dot + "Auto-sync · 8m ago"
-    //   failed  — red dot + "Auto-sync failed · 8m ago"
+    //   ok      — green dot + "Synced to Radarr · 8m ago"
+    //   failed  — red dot + "Sync to Radarr failed · 8m ago"
     //
-    // Note "Auto-sync" prefix (vs the sidebar foot's "TRaSH synced"
-    // label) intentionally distinguishes the two timestamps: the sidebar
-    // shows when the TRaSH guide-repo was last PULLED upstream, while
-    // this chip shows when clonarr last APPLIED TRaSH data to an Arr
-    // instance. Both legitimately say "sync"; the prefix makes the
-    // difference visible at a glance.
+    // App-aware naming ("Synced to Radarr" / "Synced to Sonarr") with the
+    // app from activeAppType. The verb "synced TO" (vs "pulled FROM")
+    // distinguishes this from the sidebar foot's "TRaSH pulled" label,
+    // making it visually obvious that one is upstream fetch (TRaSH repo
+    // → clonarr) and the other is push (clonarr → Arr instance).
     //
     // Chip is hidden when no rule has any sync history at all and on
     // global sections (Settings, About) where sync isn't a relevant
@@ -382,9 +381,10 @@ export default {
         if (!latest || t > latest) latest = t;
       }
       const ago = latest ? this.timeAgo(new Date(latest).toISOString()) : 'never';
+      const app = this.activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr';
       return this.autoSyncChipState() === 'failed'
-        ? `Auto-sync failed · ${ago}`
-        : `Auto-sync · ${ago}`;
+        ? `Sync to ${app} failed · ${ago}`
+        : `Synced to ${app} · ${ago}`;
     },
 
     // Click → navigate to Profiles → History so the user can see what ran.

@@ -192,7 +192,7 @@
       <div class="sidebar-trash-status">
         <span class="dot sidebar-trash-dot"
               :class="{ stale: !trashStatus.cloned, none: !trashStatus.commitHash }"
-              x-tt="sidebarCollapsed ? (trashStatus.cloned ? 'TRaSH synced ' + formatSyncTime(trashStatus.lastPull) : 'TRaSH not synced') : null"></span>
+              x-tt="sidebarCollapsed ? (trashStatus.cloned ? 'TRaSH pulled ' + formatSyncTime(trashStatus.lastPull) : 'TRaSH not synced') : null"></span>
 
         <template x-if="trashStatus.cloned">
           <button type="button" class="sidebar-trash-button"
@@ -203,7 +203,7 @@
                   aria-controls="trash-changelog-dropdown"
                   x-tt="'Click for changelog'">
             <span class="sidebar-trash-line1">
-              <span class="sidebar-trash-label">TRaSH synced</span>
+              <span class="sidebar-trash-label">TRaSH pulled</span>
               <span class="sidebar-trash-time" x-text="formatSyncTime(trashStatus.lastPull)"></span>
               <span class="sidebar-trash-chev" :class="{ flip: showChangelog }">&#9662;</span>
             </span>
@@ -215,7 +215,7 @@
         </template>
         <template x-if="!trashStatus.cloned">
           <div class="sidebar-trash-notsynced" x-show="!sidebarCollapsed">
-            <span class="sidebar-trash-line1">TRaSH not synced</span>
+            <span class="sidebar-trash-line1">TRaSH not pulled yet</span>
             <span class="sidebar-trash-line2" x-show="trashStatus.nextPull"
                   x-text="nextPullLabel()"></span>
           </div>

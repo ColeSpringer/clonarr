@@ -35,7 +35,7 @@
                   :aria-expanded="showChangelog"
                   aria-controls="trash-changelog-dropdown"
                   x-tt="'Click for changelog'">
-            <span class="topnav-trash-label">TRaSH synced</span>
+            <span class="topnav-trash-label">TRaSH pulled</span>
             <span x-text="formatSyncTime(trashStatus.lastPull)"></span>
             <span class="topnav-trash-commit" x-show="trashStatus.commitHash" x-text="trashStatus.commitHash"></span>
             <span class="topnav-trash-chev" :style="showChangelog ? 'transform:rotate(180deg)' : ''">&#9662;</span>
@@ -43,7 +43,7 @@
         </template>
         <template x-if="!trashStatus.cloned">
           <span class="topnav-trash-empty">
-            TRaSH not synced
+            TRaSH not pulled yet
             <span x-show="trashStatus.nextPull" class="topnav-trash-next"
                   x-text="'· ' + nextPullLabel()"></span>
           </span>
