@@ -406,12 +406,23 @@
 .tpd-view-btn.active { background: var(--bg-elevated-hover); color: var(--text-primary); }
 
 .tpd-cat { margin-bottom: 24px; }
+/* Category headers (Standard / SQP / Anime / French / German) use the
+   same app-color treatment as the v3-inst-header pattern from Sync
+   Rules — gradient fade + border-image fade + name colored in
+   --app-color. Reads visually as "this section belongs to the active
+   app context" exactly like the instance cards on Sync Rules/History. */
 .tpd-cat-head {
   display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px;
-  padding-bottom: 6px; border-bottom: 1px solid var(--border-muted);
+  padding: 8px 14px;
+  background: linear-gradient(90deg, var(--app-glow) 0%, transparent 60%), var(--bg-elevated);
+  border-radius: 5px;
+  border-bottom: 1px solid;
+  border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-muted) 60%, var(--border-muted) 100%) 1;
+  border-image-slice: 0 0 1 0;
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px;
 }
-.tpd-cat-name { font-size: 13px; font-weight: 600; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.6px; }
-.tpd-cat-count { margin-left: auto; color: var(--text-muted); font-size: 11.5px; }
+.tpd-cat-name { font-size: 13px; font-weight: 600; color: var(--app-color); text-transform: uppercase; letter-spacing: 0.6px; }
+.tpd-cat-count { margin-left: auto; color: var(--text-muted); font-size: 11.5px; text-transform: none; letter-spacing: 0; font-weight: 400; }
 
 /* === Pills (axis-row) — almost monochrome, subtle hints for HDR/Audio === */
 .tpd-pills { display: flex; flex-wrap: wrap; gap: 4px; }
