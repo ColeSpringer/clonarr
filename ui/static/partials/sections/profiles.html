@@ -230,7 +230,7 @@
                           <div class="tpd-pills">
                             <span class="tpd-pill" x-text="tpdResolutionLabel(d)"></span>
                             <span class="tpd-pill" x-text="tpdSourceLabel(d)"></span>
-                            <span class="tpd-pill aud" x-show="d.axes?.audio?.scored" x-text="tpdAudioPillText(d)"></span>
+                            <span class="tpd-pill" :class="d.axes?.audio?.scored ? 'aud' : ''" x-text="tpdAudioPillText(d)"></span>
                             <span class="tpd-pill vid" x-show="d.axes?.hdr?.scored" x-text="tpdHDRPillText(d)"></span>
                           </div>
                           <div class="tpd-section" x-show="d.highlights && d.highlights.length">

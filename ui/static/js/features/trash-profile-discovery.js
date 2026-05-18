@@ -135,10 +135,14 @@ export default {
     // visual noise. A card with fewer pills correctly signals fewer
     // differentiators.
 
-    // tpdAudioPillText returns the lossless-audio pill label if the profile
-    // scores audio formats, empty string otherwise (template hides via x-show).
+    // tpdAudioPillText always returns the user-outcome audio label —
+    // "Lossless audio" when [Audio] Audio Formats is scored, "Lossy audio"
+    // otherwise. Both are positive framings (asserting what the profile
+    // actually gives), not negation. Template uses different pill classes
+    // (.aud for lossless = subtle green, neutral for lossy) so they don't
+    // visually compete.
     tpdAudioPillText(d) {
-      return d.axes?.audio?.scored ? 'Lossless audio' : '';
+      return d.axes?.audio?.scored ? 'Lossless audio' : 'Lossy audio';
     },
 
     // tpdHDRPillText returns the SHORT HDR pill label — full opt-in
