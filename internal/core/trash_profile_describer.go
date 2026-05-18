@@ -502,6 +502,17 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 		out = append(out, src)
 	}
 
+	// 1b) Fallback behavior — critical for differentiating
+	//     "strict" vs "Alternative" vs "Combined" profile variants. Three
+	//     profiles can have the same cutoff + same sources but completely
+	//     different fallback chains (Remux + WEB 2160p = strict 2160p,
+	//     Remux 2160p Alternative = falls all the way down to SDTV,
+	//     Remux 2160p Combined = 2160p + 1080p). Without this bullet
+	//     they'd render identically.
+	if fb := fallbackHighlight(profile.Items); fb != "" {
+		out = append(out, fb)
+	}
+
 	// 2) HDR — describe what the user gets, not the toggle mechanism.
 	//    Inline format list with "etc." since the exact mix varies per
 	//    profile and the user just needs "this profile picks HDR".
@@ -671,3 +682,38 @@ func languageVariantHighlight(name string) string {
 
 func isSQPProfile(name string) bool { return strings.HasPrefix(name, "[SQP]") }
 
+
+// fallbackHighlight describes how the profile behaves when its primary
+// (cutoff) resolution isn't available. Returns empty for strict
+// single-resolution profiles. Drives the distinction between standard
+// profiles, "(Alternative)" variants (accept anything down to SDTV),
+// and "(Combined)" variants (2160p + 1080p together).
+func fallbackHighlight(items []QualityItem) string {
+	var resOrder []string
+	seen := map[string]bool{}
+	for _, it := range items {
+		if !it.Allowed {
+			continue
+		}
+		res := extractResolution(it.Name)
+		if res == "" || seen[res] {
+			continue
+		}
+		seen[res] = true
+		resOrder = append(resOrder, res)
+	}
+	if len(resOrder) <= 1 {
+		// Strict profile — no fallback to describe (saves a bullet
+		// that would just repeat the cutoff resolution).
+		return ""
+	}
+	primary := resOrder[0]
+	rest := resOrder[1:]
+	// Very permissive profiles (4+ fallback rungs) — describe as full
+	// fallback rather than enumerating "1080p, 720p, 576p, 480p" which
+	// reads like data noise.
+	if len(rest) >= 4 {
+		return "Falls back through all lower qualities (down to SDTV/DVD) when no " + primary + " release is available"
+	}
+	return "Falls back to " + joinAnd(rest) + " when no " + primary + " release is available"
+}
