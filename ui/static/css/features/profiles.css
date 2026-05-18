@@ -424,7 +424,15 @@
 
 /* === Card content (shared base) === */
 .tpd-card-title { font-size: 14.5px; font-weight: 600; color: var(--text-primary); margin: 0; }
-.tpd-card-title-row { display: flex; align-items: center; gap: 8px; }
+.tpd-card-title-row {
+  /* Grid view: flex row with title wrapping allowed and used-mark
+     pinned top-right. align-items:flex-start keeps the badge anchored
+     to row 1 even when the title wraps to 2 lines (e.g. long names
+     like "[French MULTi.VF] UHD Remux (2160p)"). */
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.tpd-card-title-row .tpd-card-title { flex: 1; min-width: 0; }
+.tpd-card-title-row .tpd-used-mark { flex-shrink: 0; margin-top: 2px; }
 .tpd-card-tagline { color: var(--text-secondary); font-size: 12.5px; font-style: italic; margin: 0; }
 .tpd-card-list-tagline { color: var(--text-muted); font-size: 12px; font-style: italic; }
 .tpd-card-list-tagline::before { content: " — "; }
@@ -495,7 +503,19 @@
 .tpd-view-list .tpd-card.in-use { border-color: rgba(63, 185, 80, 0.45); }
 .tpd-view-list .tpd-card-title-row {
   padding: 9px 14px; cursor: pointer; user-select: none;
-  display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+  /* 4 cells: chevron | title (natural width) | tagline (truncates with
+     ellipsis when row narrows) | used-mark (pinned right). The earlier
+     3-column template pushed used-mark to row 2 because the title-row
+     has 4 children, not 3 — long-named profiles like "[German] UHD
+     Bluray + WEB (Alternative)" rendered with double-height collapsed
+     rows. minmax(0,1fr) on the tagline cell is what enables ellipsis. */
+  display: grid;
+  grid-template-columns: 14px auto minmax(0, 1fr) auto;
+  gap: 8px; align-items: center;
+}
+.tpd-view-list .tpd-card-title-row .tpd-card-title { white-space: nowrap; }
+.tpd-view-list .tpd-card-title-row .tpd-card-list-tagline {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .tpd-view-list .tpd-card-title-row:hover { background: var(--bg-row-hover, var(--bg-elevated)); }
 .tpd-view-list .tpd-card-chevron {
