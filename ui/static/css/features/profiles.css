@@ -429,17 +429,15 @@
 .tpd-card-list-tagline { color: var(--text-muted); font-size: 12px; font-style: italic; }
 .tpd-card-list-tagline::before { content: " — "; }
 
-.tpd-note {
-  padding: 6px 10px; background: var(--bg-elevated);
-  border-left: 3px solid #a08fcc; border-radius: 3px;
-  font-size: 11.5px; color: var(--text-secondary); line-height: 1.45;
-}
-.tpd-note strong { color: var(--text-body); font-weight: 500; }
-
 /* Editorial bullet lists ("What you get" / "Best for") composed from
    axes + formatItems + variant-prefix recognition. Sparse profiles get
    shorter lists — never empty filler. */
-.tpd-section { display: flex; flex-direction: column; gap: 2px; }
+.tpd-section {
+  display: flex; flex-direction: column; gap: 4px;
+  /* extra top spacing so the section header doesn't visually collide
+     with the pills row above it (card-body gap is only 8px) */
+  margin-top: 4px;
+}
 .tpd-section-label {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px;
   color: var(--text-muted); font-weight: 600;

@@ -249,9 +249,6 @@
                               </template>
                             </ul>
                           </div>
-                          <p class="tpd-note" x-show="d.trashNote">
-                            <strong>TRaSH note:</strong> <span x-text="d.trashNote"></span>
-                          </p>
                           <div class="tpd-card-footer">
                             <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use →</button>
                             <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">📖 TRaSH guide</a>
