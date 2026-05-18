@@ -533,11 +533,15 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 
 	// 4) Variant-specific tuning. No "Tier 1-8" detail — users don't know
 	//    what TRaSH tiers are.
+	//
+	//    Anime Dual Audio CF: previously triggered a "prefers multi-audio
+	//    releases" bullet. Dropped after verifying the CF has trash_scores
+	//    = null in TRaSH data — its presence in formatItems doesn't mean
+	//    scoring; could just be tracking. The German Anime variant has
+	//    German DL +11000 doing the multi-audio work, not Anime Dual Audio.
+	//    Generic claim about anime multi-audio isn't data-supported.
 	if hasAnimeTuning(profile) {
 		out = append(out, "Tuned for anime-specific release groups")
-		if _, ok := profile.FormatItems["Anime Dual Audio"]; ok {
-			out = append(out, "Prefers releases with multiple audio tracks (e.g. Japanese + English)")
-		}
 	}
 	if vlabel := languageVariantHighlight(profile.Name); vlabel != "" {
 		out = append(out, vlabel)
