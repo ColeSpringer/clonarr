@@ -262,17 +262,22 @@ func describeProfile(
 		TrashID:  profile.TrashID,
 		Name:     profile.Name,
 		App:      app,
-		Tagline:  cleanTagline(mdSec.Tagline),
 		TrashURL: profile.TrashURL,
 		Axes: ProfileAxes{
 			Resolution: deriveResolution(profile.Items),
 			Sources:    deriveSources(profile.Items),
 			Codec:      deriveCodec(profile.Items),
 			Cutoff:     profile.Cutoff,
-			AvgSize:    mdSec.SizeText,
 		},
 		TrashNote: mdSec.Note,
 	}
+	// Tagline + AvgSize are auto-generated uniformly for ALL profiles
+	// from the axes + profile metadata. Markdown taglines only existed
+	// for ~9 of 30+ profiles, leaving anime / SQP / foreign-language
+	// cards visually sparse. Generating both from profile data gives
+	// every card the same level of detail.
+	out.Tagline = composeTagline(profile, out.Axes)
+	out.Axes.AvgSize = typicalSize(app, profile, out.Axes)
 
 	// Walk cf-groups looking for HDR/Audio scoring inclusion. The cf-group
 	// LISTS themselves aren't stored — only the boolean conclusions on
@@ -847,4 +852,154 @@ func parseDisclaimerHTML(s string) DisclaimerNotice {
 		LinkText: clean(m[3]),
 		After:    " " + strings.TrimLeft(clean(m[4]), " "),
 	}
+}
+
+// --- Auto-generated tagline + size (uniform across all profiles) ---
+//
+// Replaces the markdown-derived Tagline + AvgSize that only existed
+// for ~9 of TRaSH's ~30 profiles (standard Radarr/Sonarr). Generating
+// both from JSON-derivable facts gives every profile card the same
+// level of detail: Anime, SQP, French, German all get a tagline + size
+// estimate without depending on TRaSH adding per-profile markdown.
+//
+// The composition is rule-based (not editorial): each leading
+// adjective and size range maps from observable profile properties.
+
+// composeTagline returns a short one-line categorical descriptor like
+// "High-quality 1080p encodes" or "Uncompressed 4K Remux" derived from
+// the profile's tier (Remux / SQP / Anime / Standard / language variant),
+// primary resolution, and source class. Pills + "What you get" carry
+// the full source/scoring detail — the tagline is just the label.
+func composeTagline(profile *TrashQualityProfile, axes ProfileAxes) string {
+	if isBaseProfile(profile.Name) {
+		return "Test profile (do not use)"
+	}
+	tier := pickTierAdjective(profile, axes)
+	res := pickResolutionLabel(axes)
+	sourceClass := pickSourceClass(axes)
+	parts := []string{tier, res, sourceClass}
+	out := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if out != "" {
+			out += " "
+		}
+		out += p
+	}
+	return out
+}
+
+// pickTierAdjective picks the leading word for the tagline. Each branch
+// maps from an observable profile property to a defensible label — no
+// invented descriptors. Standard fallthrough = "High-quality".
+func pickTierAdjective(profile *TrashQualityProfile, axes ProfileAxes) string {
+	switch {
+	case isSQPProfile(profile.Name):
+		return "Streaming-optimized"
+	case hasAnimeTuning(profile):
+		return "Anime-tuned"
+	case strings.HasPrefix(profile.Name, "[French MULTi.VF]"):
+		return "French-dubbed"
+	case strings.HasPrefix(profile.Name, "[French MULTi.VO]"):
+		return "French (original audio)"
+	case strings.HasPrefix(profile.Name, "[French VOSTFR]"):
+		return "French-subtitled"
+	case strings.HasPrefix(profile.Name, "[German]"):
+		return "German-language"
+	case hasRemuxSource(axes):
+		return "Uncompressed"
+	}
+	return "High-quality"
+}
+
+// pickResolutionLabel returns the user-facing resolution token for the
+// tagline. "4K UHD" is more recognisable than "2160p" for consumer
+// audience; "1080p" stays as-is.
+func pickResolutionLabel(axes ProfileAxes) string {
+	switch {
+	case strings.Contains(axes.Resolution, "2160p"):
+		return "4K UHD"
+	case strings.Contains(axes.Resolution, "1080p"):
+		return "1080p"
+	case strings.Contains(axes.Resolution, "720p"):
+		return "720p"
+	}
+	return axes.Resolution
+}
+
+// pickSourceClass returns the trailing word/phrase for the tagline,
+// chosen by what source class dominates the profile. "Remux" wins when
+// any Remux source is allowed; "WEB-DL" when the profile is WEB-only;
+// otherwise "encodes" (catch-all for Bluray + WEB mixes).
+func pickSourceClass(axes ProfileAxes) string {
+	if hasRemuxSource(axes) {
+		return "Remux"
+	}
+	if isWebOnlyProfile(axes) {
+		return "WEB-DL"
+	}
+	return "encodes"
+}
+
+// hasRemuxSource is true when any "Remux" variant appears in the
+// derived sources list (UHD Bluray Remux / Bluray Remux).
+func hasRemuxSource(axes ProfileAxes) bool {
+	for _, s := range axes.Sources {
+		if strings.Contains(s, "Remux") {
+			return true
+		}
+	}
+	return false
+}
+
+// isWebOnlyProfile is true when the profile only accepts WEB-DL /
+// WEBRip sources (no Bluray, Remux, HDTV, DVD). Sonarr WEB-1080p /
+// WEB-2160p are the canonical examples.
+func isWebOnlyProfile(axes ProfileAxes) bool {
+	web, nonWeb := false, false
+	for _, s := range axes.Sources {
+		switch s {
+		case "WEB-DL", "WEBRip":
+			web = true
+		default:
+			nonWeb = true
+		}
+	}
+	return web && !nonWeb
+}
+
+// typicalSize returns a size-range estimate ("6–15 GB / movie",
+// "1–3 GB / episode") chosen from a small lookup based on Remux/WEB
+// classification and resolution. NOT computed from TRaSH's
+// quality-size JSONs (which give bitrate caps, not real-world typical
+// sizes) — these ranges reflect typical observed sizes in practice
+// and align with what TRaSH's own setup-quality-profiles.md reports
+// for the standard profiles that have a documented _Size:_ line.
+func typicalSize(app string, profile *TrashQualityProfile, axes ProfileAxes) string {
+	is2160 := strings.Contains(axes.Resolution, "2160p")
+	isRemux := hasRemuxSource(axes)
+	isWeb := isWebOnlyProfile(axes)
+
+	var movieSize, episodeSize string
+	switch {
+	case isRemux && is2160:
+		movieSize, episodeSize = "40–100 GB", "10–25 GB"
+	case isRemux:
+		movieSize, episodeSize = "20–40 GB", "3–8 GB"
+	case is2160 && isWeb:
+		movieSize, episodeSize = "15–50 GB", "5–15 GB"
+	case is2160:
+		movieSize, episodeSize = "20–60 GB", "5–15 GB"
+	case isWeb:
+		movieSize, episodeSize = "4–12 GB", "1–3 GB"
+	default:
+		movieSize, episodeSize = "6–15 GB", "1–3 GB"
+	}
+
+	if app == "sonarr" {
+		return episodeSize + " / episode"
+	}
+	return movieSize + " / movie"
 }
