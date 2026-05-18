@@ -36,7 +36,6 @@ type ProfileDescription struct {
 	Tagline    string      `json:"tagline,omitempty"`
 	Axes       ProfileAxes `json:"axes"`
 	Highlights []string    `json:"highlights,omitempty"`
-	BestFor    []string    `json:"bestFor,omitempty"`
 	TrashNote  string      `json:"trashNote,omitempty"`
 	TrashURL   string      `json:"trashUrl,omitempty"`
 }
@@ -279,9 +278,12 @@ func describeProfile(
 	sort.Strings(hdrOptIns)
 	out.Axes.HDR.OptIns = hdrOptIns
 
-	// Compose editorial sections from the now-populated axes + profile data.
+	// Compose Highlights from the now-populated axes + profile data.
+	// "Best for" was tried earlier but dropped — claiming "best for X TVs"
+	// is editorial interpretation we don't have authority to make. The
+	// pills + Highlights tell users what the profile DOES; who it suits
+	// is the user's own call.
 	out.Highlights = composeHighlights(profile, out.Axes)
-	out.BestFor = composeBestFor(profile, out.Axes)
 	return out
 }
 
@@ -486,55 +488,61 @@ func shortHDRVariantName(name string) string {
 // profile's data doesn't justify a bullet, we leave it out — sparse cards
 // are fine.
 
-// composeHighlights returns "What you get" bullets describing what scoring
-// + sources + variant-tuning the profile applies.
+// composeHighlights returns "What you get" bullets describing what the
+// profile picks for and what it prefers. Phrasing rule: speak to end
+// users, not to TRaSH-Guides power-users. No internal jargon — terms
+// like "BD Tier 1-8", "Repack/Proper", "DV Boost CF" mean nothing to
+// someone choosing a profile for the first time. We translate to
+// plain-English equivalents that describe outcomes.
 func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string {
 	var out []string
 
 	// 1) Source statement — most important fact, always first
-	src := sourceHighlight(axes.Sources)
-	if src != "" {
+	if src := sourceHighlight(axes.Sources); src != "" {
 		out = append(out, src)
 	}
 
-	// 2) Audio + HDR features when scored. Full opt-in enumeration goes
-	//    here (not on the pill, which only shows the short "HDR" label
-	//    plus "DV available" hint when DV opt-ins exist).
+	// 2) HDR — describe what the user GETS, not which CFs do it. Normalise
+	//    opt-in CF names ("DV Boost", "DV (w/o HDR fallback)", "HDR10+ Boost")
+	//    down to the actual HDR formats those add (Dolby Vision, HDR10+).
 	if axes.HDR.Scored {
-		hdr := "HDR scoring (HDR10 by default)"
-		if len(axes.HDR.OptIns) > 0 {
-			hdr += " — opt-in available for " + strings.Join(axes.HDR.OptIns, ", ")
+		formats := normalizeHDROptInFormats(axes.HDR.OptIns)
+		if len(formats) > 0 {
+			out = append(out, "Picks HDR releases (HDR10 by default; "+joinAnd(formats)+" can be prioritized instead)")
+		} else {
+			out = append(out, "Picks HDR releases")
 		}
-		out = append(out, hdr)
-	}
-	if axes.Audio.Scored {
-		out = append(out, "Lossless audio prioritized (Atmos / DTS-X / TrueHD / DTS-HD MA)")
 	}
 
-	// 3) Variant-specific tuning recognized by profile name + formatItems
+	// 3) Audio — name the formats users recognise, drop "DTS-HD MA" tail
+	//    which non-cinephiles don't parse anyway.
+	if axes.Audio.Scored {
+		out = append(out, "Prefers releases with lossless audio (Atmos, DTS-X, TrueHD)")
+	}
+
+	// 4) Variant-specific tuning. No "Tier 1-8" detail — users don't know
+	//    what TRaSH tiers are.
 	if hasAnimeTuning(profile) {
-		out = append(out, "Anime release-group tier scoring (BD Tier 1-8, Web Tier 1-6)")
+		out = append(out, "Tuned for anime-specific release groups")
 		if _, ok := profile.FormatItems["Anime Dual Audio"]; ok {
-			out = append(out, "Multi-language audio scoring (dual-audio preferred)")
+			out = append(out, "Prefers releases with multiple audio tracks (e.g. Japanese + English)")
 		}
 	}
 	if vlabel := languageVariantHighlight(profile.Name); vlabel != "" {
 		out = append(out, vlabel)
 	}
 	if isSQPProfile(profile.Name) {
-		out = append(out, "Streaming Quality Profile — stricter tier-based scoring than standard WEB-DL profiles")
+		out = append(out, "Stricter scoring on streaming releases than the standard WEB profiles")
 	}
 
-	// 4) Repack/Proper auto-upgrade is universal in TRaSH profiles, mention
-	//    it so users understand re-releases get caught
+	// 5) Repack/Proper — say what it DOES, not what the CFs are called.
 	if hasRepackScoring(profile) {
-		out = append(out, "Auto-upgrade to Repacks / Propers when re-released")
+		out = append(out, "Automatically upgrades when an improved release of the same file is published")
 	}
 
-	// 5) Typical file size — too verbose for a pill, but useful here as a
-	//    last bullet ("Typical size: 6-15 GB per movie depending on
-	//    running time"). Skipped when markdown didn't ship a size for this
-	//    profile (anime / SQP / foreign variants).
+	// 6) Typical file size — last bullet, useful sanity-check before
+	//    committing storage. Skipped when markdown didn't ship a size for
+	//    this profile (anime / SQP / foreign variants).
 	if axes.AvgSize != "" {
 		out = append(out, "Typical size: "+axes.AvgSize)
 	}
@@ -542,39 +550,42 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 	return out
 }
 
-// composeBestFor returns "Best for" bullets — audience hints inferred from
-// what the profile actually does. Conservative: only state implications
-// that follow directly from features.
-func composeBestFor(profile *TrashQualityProfile, axes ProfileAxes) []string {
+// normalizeHDROptInFormats maps TRaSH's HDR add-on cf-group names (which
+// describe SCORING BOOSTS, not formats) to the actual HDR formats the
+// user gains the ability to prefer. End-user vocabulary: "Dolby Vision"
+// and "HDR10+", not "DV Boost / DV (w/o HDR fallback) / HDR10+ Boost".
+func normalizeHDROptInFormats(optIns []string) []string {
+	var hasDV, hasHDR10Plus bool
+	for _, o := range optIns {
+		if strings.HasPrefix(o, "DV") {
+			hasDV = true
+		}
+		if strings.Contains(o, "HDR10+") {
+			hasHDR10Plus = true
+		}
+	}
 	var out []string
-
-	// Display tier inferred from primary resolution + HDR scoring
-	is4K := strings.Contains(axes.Resolution, "2160p")
-	if is4K && axes.HDR.Scored {
-		out = append(out, "4K HDR-capable TVs")
-	} else if is4K {
-		out = append(out, "4K TVs")
-	} else {
-		out = append(out, "1080p TVs")
+	if hasDV {
+		out = append(out, "Dolby Vision")
 	}
-
-	// Audio gear suggestion when lossless is prioritized
-	if axes.Audio.Scored {
-		out = append(out, "Sound systems that benefit from lossless audio (Atmos / DTS-X / TrueHD)")
+	if hasHDR10Plus {
+		out = append(out, "HDR10+")
 	}
-
-	// Variant-specific audience
-	if hasAnimeTuning(profile) {
-		out = append(out, "Anime collections (multi-audio support if dual-audio scoring is enabled)")
-	}
-	if isFrenchVariant(profile.Name) {
-		out = append(out, "French-speaking users wanting French audio or subtitles")
-	}
-	if isGermanVariant(profile.Name) {
-		out = append(out, "German-speaking users wanting German audio")
-	}
-
 	return out
+}
+
+// joinAnd joins a list with "and" before the last element, comma
+// elsewhere. Reads naturally in prose: ["A","B","C"] → "A, B and C".
+func joinAnd(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " and " + items[1]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 // sourceHighlight returns the canonical source-description bullet derived
@@ -653,12 +664,10 @@ func languageVariantHighlight(name string) string {
 	case strings.HasPrefix(name, "[French VOSTFR]"):
 		return "Original audio with French subtitles (VOSTFR)"
 	case strings.HasPrefix(name, "[German]"):
-		return "German audio preferred (variant of the same-named base profile)"
+		return "German audio preferred"
 	}
 	return ""
 }
 
-func isFrenchVariant(name string) bool { return strings.HasPrefix(name, "[French ") }
-func isGermanVariant(name string) bool { return strings.HasPrefix(name, "[German]") }
-func isSQPProfile(name string) bool    { return strings.HasPrefix(name, "[SQP]") }
+func isSQPProfile(name string) bool { return strings.HasPrefix(name, "[SQP]") }
 

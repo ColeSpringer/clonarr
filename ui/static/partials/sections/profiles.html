@@ -241,14 +241,6 @@
                               </template>
                             </ul>
                           </div>
-                          <div class="tpd-section" x-show="d.bestFor && d.bestFor.length">
-                            <div class="tpd-section-label">Best for</div>
-                            <ul class="tpd-section-list">
-                              <template x-for="(b, idx) in (d.bestFor || [])" :key="idx">
-                                <li x-text="b"></li>
-                              </template>
-                            </ul>
-                          </div>
                           <div class="tpd-card-footer">
                             <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use →</button>
                             <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">📖 TRaSH guide</a>
