@@ -20,6 +20,8 @@ export default {
     tpdView: localStorage.getItem('clonarr_tpdView') || 'grid',
     // filter chip — 'all' | 'hd' | 'uhd' | 'hdr' | 'lossless' | 'in-use'
     tpdFilter: 'all',
+    // category filter — 'all' | <groupName> (Standard / SQP / Anime / …)
+    tpdCategoryFilter: 'all',
     tpdSearch: '',
     // trash_id → bool (which cards are expanded in list view)
     tpdOpenIds: {},
@@ -57,6 +59,31 @@ export default {
       this.tpdFilter = filter;
     },
 
+    tpdSetCategory(cat) {
+      this.tpdCategoryFilter = cat;
+    },
+
+    // tpdCategoryList returns category names in the same order they
+    // appear as section headers in tpdGrouped — by min `group` int
+    // ascending, alpha tiebreak. Drives the category-filter pill row
+    // so its order matches the on-page grouping (Standard first,
+    // SQP next, then Anime / French / German etc).
+    tpdCategoryList(appType) {
+      const meta = this.trashProfiles[appType] || [];
+      const groups = {};
+      for (const p of meta) {
+        const name = p.groupName || 'Other';
+        const gnum = typeof p.group === 'number' ? p.group : Infinity;
+        if (!groups[name] || gnum < groups[name].minGroup) {
+          groups[name] = { name, minGroup: gnum };
+        }
+      }
+      return Object.values(groups).sort((a, b) => {
+        if (a.minGroup !== b.minGroup) return a.minGroup - b.minGroup;
+        return a.name.localeCompare(b.name);
+      }).map(g => g.name);
+    },
+
     tpdToggleOpen(trashId) {
       this.tpdOpenIds = { ...this.tpdOpenIds, [trashId]: !this.tpdOpenIds[trashId] };
     },
@@ -73,17 +100,34 @@ export default {
       return rules.some(r => instIds.has(r.instanceId) && r.trashProfileId === trashId);
     },
 
-    // Apply search + filter chip to the description list. Returns a new
-    // array — original state isn't mutated.
+    // Apply search + category filter + feature filter to the description
+    // list. All three combine with AND (a profile must match all active
+    // filters to appear). Returns a new array — original state isn't
+    // mutated.
     tpdFiltered(appType) {
       const all = this.trashProfileDescriptions[appType] || [];
       const q = (this.tpdSearch || '').toLowerCase().trim();
       const f = this.tpdFilter || 'all';
+      const cat = this.tpdCategoryFilter || 'all';
+      // Category lookup via the classic trashProfiles metadata — same
+      // source tpdGrouped uses, so a profile matches its category-pill
+      // exactly when its section heading on the page reads the same.
+      const meta = this.trashProfiles[appType] || [];
+      const metaById = new Map();
+      for (const p of meta) metaById.set(p.trashId, p);
       return all.filter(d => {
+        // Search across name + tagline (the two fields visible at-a-glance)
         if (q) {
           const hay = (d.name + ' ' + (d.tagline || '')).toLowerCase();
           if (!hay.includes(q)) return false;
         }
+        // Category filter
+        if (cat !== 'all') {
+          const m = metaById.get(d.trashId);
+          const groupName = (m && m.groupName) || 'Other';
+          if (groupName !== cat) return false;
+        }
+        // Feature filter
         switch (f) {
           case 'all': return true;
           case 'hd':       return (d.axes?.resolution || '').includes('1080p') && !(d.axes?.resolution || '').includes('2160p');
