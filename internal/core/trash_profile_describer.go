@@ -3,6 +3,7 @@ package core
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -242,6 +243,11 @@ func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]P
 			continue
 		}
 	}
+	// Scanner errors (e.g. line > 1 MiB buffer, I/O failure) would otherwise
+	// leave us with a silently-truncated section map and zero signal in logs.
+	if err := scanner.Err(); err != nil {
+		log.Printf("parseProfileMarkdown: scanner error after %d sections: %v", len(sections), err)
+	}
 	return sections
 }
 
@@ -262,7 +268,7 @@ func describeProfile(
 		TrashID:  profile.TrashID,
 		Name:     profile.Name,
 		App:      app,
-		TrashURL: profile.TrashURL,
+		TrashURL: sanitizeURL(profile.TrashURL),
 		Axes: ProfileAxes{
 			Resolution: deriveResolution(profile.Items),
 			Sources:    deriveSources(profile.Items),
@@ -328,6 +334,14 @@ func describeProfile(
 	//     thinking it's a real profile
 	if profile.TrashDescription != "" && (isSQPProfile(profile.Name) || isBaseProfile(profile.Name)) {
 		notice := parseDisclaimerHTML(profile.TrashDescription)
+		notice.LinkURL = sanitizeURL(notice.LinkURL)
+		// Drop the link entirely when the URL fails the scheme gate — otherwise
+		// the frontend would render a click-able label pointing to "" which is
+		// either confusing (re-navigates the current page) or a vector if a
+		// future framework upgrade interprets the empty href differently.
+		if notice.LinkURL == "" {
+			notice.LinkText = ""
+		}
 		out.Disclaimer = &notice
 		if notice.LinkURL != "" {
 			out.TrashURL = notice.LinkURL
@@ -824,6 +838,20 @@ func fallbackHighlight(items []QualityItem) string {
 // which ships with a "this is a base profile we use for testing" disclaimer.
 // Surfacing it on the card warns users not to pick it as a real profile.
 func isBaseProfile(name string) bool { return name == "Base Profile" }
+
+// sanitizeURL returns the URL only if it has a safe http(s) scheme, else "".
+// Defends against malicious or compromised TRaSH upstream content embedding
+// javascript: / data: / vbscript: URLs in trash_url or anchor hrefs inside
+// trash_description. The frontend renders these via Alpine ':href' bindings
+// that bypass the classic sanitizeHTML() path (which already strips unsafe
+// schemes for x-html), so we gate at the JSON boundary instead.
+func sanitizeURL(u string) string {
+	u = strings.TrimSpace(u)
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		return u
+	}
+	return ""
+}
 
 // parseDisclaimerHTML splits TRaSH's trash_description HTML into a
 // DisclaimerNotice with the first <a href="...">label</a> preserved as
