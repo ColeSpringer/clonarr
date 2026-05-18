@@ -340,8 +340,16 @@ export default {
     // manual /api/sync/apply, Restore, etc.). LastSyncTime / LastSyncError
     // in the backend don't distinguish trigger, so neither does this chip.
     // Two states, no chip otherwise:
-    //   ok      — green dot + "Last sync · 8m ago"
-    //   failed  — red dot + "Last sync failed · 8m ago"
+    //   ok      — green dot + "Auto-sync · 8m ago"
+    //   failed  — red dot + "Auto-sync failed · 8m ago"
+    //
+    // Note "Auto-sync" prefix (vs the sidebar foot's "TRaSH synced"
+    // label) intentionally distinguishes the two timestamps: the sidebar
+    // shows when the TRaSH guide-repo was last PULLED upstream, while
+    // this chip shows when clonarr last APPLIED TRaSH data to an Arr
+    // instance. Both legitimately say "sync"; the prefix makes the
+    // difference visible at a glance.
+    //
     // Chip is hidden when no rule has any sync history at all and on
     // global sections (Settings, About) where sync isn't a relevant
     // concept.
@@ -375,8 +383,8 @@ export default {
       }
       const ago = latest ? this.timeAgo(new Date(latest).toISOString()) : 'never';
       return this.autoSyncChipState() === 'failed'
-        ? `Last sync failed · ${ago}`
-        : `Last sync · ${ago}`;
+        ? `Auto-sync failed · ${ago}`
+        : `Auto-sync · ${ago}`;
     },
 
     // Click → navigate to Profiles → History so the user can see what ran.
