@@ -593,9 +593,11 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 	if vlabel := languageVariantHighlight(profile.Name); vlabel != "" {
 		out = append(out, vlabel)
 	}
-	if isSQPProfile(profile.Name) {
-		out = append(out, "Stricter scoring on streaming releases than the standard WEB profiles")
-	}
+	// SQP profiles vary widely (SQP-1 = streaming 1080p, SQP-3 Audio = UHD
+	// audio-focused, etc.) — the generic "stricter streaming scoring"
+	// blurb doesn't fit them all. The Disclaimer already conveys "advanced
+	// profile, read the Discord guide" via TRaSH's own wording; no need
+	// for clonarr to add a separate guess about what SQP does.
 
 	// 5) Repack/Proper — say what it DOES, not what the CFs are called.
 	if hasRepackScoring(profile) {
