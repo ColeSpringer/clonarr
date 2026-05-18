@@ -291,11 +291,12 @@ func describeProfile(
 			if g.TrashID == hdrFormatsTrashID(app) {
 				out.Axes.HDR.Scored = true
 			}
-		} else if isHDRVariantGroup(g.Name) {
-			// default=false HDR variant — surface as opt-in on the pill
-			if short := shortHDRVariantName(g.Name); short != "" {
-				hdrOptIns = append(hdrOptIns, short)
-			}
+		} else if label := hdrVariantOptInLabel(app, g.TrashID); label != "" {
+			// default=false HDR variant — surface as opt-in on the pill.
+			// Matched by trash_id (stable across TRaSH-Guides updates)
+			// rather than name prefix — TRaSH adjusts CF-group names
+			// occasionally but trash_ids never change once assigned.
+			hdrOptIns = append(hdrOptIns, label)
 		}
 	}
 	sort.Strings(hdrOptIns)
@@ -528,27 +529,37 @@ func hdrFormatsTrashID(app string) string {
 	return ""
 }
 
-// isHDRVariantGroup reports whether a cf-group name is one of the HDR variant
-// opt-ins (DV Boost, DV w/o HDR fallback, HDR10+ Boost, SDR, etc.) — used so
-// the HDR axis pill can summarise "DV/HDR10+ opt-in" without dumping the
-// whole group list onto the pill.
-func isHDRVariantGroup(name string) bool {
-	if !strings.HasPrefix(name, "[HDR Formats]") {
-		return false
+// hdrVariantOptInLabel returns a short pill-friendly label ("DV Boost",
+// "HDR10+ Boost", "DV (w/o HDR fallback)") for known HDR-variant cf-groups
+// matched by trash_id. Returns "" when the trash_id isn't a recognized
+// variant OR is the SDR group (too niche for the axis pill).
+//
+// Trash_id matching (not name prefix) is deliberate: TRaSH renames or
+// restructures cf-group names occasionally, but trash_ids never change
+// once assigned. The cost is a small per-app lookup table — manageable
+// for the ~5 HDR variants TRaSH ships, and adding new ones is a single
+// table entry when they appear.
+func hdrVariantOptInLabel(app, trashID string) string {
+	var table map[string]string
+	switch app {
+	case "radarr":
+		table = map[string]string{
+			"1616617ab3a14397a2b2321bcbda44d1": "DV Boost",
+			"7fc2751eef7e6bdc70b74136e5e35c76": "DV (w/o HDR fallback)",
+			"b29413a7487478fe98228ce79e5689e4": "HDR10+ Boost",
+			// "47f0d69750de9e16855915fa73bb7b08" (SDR) intentionally omitted —
+			// it's a negative-prefer "exclude SDR" toggle, not a user-facing
+			// HDR-format choice; cluttering the pill with it hurts more than
+			// helps.
+		}
+	case "sonarr":
+		table = map[string]string{
+			"e0b2774083df4265f25c9e5bc6c80940": "DV Boost",
+			"d776a1ea912a117d66d83b880ff2055d": "DV (w/o HDR fallback)",
+			"7d366c213e5c23a052b157356fac1921": "HDR10+ Boost",
+		}
 	}
-	// Exclude the primary "HDR" group itself; we only want the variants
-	return !strings.HasSuffix(strings.TrimSpace(name), " HDR")
-}
-
-// shortHDRVariantName extracts a short pill-label from a cf-group name like
-// "[HDR Formats] DV Boost" → "DV Boost". Returns "" for the SDR negative-prefer
-// group since users rarely care about it on the axis pill.
-func shortHDRVariantName(name string) string {
-	short := strings.TrimSpace(strings.TrimPrefix(name, "[HDR Formats]"))
-	if short == "SDR" {
-		return "" // omit from axis pill — too niche
-	}
-	return short
+	return table[trashID]
 }
 
 // --- Editorial composers (auto-derived "what you get" + "best for") ---
