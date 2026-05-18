@@ -563,11 +563,6 @@ func composeBestFor(profile *TrashQualityProfile, axes ProfileAxes) []string {
 		out = append(out, "Sound systems that benefit from lossless audio (Atmos / DTS-X / TrueHD)")
 	}
 
-	// Storage caveat for the heavy profiles
-	if isLargeFootprint(axes) {
-		out = append(out, "Setups with storage to spare — see the size estimate above")
-	}
-
 	// Variant-specific audience
 	if hasAnimeTuning(profile) {
 		out = append(out, "Anime collections (multi-audio support if dual-audio scoring is enabled)")
@@ -601,11 +596,11 @@ func sourceHighlight(sources []string) string {
 	case set["Bluray Remux"]:
 		return "Uncompressed 1080p Bluray Remux (disc-perfect picture)" + webSuffix
 	case set["UHD Bluray"]:
-		return "4K Bluray encodes from vetted release groups" + webSuffix
+		return "4K Bluray encodes from approved release groups" + webSuffix
 	case set["Bluray"]:
-		return "1080p Bluray encodes from vetted release groups" + webSuffix
+		return "1080p Bluray encodes from approved release groups" + webSuffix
 	case hasWeb:
-		return "Streaming WEB-DL releases from vetted release groups"
+		return "Streaming WEB-DL releases from approved release groups"
 	}
 	return ""
 }
@@ -667,15 +662,3 @@ func isFrenchVariant(name string) bool { return strings.HasPrefix(name, "[French
 func isGermanVariant(name string) bool { return strings.HasPrefix(name, "[German]") }
 func isSQPProfile(name string) bool    { return strings.HasPrefix(name, "[SQP]") }
 
-// isLargeFootprint is true when the profile's source mix puts file sizes
-// in the "noticeably big" tier — Remux of any resolution, or anything
-// 2160p. The cards already show the actual size estimate; this just
-// triggers the storage caveat bullet.
-func isLargeFootprint(axes ProfileAxes) bool {
-	for _, s := range axes.Sources {
-		if strings.Contains(s, "Remux") {
-			return true
-		}
-	}
-	return strings.Contains(axes.Resolution, "2160p")
-}
