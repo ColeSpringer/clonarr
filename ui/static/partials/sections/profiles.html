@@ -188,31 +188,30 @@
 
           <template x-if="trashProfileDescriptions[activeAppType] && trashProfileDescriptions[activeAppType].length > 0">
             <div>
-              <!-- Toolbar: search + view toggle on top, two filter-pill
-                   rows below (category then feature). Visual separation
-                   via margin between rows; no labels — pill content is
-                   self-evident. Category-list order matches the on-page
-                   section ordering (Standard, SQP, Anime, foreign-language). -->
+              <!-- Toolbar: search + category pills · feature pills + view
+                   toggle, all on the same flex row. Wraps naturally on
+                   narrow screens. Visual separator (·) between category
+                   and feature pill groups so the two dimensions are
+                   distinguishable without labels. Category-list order
+                   matches the on-page section ordering (Standard, SQP,
+                   Anime, foreign-language). -->
               <div class="tpd-toolbar">
                 <input class="tpd-search" placeholder="Search profiles…" x-model="tpdSearch">
-                <div class="tpd-view-toggle" role="group" aria-label="View mode">
-                  <button class="tpd-view-btn" :class="{ active: tpdView === 'grid' }" @click="tpdSetView('grid')">Grid</button>
-                  <button class="tpd-view-btn" :class="{ active: tpdView === 'list' }" @click="tpdSetView('list')">List</button>
-                </div>
-              </div>
-              <div class="tpd-filter-row">
                 <button class="tpd-chip" :class="{ active: tpdCategoryFilter === 'all' }" @click="tpdSetCategory('all')">All</button>
                 <template x-for="cat in tpdCategoryList(activeAppType)" :key="cat">
                   <button class="tpd-chip" :class="{ active: tpdCategoryFilter === cat }" @click="tpdSetCategory(cat)" x-text="cat"></button>
                 </template>
-              </div>
-              <div class="tpd-filter-row">
+                <span class="tpd-toolbar-sep" aria-hidden="true">·</span>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'all' }" @click="tpdSetFilter('all')">All</button>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'hd' }" @click="tpdSetFilter('hd')">1080p</button>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'uhd' }" @click="tpdSetFilter('uhd')">4K / UHD</button>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'hdr' }" @click="tpdSetFilter('hdr')">HDR</button>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'lossless' }" @click="tpdSetFilter('lossless')">Lossless audio</button>
                 <button class="tpd-chip" :class="{ active: tpdFilter === 'in-use' }" @click="tpdSetFilter('in-use')">In use</button>
+                <div class="tpd-view-toggle" role="group" aria-label="View mode">
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'grid' }" @click="tpdSetView('grid')">Grid</button>
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'list' }" @click="tpdSetView('list')">List</button>
+                </div>
               </div>
 
               <!-- Category sections -->

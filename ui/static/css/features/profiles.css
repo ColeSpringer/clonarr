@@ -387,12 +387,13 @@
 }
 .tpd-chip.active { background: var(--app-color); color: var(--text-on-accent); border-color: var(--app-color); font-weight: 500; }
 
-/* Two filter rows (category, feature). Visual separation between rows
-   communicates "two independent dimensions" without needing text labels. */
-.tpd-filter-row {
-  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;
+/* Mid-toolbar separator between the two filter dimensions (category
+   pills on the left, feature pills on the right). Communicates "these
+   are two independent groups" without needing labels or row breaks. */
+.tpd-toolbar-sep {
+  color: var(--text-muted); padding: 0 2px;
+  user-select: none; font-size: 14px;
 }
-.tpd-filter-row + .tpd-filter-row { margin-bottom: 16px; }
 .tpd-view-toggle {
   margin-left: auto; display: inline-flex; border: 1px solid var(--border-subtle);
   border-radius: 5px; overflow: hidden; background: var(--bg-elevated);
