@@ -284,6 +284,16 @@ func describeProfile(
 	// pills + Highlights tell users what the profile DOES; who it suits
 	// is the user's own call.
 	out.Highlights = composeHighlights(profile, out.Axes)
+
+	// SQP profiles aren't documented on TRaSH-Guides (community-curated
+	// in Discord instead). The profile JSON ships no trash_url for them,
+	// so fill the "guide" link with the Discord channel where the SQP
+	// rules + release-group lists live. Users need to read that before
+	// using an SQP profile — it has stricter scoring assumptions that
+	// the standard TRaSH defaults don't cover.
+	if isSQPProfile(profile.Name) && out.TrashURL == "" {
+		out.TrashURL = "https://discord.com/channels/492590071455940612/934779539140276245"
+	}
 	return out
 }
 
@@ -496,6 +506,16 @@ func shortHDRVariantName(name string) string {
 // plain-English equivalents that describe outcomes.
 func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string {
 	var out []string
+
+	// 0) SQP warning FIRST — these profiles aren't documented in
+	//    TRaSH-Guides the same way standard ones are. The scoring assumes
+	//    you've read the SQP guide on Discord and configured the required
+	//    release-group lists. Skipping this step typically results in
+	//    nothing being grabbed. The bullet links visibility-wise to the
+	//    Discord URL set on TrashURL.
+	if isSQPProfile(profile.Name) {
+		out = append(out, "Read the SQP guide on Discord before using — SQP profiles have special release-group rules that need extra setup")
+	}
 
 	// 1) Source statement — most important fact, always first
 	if src := sourceHighlight(axes.Sources); src != "" {
