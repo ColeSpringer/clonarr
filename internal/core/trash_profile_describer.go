@@ -502,15 +502,15 @@ func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string 
 		out = append(out, src)
 	}
 
-	// 2) HDR — describe what the user GETS, not which CFs do it. Normalise
-	//    opt-in CF names ("DV Boost", "DV (w/o HDR fallback)", "HDR10+ Boost")
-	//    down to the actual HDR formats those add (Dolby Vision, HDR10+).
+	// 2) HDR — describe what the user gets, not the toggle mechanism.
+	//    Inline format list with "etc." since the exact mix varies per
+	//    profile and the user just needs "this profile picks HDR".
 	if axes.HDR.Scored {
 		formats := normalizeHDROptInFormats(axes.HDR.OptIns)
 		if len(formats) > 0 {
-			out = append(out, "Picks HDR releases (HDR10 by default; "+joinAnd(formats)+" can be prioritized instead)")
+			out = append(out, "Picks HDR releases (HDR10, "+joinAnd(formats)+", etc.)")
 		} else {
-			out = append(out, "Picks HDR releases")
+			out = append(out, "Picks HDR releases (HDR10, etc.)")
 		}
 	}
 
