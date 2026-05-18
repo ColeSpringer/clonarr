@@ -227,6 +227,10 @@
 
                         <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
                           <p class="tpd-card-tagline" x-show="d.tagline" x-text="d.tagline"></p>
+                          <div class="tpd-disclaimer" x-show="d.disclaimer">
+                            <strong>Notice from TRaSH-Guides</strong>
+                            <span x-text="d.disclaimer"></span>
+                          </div>
                           <div class="tpd-pills">
                             <span class="tpd-pill" x-text="tpdResolutionLabel(d)"></span>
                             <span class="tpd-pill" x-text="tpdSourceLabel(d)"></span>

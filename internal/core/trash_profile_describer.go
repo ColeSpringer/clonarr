@@ -37,7 +37,13 @@ type ProfileDescription struct {
 	Axes       ProfileAxes `json:"axes"`
 	Highlights []string    `json:"highlights,omitempty"`
 	TrashNote  string      `json:"trashNote,omitempty"`
-	TrashURL   string      `json:"trashUrl,omitempty"`
+	// Disclaimer is TRaSH's own prose disclaimer from the profile JSON's
+	// trash_description field, surfaced when it's not just the structural
+	// "Quality Profile that covers: ..." auto-text. Currently used for
+	// SQP profiles where TRaSH ships an explicit "join the Discord before
+	// using" disclaimer they want shown verbatim on every SQP card.
+	Disclaimer string `json:"disclaimer,omitempty"`
+	TrashURL   string `json:"trashUrl,omitempty"`
 }
 
 // ProfileAxes is the 7-row quick-fact summary shown as pills on the profile card.
@@ -285,14 +291,24 @@ func describeProfile(
 	// is the user's own call.
 	out.Highlights = composeHighlights(profile, out.Axes)
 
-	// SQP profiles aren't documented on TRaSH-Guides (community-curated
-	// in Discord instead). The profile JSON ships no trash_url for them,
-	// so fill the "guide" link with the Discord channel where the SQP
-	// rules + release-group lists live. Users need to read that before
-	// using an SQP profile — it has stricter scoring assumptions that
-	// the standard TRaSH defaults don't cover.
-	if isSQPProfile(profile.Name) && out.TrashURL == "" {
-		out.TrashURL = "https://discord.com/channels/492590071455940612/934779539140276245"
+	// Some profiles ship an explicit prose disclaimer in
+	// profile.TrashDescription (vs the structural "Quality Profile that
+	// covers: WEBDL 1080p..." form that standard profiles use, which is
+	// redundant with our pills + axes).
+	//
+	// Surface the disclaimer as a prominent notice on the card. Currently
+	// applies to:
+	//   - SQP profiles — TRaSH ships an "advanced profile, join Discord"
+	//     disclaimer they want shown verbatim on every SQP card
+	//   - Base Profile — TRaSH's internal test profile ("This is a base
+	//     profile that we use for testing"); users shouldn't pick it
+	//     thinking it's a real profile
+	if profile.TrashDescription != "" && (isSQPProfile(profile.Name) || isBaseProfile(profile.Name)) {
+		text, link := stripHTMLAndExtractURL(profile.TrashDescription)
+		out.Disclaimer = text
+		if link != "" {
+			out.TrashURL = link
+		}
 	}
 	return out
 }
@@ -507,17 +523,11 @@ func shortHDRVariantName(name string) string {
 func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string {
 	var out []string
 
-	// 0) SQP warning FIRST — these profiles aren't documented in
-	//    TRaSH-Guides the same way standard ones are. The scoring assumes
-	//    you've read the SQP guide on Discord and configured the required
-	//    release-group lists. Skipping this step typically results in
-	//    nothing being grabbed. The bullet links visibility-wise to the
-	//    Discord URL set on TrashURL.
-	if isSQPProfile(profile.Name) {
-		out = append(out, "Read the SQP guide on Discord before using — SQP profiles have special release-group rules that need extra setup")
-	}
-
-	// 1) Source statement — most important fact, always first
+	// 1) Source statement — most important fact, always first.
+	//    Note: SQP profiles get their warning via the Disclaimer field
+	//    (TRaSH's own verbatim text from profile.trash_description),
+	//    rendered as a separate notice block above Highlights — not
+	//    duplicated here.
 	if src := sourceHighlight(axes.Sources); src != "" {
 		out = append(out, src)
 	}
@@ -740,4 +750,28 @@ func fallbackHighlight(items []QualityItem) string {
 		return "Falls back through all lower qualities (down to SDTV/DVD) when no " + primary + " release is available"
 	}
 	return "Falls back to " + joinAnd(rest) + " when no " + primary + " release is available"
+}
+
+// isBaseProfile is true for TRaSH's internal test profile "Base Profile",
+// which ships with a "this is a base profile we use for testing" disclaimer.
+// Surfacing it on the card warns users not to pick it as a real profile.
+func isBaseProfile(name string) bool { return name == "Base Profile" }
+
+// stripHTMLAndExtractURL converts a small subset of HTML (the kind TRaSH
+// uses in profile.trash_description: <a href="...">, <br>) to plain text +
+// the first href URL found. NOT a general-purpose sanitiser — assumes the
+// input is TRaSH-shipped JSON content, not user input. Keeps things in Go
+// stdlib (regex) rather than pulling in bluemonday for a single use case.
+func stripHTMLAndExtractURL(s string) (text, url string) {
+	// Capture the first href before stripping tags
+	if m := regexp.MustCompile(`(?i)<a[^>]+href=["']([^"']+)["']`).FindStringSubmatch(s); len(m) > 1 {
+		url = m[1]
+	}
+	// Convert <br>, <br/>, <br /> to spaces so wrapped text reads as one line
+	s = regexp.MustCompile(`(?i)<br\s*/?>`).ReplaceAllString(s, " ")
+	// Strip remaining tags
+	s = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(s, "")
+	// Collapse multi-space + trim
+	s = strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(s, " "))
+	return s, url
 }
