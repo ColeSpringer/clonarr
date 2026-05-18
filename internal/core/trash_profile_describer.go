@@ -697,29 +697,33 @@ func joinAnd(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
-// sourceHighlight returns the canonical source-description bullet derived
-// from the normalised source list (same source classification used by the
-// frontend's tpdSourceLabel pill, just expanded into a sentence).
+// sourceHighlight returns the canonical primary-source-description bullet
+// derived from the normalised source list. Describes ONLY the cutoff-tier
+// source — the "+ WEB" / fallback wording lives elsewhere:
+//   - Source pill (e.g. "Bluray Remux + WEB") covers what other sources
+//     are accepted at the same resolution
+//   - fallbackHighlight covers the lower-resolution fallback chain
+//
+// Earlier versions appended "with WEB-DL fallback" here too, which
+// contradicted fallbackHighlight on permissive profiles ("(Alternative)"
+// variants that fall through to SDTV/DVD). Keeping primary-source-only
+// makes the three signals — pill, source bullet, fallback bullet —
+// non-overlapping and consistent.
 func sourceHighlight(sources []string) string {
 	set := map[string]bool{}
 	for _, s := range sources {
 		set[s] = true
 	}
-	hasWeb := set["WEB-DL"] || set["WEBRip"]
-	webSuffix := ""
-	if hasWeb {
-		webSuffix = " with WEB-DL fallback"
-	}
 	switch {
 	case set["UHD Bluray Remux"]:
-		return "Uncompressed 4K Bluray Remux (disc-perfect picture)" + webSuffix
+		return "Uncompressed 4K Bluray Remux (disc-perfect picture)"
 	case set["Bluray Remux"]:
-		return "Uncompressed 1080p Bluray Remux (disc-perfect picture)" + webSuffix
+		return "Uncompressed 1080p Bluray Remux (disc-perfect picture)"
 	case set["UHD Bluray"]:
-		return "4K Bluray encodes from approved release groups" + webSuffix
+		return "4K Bluray encodes from approved release groups"
 	case set["Bluray"]:
-		return "1080p Bluray encodes from approved release groups" + webSuffix
-	case hasWeb:
+		return "1080p Bluray encodes from approved release groups"
+	case set["WEB-DL"] || set["WEBRip"]:
 		return "Streaming WEB-DL releases from approved release groups"
 	}
 	return ""
