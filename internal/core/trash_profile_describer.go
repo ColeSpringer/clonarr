@@ -869,30 +869,64 @@ func parseDisclaimerHTML(s string) DisclaimerNotice {
 // The composition is rule-based (not editorial): each leading
 // adjective and size range maps from observable profile properties.
 
-// composeTagline returns a short one-line categorical descriptor like
-// "High-quality 1080p encodes" or "Uncompressed 4K Remux" derived from
-// the profile's tier (Remux / SQP / Anime / Standard / language variant),
-// primary resolution, and source class. Pills + "What you get" carry
-// the full source/scoring detail — the tagline is just the label.
+// composeTagline returns a short "what the profile prefers" descriptor
+// like "Prefers high-quality 1080p encodes" or "Prefers uncompressed 4K
+// UHD Remux". The "Prefers" verb is deliberate — without it the tagline
+// reads as a guarantee ("Uncompressed 4K UHD Remux") which is misleading
+// when the profile actually has fallback policies. "Prefers" signals
+// this is the target, not the outcome. Pills + What you get cover the
+// actual fallback behavior.
+//
+// Appends a variant suffix when the profile name signals it deviates
+// further from strict cutoff-only behavior:
+//   "Remux 2160p (Alternative)" → "...· with full fallback chain"
+//   "Remux 2160p (Combined)"    → "...· multi-resolution"
 func composeTagline(profile *TrashQualityProfile, axes ProfileAxes) string {
 	if isBaseProfile(profile.Name) {
 		return "Test profile (do not use)"
 	}
-	tier := pickTierAdjective(profile, axes)
+	tier := lowercaseTierAdjective(pickTierAdjective(profile, axes))
 	res := pickResolutionLabel(axes)
 	sourceClass := pickSourceClass(axes)
 	parts := []string{tier, res, sourceClass}
-	out := ""
+	body := ""
 	for _, p := range parts {
 		if p == "" {
 			continue
 		}
-		if out != "" {
-			out += " "
+		if body != "" {
+			body += " "
 		}
-		out += p
+		body += p
+	}
+	// "Prefers ... when available" — the verb signals goal, the "when
+	// available" suffix signals fallback exists (even strict profiles
+	// fall back from Remux to WEB-DL at the same resolution).
+	out := "Prefers " + body + " when available"
+	// Extra-honesty suffix for permissive variants where the fallback
+	// is unusually broad or multi-resolution at primary tier.
+	switch {
+	case strings.Contains(profile.Name, "(Alternative)"):
+		out += " · with full fallback chain"
+	case strings.Contains(profile.Name, "(Combined)"):
+		out += " · multi-resolution"
 	}
 	return out
+}
+
+// lowercaseTierAdjective lowercases the first letter of the tier
+// adjective so it reads naturally after the "Prefers" prefix
+// ("uncompressed", "high-quality") — UNLESS it starts with a proper
+// noun (French / German), which stays capitalized regardless of
+// sentence position ("Prefers French-dubbed", "Prefers German-language").
+func lowercaseTierAdjective(adj string) string {
+	if adj == "" {
+		return adj
+	}
+	if strings.HasPrefix(adj, "French") || strings.HasPrefix(adj, "German") {
+		return adj
+	}
+	return strings.ToLower(adj[:1]) + adj[1:]
 }
 
 // pickTierAdjective picks the leading word for the tagline. Each branch
