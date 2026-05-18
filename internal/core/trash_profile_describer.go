@@ -42,8 +42,25 @@ type ProfileDescription struct {
 	// "Quality Profile that covers: ..." auto-text. Currently used for
 	// SQP profiles where TRaSH ships an explicit "join the Discord before
 	// using" disclaimer they want shown verbatim on every SQP card.
-	Disclaimer string `json:"disclaimer,omitempty"`
-	TrashURL   string `json:"trashUrl,omitempty"`
+	//
+	// Structured into Before / LinkText / LinkURL / After so the frontend
+	// can render the embedded <a href=...>...</a> as an actual clickable
+	// link inline in the prose, preserving TRaSH's exact wording for the
+	// link label (e.g. "TRaSH-Guide Discord") rather than stripping the
+	// HTML to plain text.
+	Disclaimer *DisclaimerNotice `json:"disclaimer,omitempty"`
+	TrashURL   string            `json:"trashUrl,omitempty"`
+}
+
+// DisclaimerNotice carries TRaSH's prose disclaimer split around a single
+// embedded link. Designed for trash_description fields like the SQP one:
+// "...please join the <a href='...'>TRaSH-Guide Discord</a> for more...".
+// Disclaimers without a link have only Before populated.
+type DisclaimerNotice struct {
+	Before   string `json:"before"`
+	LinkText string `json:"linkText,omitempty"`
+	LinkURL  string `json:"linkUrl,omitempty"`
+	After    string `json:"after,omitempty"`
 }
 
 // ProfileAxes is the 7-row quick-fact summary shown as pills on the profile card.
@@ -304,10 +321,10 @@ func describeProfile(
 	//     profile that we use for testing"); users shouldn't pick it
 	//     thinking it's a real profile
 	if profile.TrashDescription != "" && (isSQPProfile(profile.Name) || isBaseProfile(profile.Name)) {
-		text, link := stripHTMLAndExtractURL(profile.TrashDescription)
-		out.Disclaimer = text
-		if link != "" {
-			out.TrashURL = link
+		notice := parseDisclaimerHTML(profile.TrashDescription)
+		out.Disclaimer = &notice
+		if notice.LinkURL != "" {
+			out.TrashURL = notice.LinkURL
 		}
 	}
 	return out
@@ -757,21 +774,35 @@ func fallbackHighlight(items []QualityItem) string {
 // Surfacing it on the card warns users not to pick it as a real profile.
 func isBaseProfile(name string) bool { return name == "Base Profile" }
 
-// stripHTMLAndExtractURL converts a small subset of HTML (the kind TRaSH
-// uses in profile.trash_description: <a href="...">, <br>) to plain text +
-// the first href URL found. NOT a general-purpose sanitiser — assumes the
-// input is TRaSH-shipped JSON content, not user input. Keeps things in Go
-// stdlib (regex) rather than pulling in bluemonday for a single use case.
-func stripHTMLAndExtractURL(s string) (text, url string) {
-	// Capture the first href before stripping tags
-	if m := regexp.MustCompile(`(?i)<a[^>]+href=["']([^"']+)["']`).FindStringSubmatch(s); len(m) > 1 {
-		url = m[1]
-	}
-	// Convert <br>, <br/>, <br /> to spaces so wrapped text reads as one line
+// parseDisclaimerHTML splits TRaSH's trash_description HTML into a
+// DisclaimerNotice with the first <a href="...">label</a> preserved as
+// structured Before / LinkText / LinkURL / After fields. <br> tags become
+// spaces. Disclaimers without a link end up with only Before populated.
+// NOT a general-purpose sanitiser — assumes input is TRaSH-shipped JSON
+// content, not user input. Keeps to stdlib regex rather than pulling in
+// bluemonday for a single field.
+func parseDisclaimerHTML(s string) DisclaimerNotice {
+	// Convert <br> tags to spaces first so the disclaimer reads as prose
 	s = regexp.MustCompile(`(?i)<br\s*/?>`).ReplaceAllString(s, " ")
-	// Strip remaining tags
-	s = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(s, "")
-	// Collapse multi-space + trim
-	s = strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(s, " "))
-	return s, url
+
+	// Extract the first anchor: href + label + the surrounding before/after
+	// segments in one regex pass. Submatches: 1=href, 2=label.
+	anchorRe := regexp.MustCompile(`(?is)(.*?)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>(.*)`)
+	m := anchorRe.FindStringSubmatch(s)
+
+	clean := func(x string) string {
+		// Strip any leftover HTML tags + collapse whitespace
+		x = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(x, "")
+		return strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(x, " "))
+	}
+	if m == nil {
+		// No anchor found — whole string becomes Before
+		return DisclaimerNotice{Before: clean(s)}
+	}
+	return DisclaimerNotice{
+		Before:   strings.TrimRight(clean(m[1]), " ") + " ",
+		LinkURL:  m[2],
+		LinkText: clean(m[3]),
+		After:    " " + strings.TrimLeft(clean(m[4]), " "),
+	}
 }

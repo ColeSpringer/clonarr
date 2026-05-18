@@ -229,7 +229,9 @@
                           <p class="tpd-card-tagline" x-show="d.tagline" x-text="d.tagline"></p>
                           <div class="tpd-disclaimer" x-show="d.disclaimer">
                             <strong>Notice from TRaSH-Guides</strong>
-                            <span x-text="d.disclaimer"></span>
+                            <span>
+                              <span x-text="d.disclaimer?.before"></span><a x-show="d.disclaimer?.linkUrl" :href="d.disclaimer?.linkUrl" target="_blank" rel="noopener" x-text="d.disclaimer?.linkText"></a><span x-text="d.disclaimer?.after"></span>
+                            </span>
                           </div>
                           <div class="tpd-pills">
                             <span class="tpd-pill" x-text="tpdResolutionLabel(d)"></span>
