@@ -903,13 +903,16 @@ func composeTagline(profile *TrashQualityProfile, axes ProfileAxes) string {
 	// available" suffix signals fallback exists (even strict profiles
 	// fall back from Remux to WEB-DL at the same resolution).
 	out := "Prefers " + body + " when available"
-	// Extra-honesty suffix for permissive variants where the fallback
-	// is unusually broad or multi-resolution at primary tier.
+	// Extra-honesty suffix for the permissive variants. Distinction:
+	//   (Combined)   — falls back on RESOLUTION only (2160p → 1080p),
+	//                  same quality tiers (Remux + Bluray + WEB) at both
+	//   (Alternative) — falls back on QUALITY too (accepts HDTV / DVD /
+	//                  SDTV that the strict + Combined profiles reject)
 	switch {
 	case strings.Contains(profile.Name, "(Alternative)"):
-		out += " · with full fallback chain"
+		out += " · with fallback quality"
 	case strings.Contains(profile.Name, "(Combined)"):
-		out += " · multi-resolution"
+		out += " · with fallback resolution"
 	}
 	return out
 }
