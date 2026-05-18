@@ -101,7 +101,7 @@
                 <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx" style="font-size:13px"></span>
               </div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
-                <template x-if="profileDetail?.instance?.name">
+                <template x-if="profileDetail?.instance?.name && !profileDetail?._browseMode">
                   <span><span x-text="profileDetail.instance.name"></span><template x-if="profileDetail._arrProfileName"><span> → <span style="color:var(--text-primary)" x-text="profileDetail._arrProfileName"></span></span></template> — </span>
                 </template>
                 <span x-text="profileDetail?.detail?.totalCoreCFs || 0"></span> <span x-text="profileDetail?.detail?.imported ? 'Custom Formats' : 'Required CFs'"></span>

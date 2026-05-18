@@ -100,6 +100,28 @@ export default {
       return rules.some(r => instIds.has(r.instanceId) && r.trashProfileId === trashId);
     },
 
+    // Multi-line tooltip body for the in-use badge — count line + bullet
+    // list, same shape whether 1 or N instances so the badge itself stays
+    // consistent ("in use" always) and details live in the tooltip.
+    // Rendered via white-space: pre-line on the tooltip stylesheet.
+    // (Per-section instance picker would make this redundant — open
+    // redesign item noted in CLAUDE.md.)
+    tpdInUseTooltip(appType, trashId) {
+      const rules = this.autoSyncRules || [];
+      const insts = this.instancesOfType(appType);
+      const byId = new Map(insts.map(i => [i.id, i.name]));
+      const names = rules
+        .filter(r => r.trashProfileId === trashId && byId.has(r.instanceId))
+        // Collapse stray whitespace so an instance name with embedded
+        // newlines/tabs can't break the bullet-list layout.
+        .map(r => (byId.get(r.instanceId) || '').replace(/\s+/g, ' ').trim());
+      if (names.length === 0) return '';
+      const header = names.length === 1
+        ? 'Used in 1 instance:'
+        : `Used in ${names.length} instances:`;
+      return header + '\n' + names.map(n => '• ' + n).join('\n');
+    },
+
     // Apply search + category filter + feature filter to the description
     // list. All three combine with AND (a profile must match all active
     // filters to appear). Returns a new array — original state isn't
@@ -242,23 +264,30 @@ export default {
     },
 
     // Click-handler for the primary "Use →" CTA on a card. Opens the
-    // existing sync-rule editor for this profile on the first instance
-    // of the active app type. Falls back to instance picker when there
-    // are 2+ instances (not implemented in this slice — defers to existing
-    // openProfileDetail flow which prompts).
-    tpdUseProfile(appType, trashId) {
+    // detail/editor overlay so the user can configure customizations and
+    // pick their target instance in Save & Sync's picker. We pass insts[0]
+    // as the editor's default working instance (so internal data flow and
+    // the sync-modal's picker have a valid starting point), but mark the
+    // overlay as browse-mode so the header doesn't display that default
+    // as if it were a committed target — the user picks the real instance
+    // when they hit Save & Sync. Sync Rule → Edit entries skip this flag
+    // (they pass restoreFromRule=true) and continue to show the bound
+    // instance as today.
+    async tpdUseProfile(appType, trashId) {
       const insts = this.instancesOfType(appType);
       if (insts.length === 0) {
         this.showToast(`Add a ${appType} instance first to use this profile`, 'error', 6000);
         return;
       }
-      // Look up the classic profile object — openProfileDetail expects it
       const profile = (this.trashProfiles[appType] || []).find(p => p.trashId === trashId);
       if (!profile) {
         this.showToast('Profile not found in TRaSH data', 'error', 6000);
         return;
       }
-      this.openProfileDetail(insts[0], profile);
+      await this.openProfileDetail(insts[0], profile);
+      if (this.profileDetail) {
+        this.profileDetail = { ...this.profileDetail, _browseMode: true };
+      }
     },
   },
 };

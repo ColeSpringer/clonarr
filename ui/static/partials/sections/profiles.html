@@ -233,7 +233,7 @@
                           <h3 class="tpd-card-title" x-text="d.name"></h3>
                           <span x-show="tpdView === 'list'" class="tpd-card-list-tagline"
                                 x-text="(d.tagline || '') + (d.axes?.avgSize ? ' · ' + d.axes.avgSize : '')"></span>
-                          <span class="tpd-used-mark" x-show="tpdProfileInUse(activeAppType, d.trashId)">in use</span>
+                          <span class="tpd-used-mark" x-show="tpdProfileInUse(activeAppType, d.trashId)" x-tt="tpdInUseTooltip(activeAppType, d.trashId)" @click.stop>in use</span>
                         </div>
 
                         <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
