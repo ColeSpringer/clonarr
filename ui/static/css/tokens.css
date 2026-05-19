@@ -124,6 +124,8 @@
   --radarr-glow: rgba(255, 194, 48, 0.18);
   --sonarr-color: #35c5f4;
   --sonarr-glow: rgba(53, 197, 244, 0.18);
+  --prowlarr-color: #e66000;
+  --prowlarr-glow: rgba(230, 96, 0, 0.18);
   --clonarr-color: #2faa57;
   --clonarr-glow: rgba(47, 170, 87, 0.18);
 

@@ -4,57 +4,197 @@
     <div style="font-size:18px;font-weight:600;margin-bottom:4px">Settings</div>
     <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Configure Clonarr — instances, TRaSH repository, Prowlarr, notifications, and display.</div>
 
+    <!-- Settings sub-section navigation now lives in the main sidebar
+         (mirrors Profiles / Media Management / Advanced pattern). The
+         in-page settings-sidebar nav was removed; .settings-layout +
+         .settings-content remain so the card container styling carries
+         over with content filling the full width. -->
     <div class="settings-layout">
-      <!-- Sidebar nav -->
-      <nav class="settings-sidebar" aria-label="Settings">
-        <a class="settings-nav" :class="settingsSection === 'instances' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'instances' })" :aria-current="settingsSection === 'instances' ? 'page' : null">Instances</a>
-        <a class="settings-nav" :class="settingsSection === 'trash' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'trash' })" :aria-current="settingsSection === 'trash' ? 'page' : null">TRaSH Guides</a>
-        <a class="settings-nav" x-show="config.devMode" :class="settingsSection === 'prowlarr' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'prowlarr' })" :aria-current="settingsSection === 'prowlarr' ? 'page' : null">Prowlarr</a>
-        <a class="settings-nav" :class="settingsSection === 'notifications' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'notifications' })" :aria-current="settingsSection === 'notifications' ? 'page' : null">Notifications</a>
-        <a class="settings-nav" :class="settingsSection === 'display' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'display' })" :aria-current="settingsSection === 'display' ? 'page' : null">Display</a>
-        <a class="settings-nav" :class="settingsSection === 'security' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'security' })" :aria-current="settingsSection === 'security' ? 'page' : null">Security</a>
-        <a class="settings-nav" :class="settingsSection === 'advanced' && 'settings-nav-active'" :href="navHref('settings', { settingsSection: 'advanced' })" :aria-current="settingsSection === 'advanced' ? 'page' : null">Advanced</a>
-      </nav>
-
-      <!-- Content panel -->
       <div class="settings-content">
 
         <!-- ===== Instances ===== -->
+        <!-- Three sibling sections (Radarr / Sonarr / Prowlarr), each
+             wrapped in a .v3-inst-card so the app-color gradient header
+             matches the per-instance cards used on Sync Rules + History.
+             Inline style overrides --app-color + --app-glow per section so
+             each one carries its app's brand identity without depending on
+             the global activeAppType cascade. Prowlarr is gated behind
+             config.devMode (same as before) and surfaces its existing
+             URL + API key + categories form inline rather than as a
+             separate Settings sub-section. -->
         <div x-show="settingsSection === 'instances'">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <div>
-              <div class="settings-section-title">Instances</div>
-              <div class="settings-section-desc">Connect your Radarr and Sonarr instances.</div>
+          <div class="settings-section-title">Instances</div>
+          <div class="settings-section-desc">Connect your Radarr and Sonarr instances<span x-show="config.devMode">, plus Prowlarr for the Scoring Sandbox</span>.</div>
+
+          <!-- Radarr section -->
+          <div class="v3-inst-card" style="--app-color: var(--radarr-color); --app-glow: var(--radarr-glow); margin-top: 16px;">
+            <div class="v3-inst-header">
+              <span class="v3-inst-name">Radarr</span>
+              <span class="v3-inst-count" x-text="instancesOfType('radarr').length + (instancesOfType('radarr').length === 1 ? ' instance' : ' instances')"></span>
+              <div class="v3-inst-actions">
+                <button class="v3-inst-action" @click="startInlineAdd('radarr')" x-show="inlineEditingId !== 'new-radarr'">+ Add Radarr</button>
+              </div>
             </div>
-            <button class="btn btn-sm btn-primary" @click="openInstanceModal()">+ Add Instance</button>
-          </div>
-          <template x-if="instances.length === 0">
-            <div style="color:var(--text-muted);font-size:13px;padding:8px 0">No instances configured. Add your first Radarr or Sonarr instance.</div>
-          </template>
-          <template x-for="inst in [...instances].sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))" :key="inst.id">
-            <div class="inst-row">
-              <img class="inst-icon" :src="instanceIconUrl(inst)" :alt="inst.type">
-              <div style="font-size:13px;font-weight:500;min-width:80px" x-text="inst.name"></div>
-              <div style="font-size:13px;color:var(--text-muted);margin-left:4px" x-text="inst.url"></div>
-              <div style="margin-left:auto;text-align:right;white-space:nowrap">
-                <template x-if="instanceStatus[inst.id] === 'testing'">
-                  <span class="status-testing"><span class="spinner"></span></span>
-                </template>
-                <template x-if="instanceStatus[inst.id] === 'connected'">
-                  <span class="status-connected">Connected<span x-show="instanceVersion[inst.id]" style="color:var(--text-muted);font-weight:400;font-size:13px" x-text="' · v' + instanceVersion[inst.id]"></span></span>
-                </template>
-                <template x-if="instanceStatus[inst.id] === 'failed'">
-                  <span class="status-failed">Failed</span>
-                </template>
-                <template x-if="!instanceStatus[inst.id]">
-                  <span style="font-size:12px;color:var(--text-muted)">Not tested</span>
+            <template x-if="instancesOfType('radarr').length === 0 && inlineEditingId !== 'new-radarr'">
+              <div style="color:var(--text-muted);font-size:13px;padding:14px 16px">No Radarr instances yet.</div>
+            </template>
+            <template x-for="inst in instancesOfType('radarr')" :key="inst.id">
+              <div>
+                <!-- View row — hidden while this row's edit form is open -->
+                <div class="inst-row" x-show="inlineEditingId !== inst.id">
+                  <img class="inst-icon" :src="instanceIconUrl(inst)" :alt="inst.type">
+                  <div style="font-size:13px;font-weight:500;min-width:80px" x-text="inst.name"></div>
+                  <div style="font-size:13px;color:var(--text-muted);margin-left:4px" x-text="inst.url"></div>
+                  <div style="margin-left:auto;text-align:right;white-space:nowrap">
+                    <template x-if="instanceStatus[inst.id] === 'testing'"><span class="status-testing"><span class="spinner"></span></span></template>
+                    <template x-if="instanceStatus[inst.id] === 'connected'"><span class="status-connected">Connected<span x-show="instanceVersion[inst.id]" style="color:var(--text-muted);font-weight:400;font-size:13px" x-text="' · v' + instanceVersion[inst.id]"></span></span></template>
+                    <template x-if="instanceStatus[inst.id] === 'failed'"><span class="status-failed">Failed</span></template>
+                    <template x-if="!instanceStatus[inst.id]"><span style="font-size:12px;color:var(--text-muted)">Not tested</span></template>
+                  </div>
+                  <button class="btn btn-sm" style="margin-left:8px" @click="testInstance(inst)">Test</button>
+                  <button class="btn btn-sm" style="margin-left:4px" @click="startInlineEdit(inst)">Edit</button>
+                  <button class="btn btn-sm btn-danger" style="margin-left:4px" @click="deleteInstance(inst)">Delete</button>
+                </div>
+                <!-- Inline edit form — only rendered when this row is active -->
+                <template x-if="inlineEditingId === inst.id">
+                  {{template "instance-edit-form" .}}
                 </template>
               </div>
-              <button class="btn btn-sm" style="margin-left:8px" @click="testInstance(inst)">Test</button>
-              <button class="btn btn-sm" style="margin-left:4px" @click="openInstanceModal(inst)">Edit</button>
-              <button class="btn btn-sm btn-danger" style="margin-left:4px" @click="deleteInstance(inst)">Delete</button>
+            </template>
+            <!-- New-instance form at section bottom -->
+            <template x-if="inlineEditingId === 'new-radarr'">
+              {{template "instance-edit-form" .}}
+            </template>
+          </div>
+
+          <!-- Sonarr section -->
+          <div class="v3-inst-card" style="--app-color: var(--sonarr-color); --app-glow: var(--sonarr-glow);">
+            <div class="v3-inst-header">
+              <span class="v3-inst-name">Sonarr</span>
+              <span class="v3-inst-count" x-text="instancesOfType('sonarr').length + (instancesOfType('sonarr').length === 1 ? ' instance' : ' instances')"></span>
+              <div class="v3-inst-actions">
+                <button class="v3-inst-action" @click="startInlineAdd('sonarr')" x-show="inlineEditingId !== 'new-sonarr'">+ Add Sonarr</button>
+              </div>
             </div>
-          </template>
+            <template x-if="instancesOfType('sonarr').length === 0 && inlineEditingId !== 'new-sonarr'">
+              <div style="color:var(--text-muted);font-size:13px;padding:14px 16px">No Sonarr instances yet.</div>
+            </template>
+            <template x-for="inst in instancesOfType('sonarr')" :key="inst.id">
+              <div>
+                <div class="inst-row" x-show="inlineEditingId !== inst.id">
+                  <img class="inst-icon" :src="instanceIconUrl(inst)" :alt="inst.type">
+                  <div style="font-size:13px;font-weight:500;min-width:80px" x-text="inst.name"></div>
+                  <div style="font-size:13px;color:var(--text-muted);margin-left:4px" x-text="inst.url"></div>
+                  <div style="margin-left:auto;text-align:right;white-space:nowrap">
+                    <template x-if="instanceStatus[inst.id] === 'testing'"><span class="status-testing"><span class="spinner"></span></span></template>
+                    <template x-if="instanceStatus[inst.id] === 'connected'"><span class="status-connected">Connected<span x-show="instanceVersion[inst.id]" style="color:var(--text-muted);font-weight:400;font-size:13px" x-text="' · v' + instanceVersion[inst.id]"></span></span></template>
+                    <template x-if="instanceStatus[inst.id] === 'failed'"><span class="status-failed">Failed</span></template>
+                    <template x-if="!instanceStatus[inst.id]"><span style="font-size:12px;color:var(--text-muted)">Not tested</span></template>
+                  </div>
+                  <button class="btn btn-sm" style="margin-left:8px" @click="testInstance(inst)">Test</button>
+                  <button class="btn btn-sm" style="margin-left:4px" @click="startInlineEdit(inst)">Edit</button>
+                  <button class="btn btn-sm btn-danger" style="margin-left:4px" @click="deleteInstance(inst)">Delete</button>
+                </div>
+                <template x-if="inlineEditingId === inst.id">
+                  {{template "instance-edit-form" .}}
+                </template>
+              </div>
+            </template>
+            <template x-if="inlineEditingId === 'new-sonarr'">
+              {{template "instance-edit-form" .}}
+            </template>
+          </div>
+
+          <!-- Prowlarr section (devMode-gated; powers the Scoring Sandbox).
+               Single config — only one Prowlarr can be connected — but the
+               row + inline-form pattern matches Radarr/Sonarr so users
+               see consistent button placement and save/cancel semantics
+               across all three sections. "+ Add Prowlarr" hides once
+               configured (no second instance allowed). -->
+          <div x-show="config.devMode" class="v3-inst-card" style="--app-color: var(--prowlarr-color); --app-glow: var(--prowlarr-glow);">
+            <div class="v3-inst-header">
+              <span class="v3-inst-name">Prowlarr</span>
+              <span class="v3-inst-count">Indexer aggregator (powers Scoring Sandbox)</span>
+              <div class="v3-inst-actions">
+                <button class="v3-inst-action" @click="startProwlarrAdd()" x-show="!config.prowlarr?.url && inlineEditingId !== 'new-prowlarr'">+ Add Prowlarr</button>
+              </div>
+            </div>
+            <!-- Configured row — hidden while this row's edit form is open.
+                 Uses x-show on a div (not <template x-if>) so the nested
+                 status x-if templates retain consistent reactive bindings
+                 across edits and Test cycles. -->
+            <div class="inst-row" x-show="config.prowlarr?.url && inlineEditingId !== 'prowlarr'">
+              <img class="inst-icon" src="icons/prowlarr.png" alt="Prowlarr">
+              <div style="font-size:13px;font-weight:500;min-width:80px">Prowlarr</div>
+              <div style="font-size:13px;color:var(--text-muted);margin-left:4px" x-text="config.prowlarr?.url"></div>
+              <div style="margin-left:auto;text-align:right;white-space:nowrap">
+                <template x-if="prowlarrTesting"><span class="status-testing"><span class="spinner"></span></span></template>
+                <template x-if="!prowlarrTesting && prowlarrTestResult?.ok"><span class="status-connected">Connected<span x-show="prowlarrTestResult?.version" style="color:var(--text-muted);font-weight:400;font-size:13px" x-text="' · v' + prowlarrTestResult?.version"></span></span></template>
+                <template x-if="!prowlarrTesting && prowlarrTestResult && !prowlarrTestResult.ok"><span class="status-failed" x-text="prowlarrTestResult.message"></span></template>
+                <template x-if="!prowlarrTesting && !prowlarrTestResult"><span style="font-size:12px;color:var(--text-muted)">Not tested</span></template>
+              </div>
+              <button class="btn btn-sm" style="margin-left:8px" @click="testProwlarr()" :disabled="!config.prowlarr?.url || !config.prowlarr?.apiKey">Test</button>
+              <button class="btn btn-sm" style="margin-left:4px" @click="startProwlarrEdit()">Edit</button>
+              <button class="btn btn-sm btn-danger" style="margin-left:4px" @click="deleteProwlarr()">Delete</button>
+            </div>
+            <!-- Unconfigured placeholder — shown when nothing's connected and no add form is open -->
+            <div style="color:var(--text-muted);font-size:13px;padding:14px 16px" x-show="!config.prowlarr?.url && inlineEditingId !== 'new-prowlarr'">Prowlarr not configured — click + Add Prowlarr to connect.</div>
+            <!-- Edit / add form. Binds to prowlarrForm (temp state) so Cancel
+                 can discard cleanly; Save commits to config.prowlarr. -->
+            <template x-if="inlineEditingId === 'prowlarr' || inlineEditingId === 'new-prowlarr'">
+              <div class="inst-edit-form" style="padding:14px 16px 16px 16px;border-top:1px solid var(--border-muted)">
+                <div class="setting-row">
+                  <div class="setting-label">Enabled</div>
+                  <div class="setting-value">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" x-model="prowlarrForm.enabled" style="accent-color:var(--accent-blue)">
+                      <span style="font-size:13px;color:var(--text-secondary)">Enable Prowlarr integration</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-label">URL</div>
+                  <div class="setting-value">
+                    <input class="input" style="width:340px" x-model="prowlarrForm.url" placeholder="http://prowlarr:9696" autocomplete="one-time-code">
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-label">API Key</div>
+                  <div class="setting-value">
+                    <input class="input" style="width:340px" x-model="prowlarrForm.apiKey" placeholder="API key" autocomplete="one-time-code">
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-label">Radarr categories</div>
+                  <div class="setting-value" style="display:flex;align-items:center;gap:8px">
+                    <input class="input" style="width:280px;font-family:monospace;font-size:12px"
+                           :value="(prowlarrForm.radarrCategories || []).join(', ')"
+                           @change="prowlarrForm.radarrCategories = parseCategoryList($event.target.value)"
+                           placeholder="2000 (default)">
+                    <span style="font-size:12px;color:var(--text-secondary)">Category IDs for movie searches</span>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-label">Sonarr categories</div>
+                  <div class="setting-value" style="display:flex;align-items:center;gap:8px">
+                    <input class="input" style="width:280px;font-family:monospace;font-size:12px"
+                           :value="(prowlarrForm.sonarrCategories || []).join(', ')"
+                           @change="prowlarrForm.sonarrCategories = parseCategoryList($event.target.value)"
+                           placeholder="5000 (default)">
+                    <span style="font-size:12px;color:var(--text-secondary)">Category IDs for TV searches</span>
+                  </div>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">
+                  Leave blank for defaults. Add sub-IDs (e.g. <code style="background:var(--bg-muted);padding:1px 4px;border-radius:2px;color:var(--text-body)">2000, 2040, 2045</code>) if your indexer only tags specific sub-categories and root-only searches return no results.
+                </div>
+                <div style="display:flex;gap:8px;padding-top:12px;margin-top:8px;border-top:1px solid var(--border-muted)">
+                  <div style="flex:1"></div>
+                  <button class="btn btn-sm" @click="cancelInlineEdit()">Cancel</button>
+                  <button class="btn btn-sm btn-primary" @click="saveProwlarrConfig()" x-text="inlineEditingId === 'new-prowlarr' ? 'Add' : 'Save'"></button>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
 
         <!-- ===== TRaSH Guides ===== -->
@@ -244,53 +384,6 @@
               </button>
               <span style="font-size:12px;color:var(--text-muted)">Deletes only the local cache. Pull redownloads TRaSH data; Sync All forces an Arr refresh.</span>
             </div>
-          </div>
-        </div>
-
-        <!-- ===== Prowlarr ===== -->
-        <div x-show="settingsSection === 'prowlarr'">
-          <div class="settings-section-title">Prowlarr</div>
-          <div class="settings-section-desc">Connect Prowlarr to enable release searching in the Scoring Sandbox.</div>
-          <div class="setting-row">
-            <div class="setting-label">Connection</div>
-            <div class="setting-value" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input type="checkbox" x-model="config.prowlarr.enabled" @change="saveConfig(['prowlarr'])" style="accent-color:var(--accent-blue)">
-              </label>
-              <input class="input" style="width:250px" x-model="config.prowlarr.url" @change="saveConfig(['prowlarr'])" placeholder="http://prowlarr:9696" autocomplete="one-time-code">
-              <input class="input" style="width:250px" x-model="config.prowlarr.apiKey" @change="saveConfig(['prowlarr'])" placeholder="API key" autocomplete="one-time-code">
-              <button class="btn btn-sm" @click="testProwlarr()" :disabled="prowlarrTesting || !config.prowlarr?.url || !config.prowlarr?.apiKey">
-                <span x-show="prowlarrTesting" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
-                <span x-show="!prowlarrTesting">Test</span>
-              </button>
-              <span x-show="prowlarrTestResult" style="font-size:12px">
-                <span :style="prowlarrTestResult?.ok ? 'color:var(--accent-green)' : 'color:var(--accent-red)'" x-text="prowlarrTestResult?.message"></span>
-                <span x-show="prowlarrTestResult?.version" style="color:var(--text-muted);font-size:13px" x-text="' · v' + prowlarrTestResult?.version"></span>
-              </span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">Radarr categories</div>
-            <div class="setting-value" style="display:flex;align-items:center;gap:8px">
-              <input class="input" style="width:250px;font-family:monospace;font-size:12px"
-                     :value="(config.prowlarr.radarrCategories || []).join(', ')"
-                     @change="config.prowlarr.radarrCategories = parseCategoryList($event.target.value); saveConfig(['prowlarr'])"
-                     placeholder="2000 (default)">
-              <span style="font-size:12px;color:var(--text-secondary)">Category IDs for movie searches</span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">Sonarr categories</div>
-            <div class="setting-value" style="display:flex;align-items:center;gap:8px">
-              <input class="input" style="width:250px;font-family:monospace;font-size:12px"
-                     :value="(config.prowlarr.sonarrCategories || []).join(', ')"
-                     @change="config.prowlarr.sonarrCategories = parseCategoryList($event.target.value); saveConfig(['prowlarr'])"
-                     placeholder="5000 (default)">
-              <span style="font-size:12px;color:var(--text-secondary)">Category IDs for TV searches</span>
-            </div>
-          </div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:8px;padding-top:8px;border-top:1px solid var(--bg-muted);line-height:1.5">
-            Leave blank for defaults. Add sub-IDs (e.g. <code style="background:var(--bg-muted);padding:1px 4px;border-radius:2px;color:var(--text-body)">2000, 2040, 2045</code>) if your indexer only tags specific sub-categories and root-only searches return no results.
           </div>
         </div>
 

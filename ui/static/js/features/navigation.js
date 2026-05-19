@@ -178,7 +178,10 @@ export default {
       // sections in v3. Old bookmarks pointing to those hashes stay
       // working as a result.
       const validSections = ['profiles','custom-formats','media-management','quality-size','naming','maintenance','advanced','settings','about'];
-      const validSettings = ['instances','trash','prowlarr','notifications','display','security','advanced'];
+      // 'prowlarr' kept as a legacy alias for old bookmarks — Prowlarr config
+      // now lives inside the Instances section as its own v3-inst-card.
+      const validSettings = ['instances','trash','notifications','display','security','advanced'];
+      const settingsAlias = { prowlarr: 'instances' };
       // v3: 'trash-sync' kept as a legacy alias of 'trash-profiles' so old
       // bookmarks and hashes keep working after the sub-tab split. Mapped
       // during hash restore below.
@@ -190,7 +193,10 @@ export default {
       try {
         if (parts[0] === 'settings') {
           this.currentSection = 'settings';
-          if (parts[1] && validSettings.includes(parts[1])) this.settingsSection = parts[1];
+          if (parts[1]) {
+            const aliased = settingsAlias[parts[1]] || parts[1];
+            if (validSettings.includes(aliased)) this.settingsSection = aliased;
+          }
         } else if (parts[0] === 'about') {
           this.currentSection = 'about';
         } else {

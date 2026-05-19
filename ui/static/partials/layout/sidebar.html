@@ -166,14 +166,36 @@
 
       <div class="sidebar-section-label" x-show="!sidebarCollapsed">App</div>
 
-      <!-- Settings -->
+      <!-- Settings — sub-nav mirrors the in-page settings-nav tab row
+           that used to sit at the top of the Settings page. Now the
+           sidebar is the single source for navigation between Settings
+           sub-sections (matches Profiles / Media Management / Advanced
+           pattern). Hover-popup works the same way for collapsed mode. -->
       <a class="sidebar-nav-item" :class="{ active: currentSection === 'settings' }"
          :href="navHref('settings')"
          :aria-current="currentSection === 'settings' ? 'page' : null"
-         x-tt="sidebarCollapsed ? 'Settings' : null">
+         x-tt="sidebarCollapsed ? 'Settings' : null"
+         @mouseenter="showSidebarSubnav('settings', $el)"
+         @mouseleave="scheduleHideSidebarSubnav()">
         <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
         <span class="sidebar-nav-label" x-show="!sidebarCollapsed">Settings</span>
       </a>
+
+      <!-- Sub-nav under Settings, only when sidebar expanded -->
+      <div class="sidebar-subnav" x-show="!sidebarCollapsed && currentSection === 'settings'">
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'instances' }"
+           :href="navHref('settings', { settingsSection: 'instances' })">Instances</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'trash' }"
+           :href="navHref('settings', { settingsSection: 'trash' })">TRaSH Guides</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'notifications' }"
+           :href="navHref('settings', { settingsSection: 'notifications' })">Notifications</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'display' }"
+           :href="navHref('settings', { settingsSection: 'display' })">Display</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'security' }"
+           :href="navHref('settings', { settingsSection: 'security' })">Security</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'advanced' }"
+           :href="navHref('settings', { settingsSection: 'advanced' })">Advanced</a>
+      </div>
 
       <!-- About -->
       <a class="sidebar-nav-item" :class="{ active: currentSection === 'about' }"
@@ -307,7 +329,7 @@
        @mouseleave="scheduleHideSidebarSubnav()"
        @keydown.escape.window="sidebarSubnavPopup = ''"
        role="menu"
-       :aria-label="(sidebarSubnavPopup === 'profiles' ? 'Profiles' : sidebarSubnavPopup === 'media-management' ? 'Media Management' : sidebarSubnavPopup === 'maintenance' ? 'Maintenance' : 'Advanced') + ' sub-navigation'">
+       :aria-label="(sidebarSubnavPopup === 'profiles' ? 'Profiles' : sidebarSubnavPopup === 'media-management' ? 'Media Management' : sidebarSubnavPopup === 'maintenance' ? 'Maintenance' : sidebarSubnavPopup === 'settings' ? 'Settings' : 'Advanced') + ' sub-navigation'">
     <template x-if="sidebarSubnavPopup === 'profiles'">
       <div>
         <div class="sidebar-subnav-popup-header">Profiles</div>
@@ -349,6 +371,23 @@
            :href="navHref('advanced', { advancedTab: 'scoring' })" @click="sidebarSubnavPopup = ''">Scoring Sandbox</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: advancedTab === 'group-builder' }"
            :href="navHref('advanced', { advancedTab: 'group-builder' })" @click="sidebarSubnavPopup = ''">CF Group Builder</a>
+      </div>
+    </template>
+    <template x-if="sidebarSubnavPopup === 'settings'">
+      <div>
+        <div class="sidebar-subnav-popup-header">Settings</div>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'instances' }"
+           :href="navHref('settings', { settingsSection: 'instances' })" @click="sidebarSubnavPopup = ''">Instances</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'trash' }"
+           :href="navHref('settings', { settingsSection: 'trash' })" @click="sidebarSubnavPopup = ''">TRaSH Guides</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'notifications' }"
+           :href="navHref('settings', { settingsSection: 'notifications' })" @click="sidebarSubnavPopup = ''">Notifications</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'display' }"
+           :href="navHref('settings', { settingsSection: 'display' })" @click="sidebarSubnavPopup = ''">Display</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'security' }"
+           :href="navHref('settings', { settingsSection: 'security' })" @click="sidebarSubnavPopup = ''">Security</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'advanced' }"
+           :href="navHref('settings', { settingsSection: 'advanced' })" @click="sidebarSubnavPopup = ''">Advanced</a>
       </div>
     </template>
   </div>
