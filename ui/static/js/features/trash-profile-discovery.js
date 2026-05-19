@@ -18,10 +18,15 @@ export default {
     tpdLoading: { radarr: false, sonarr: false },
     // 'grid' | 'list' (per-browser localStorage)
     tpdView: localStorage.getItem('clonarr_tpdView') || 'grid',
-    // filter chip — 'all' | 'hd' | 'uhd' | 'hdr' | 'lossless' | 'in-use'
-    tpdFilter: 'all',
-    // category filter — 'all' | <groupName> (Standard / SQP / Anime / …)
-    tpdCategoryFilter: 'all',
+    // Multi-select feature filters — array of any combination of
+    // 'hd' | 'uhd' | 'hdr' | 'lossless' | 'in-use'. Empty means "All".
+    // Within the group selections are OR'd (HDR + Lossless → either),
+    // and the feature group AND's with the category group.
+    tpdFeatureFilters: [],
+    // Multi-select category filters — array of group names from
+    // tpdCategoryList (Standard / SQP / Anime / …). Empty means "All".
+    // Selections within the group are OR'd.
+    tpdCategoryFilters: [],
     tpdSearch: '',
     // trash_id → bool (which cards are expanded in list view)
     tpdOpenIds: {},
@@ -55,12 +60,32 @@ export default {
       localStorage.setItem('clonarr_tpdView', view);
     },
 
-    tpdSetFilter(filter) {
-      this.tpdFilter = filter;
+    // Toggle a feature pill in or out of the active set. Clicking an
+    // active pill removes it; clicking the "All" pill clears the entire
+    // set. Same shape for the two groups, kept as separate helpers so
+    // template binding is symmetric with isActive checks.
+    tpdToggleFeature(filter) {
+      const i = this.tpdFeatureFilters.indexOf(filter);
+      if (i >= 0) this.tpdFeatureFilters.splice(i, 1);
+      else this.tpdFeatureFilters.push(filter);
+    },
+    tpdClearFeatures() {
+      this.tpdFeatureFilters = [];
+    },
+    tpdIsFeatureActive(filter) {
+      return this.tpdFeatureFilters.includes(filter);
     },
 
-    tpdSetCategory(cat) {
-      this.tpdCategoryFilter = cat;
+    tpdToggleCategory(cat) {
+      const i = this.tpdCategoryFilters.indexOf(cat);
+      if (i >= 0) this.tpdCategoryFilters.splice(i, 1);
+      else this.tpdCategoryFilters.push(cat);
+    },
+    tpdClearCategories() {
+      this.tpdCategoryFilters = [];
+    },
+    tpdIsCategoryActive(cat) {
+      return this.tpdCategoryFilters.includes(cat);
     },
 
     // tpdCategoryList returns category names in the same order they
@@ -90,6 +115,28 @@ export default {
 
     tpdIsOpen(trashId) {
       return !!this.tpdOpenIds[trashId];
+    },
+
+    // True when at least one profile detail body is currently expanded.
+    // Drives the Expand-all / Collapse-all toggle label in list view —
+    // the same button flips between the two actions based on this state.
+    tpdAnyOpen() {
+      return Object.values(this.tpdOpenIds).some(v => v);
+    },
+
+    // Open every profile in the current filtered set. Operates only on
+    // tpdFiltered so a filter narrows the bulk-expand scope (e.g. filter
+    // to UHD then Expand all → just those expand, not all 30).
+    tpdExpandAll(appType) {
+      const next = { ...this.tpdOpenIds };
+      for (const d of this.tpdFiltered(appType)) next[d.trashId] = true;
+      this.tpdOpenIds = next;
+    },
+
+    // Reset all open states. Cheap one-liner; preserved as a named helper
+    // so the template stays declarative.
+    tpdCollapseAll() {
+      this.tpdOpenIds = {};
     },
 
     // True when at least one auto-sync rule references this trash_id on any
@@ -129,34 +176,62 @@ export default {
     tpdFiltered(appType) {
       const all = this.trashProfileDescriptions[appType] || [];
       const q = (this.tpdSearch || '').toLowerCase().trim();
-      const f = this.tpdFilter || 'all';
-      const cat = this.tpdCategoryFilter || 'all';
+      const cats = this.tpdCategoryFilters || [];
+      const feats = this.tpdFeatureFilters || [];
       // Category lookup via the classic trashProfiles metadata — same
       // source tpdGrouped uses, so a profile matches its category-pill
       // exactly when its section heading on the page reads the same.
       const meta = this.trashProfiles[appType] || [];
       const metaById = new Map();
       for (const p of meta) metaById.set(p.trashId, p);
-      return all.filter(d => {
-        // Search across name + tagline (the two fields visible at-a-glance)
-        if (q) {
-          const hay = (d.name + ' ' + (d.tagline || '')).toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        // Category filter
-        if (cat !== 'all') {
-          const m = metaById.get(d.trashId);
-          const groupName = (m && m.groupName) || 'Other';
-          if (groupName !== cat) return false;
-        }
-        // Feature filter
+
+      const matchesFeature = (d, f) => {
         switch (f) {
-          case 'all': return true;
           case 'hd':       return (d.axes?.resolution || '').includes('1080p') && !(d.axes?.resolution || '').includes('2160p');
           case 'uhd':      return (d.axes?.resolution || '').includes('2160p');
           case 'hdr':      return !!d.axes?.hdr?.scored;
           case 'lossless': return !!d.axes?.audio?.scored;
           case 'in-use':   return this.tpdProfileInUse(appType, d.trashId);
+        }
+        return false;
+      };
+
+      return all.filter(d => {
+        if (q) {
+          // Build a wider haystack so words from the description match too.
+          // Includes name + tagline + every Highlights bullet + axes prose
+          // (resolution, sources list, HDR opt-ins, average size) + the
+          // disclaimer prose. Matches user intent: searching "atmos" finds
+          // the lossless-audio bullet; "remux" matches the source label
+          // even when not in the profile name.
+          const hayParts = [
+            d.name,
+            d.tagline || '',
+            (d.highlights || []).join(' '),
+            d.axes?.resolution || '',
+            (d.axes?.sources || []).join(' '),
+            (d.axes?.hdr?.optIns || []).join(' '),
+            d.axes?.avgSize || '',
+            d.disclaimer?.before || '',
+            d.disclaimer?.linkText || '',
+            d.disclaimer?.after || '',
+          ];
+          const hay = hayParts.join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        // Category — empty array means "All". Multiple selections OR'd
+        // (Standard + SQP → either group qualifies).
+        if (cats.length > 0) {
+          const m = metaById.get(d.trashId);
+          const groupName = (m && m.groupName) || 'Other';
+          if (!cats.includes(groupName)) return false;
+        }
+        // Features — empty array means "All". Multiple selections OR'd
+        // (HDR + Lossless → either feature qualifies). To require all
+        // selected features at once, swap .some → .every; OR was chosen
+        // because most chip-grids in this app behave additively.
+        if (feats.length > 0) {
+          if (!feats.some(f => matchesFeature(d, f))) return false;
         }
         return true;
       });

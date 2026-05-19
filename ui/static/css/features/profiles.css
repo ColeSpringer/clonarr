@@ -513,6 +513,13 @@
   padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
   transition: border-color 120ms ease;
 }
+/* Body fills remaining card height as a flex column so the footer's
+   margin-top:auto pushes it to the card bottom — without flex:1 here,
+   varying highlights-bullet counts left footers floating mid-card and
+   misaligned across the row. */
+.tpd-view-grid .tpd-card-body {
+  flex: 1; display: flex; flex-direction: column; gap: 8px;
+}
 .tpd-view-grid .tpd-card-chevron,
 .tpd-view-grid .tpd-card-list-tagline { display: none; }
 

@@ -197,20 +197,23 @@
                    Anime, foreign-language). -->
               <div class="tpd-toolbar">
                 <input class="tpd-search" placeholder="Search profiles…" x-model="tpdSearch">
-                <button class="tpd-chip" :class="{ active: tpdCategoryFilter === 'all' }" @click="tpdSetCategory('all')">All</button>
+                <button class="tpd-chip" :class="{ active: tpdCategoryFilters.length === 0 }" @click="tpdClearCategories()">All</button>
                 <template x-for="cat in tpdCategoryList(activeAppType)" :key="cat">
-                  <button class="tpd-chip" :class="{ active: tpdCategoryFilter === cat }" @click="tpdSetCategory(cat)" x-text="cat"></button>
+                  <button class="tpd-chip" :class="{ active: tpdIsCategoryActive(cat) }" @click="tpdToggleCategory(cat)" x-text="cat"></button>
                 </template>
                 <span class="tpd-toolbar-sep" aria-hidden="true">·</span>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'all' }" @click="tpdSetFilter('all')">All</button>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'hd' }" @click="tpdSetFilter('hd')">1080p</button>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'uhd' }" @click="tpdSetFilter('uhd')">4K / UHD</button>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'hdr' }" @click="tpdSetFilter('hdr')">HDR</button>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'lossless' }" @click="tpdSetFilter('lossless')">Lossless audio</button>
-                <button class="tpd-chip" :class="{ active: tpdFilter === 'in-use' }" @click="tpdSetFilter('in-use')">In use</button>
+                <button class="tpd-chip" :class="{ active: tpdFeatureFilters.length === 0 }" @click="tpdClearFeatures()">All</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('hd') }" @click="tpdToggleFeature('hd')">1080p</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('uhd') }" @click="tpdToggleFeature('uhd')">4K / UHD</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('hdr') }" @click="tpdToggleFeature('hdr')">HDR</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('lossless') }" @click="tpdToggleFeature('lossless')">Lossless audio</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('in-use') }" @click="tpdToggleFeature('in-use')">In use</button>
                 <div class="tpd-view-toggle" role="group" aria-label="View mode">
                   <button class="tpd-view-btn" :class="{ active: tpdView === 'grid' }" @click="tpdSetView('grid')">Grid</button>
                   <button class="tpd-view-btn" :class="{ active: tpdView === 'list' }" @click="tpdSetView('list')">List</button>
+                  <button x-show="tpdView === 'list'" class="tpd-view-btn"
+                          @click="tpdAnyOpen() ? tpdCollapseAll() : tpdExpandAll(activeAppType)"
+                          x-text="tpdAnyOpen() ? 'Collapse all' : 'Expand all'"></button>
                 </div>
               </div>
 
