@@ -541,6 +541,13 @@
   grid-template-columns: 14px auto minmax(0, 1fr) auto;
   gap: 8px; align-items: center;
 }
+/* Minimal cards (SQP / Base) hide the tagline entirely — drop the
+   tagline column from the grid so the used-mark doesn't claim the 1fr
+   slot and stretch across the row. Title gets the 1fr instead so it
+   can still truncate on narrow viewports. */
+.tpd-view-list .tpd-card-title-row.no-tagline {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
 .tpd-view-list .tpd-card-title-row .tpd-card-title { white-space: nowrap; }
 .tpd-view-list .tpd-card-title-row .tpd-card-list-tagline {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;

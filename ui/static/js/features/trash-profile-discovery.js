@@ -338,6 +338,17 @@ export default {
       return m ? m[1] : raw;
     },
 
+    // Minimal card mode — true for SQP profiles ([SQP] prefix) and the
+    // Base Profile (TRaSH's internal test profile). These profiles carry
+    // hand-written disclaimer copy that explains what they are; our
+    // auto-derived tagline + "What you get" highlights become redundant
+    // noise on top of that. Templates check this to suppress the tagline
+    // (both list-view and card-body) and the highlights section, leaving
+    // just the disclaimer + pills + action buttons.
+    tpdIsMinimalCard(d) {
+      return !!(d?.name && (d.name.startsWith('[SQP]') || d.name === 'Base Profile'));
+    },
+
     // Returns the auto-derived ProfileDescription for the profile currently
     // open in the editor overlay, or null. Reused by the Sync Preview's
     // profile-info panel so the editor opens with the same rich axes /
@@ -405,43 +416,61 @@ export default {
     // once the Customize button wires basics-editing.
 
     // The 6 basics fields with effective value + whether the user has
-    // overridden them. pdOverrides legacy semantics: `.enabled === false`
-    // means "override is active". Returns one row per field.
+    // overridden them. Modified detection compares values directly
+    // against the profile default — matches pdGeneralChangeCount
+    // (profiles.js:2963-2968). The .enabled flag on pdOverrides is
+    // only set when loading a saved rule; live edits don't flip it,
+    // so a flag-based check would miss in-flight changes.
+    // Language skipped for Sonarr (no profile-level language field).
     spOverviewBasics() {
       const pd = this.profileDetail?.detail?.profile;
       const ov = this.pdOverrides || {};
       if (!pd) return [];
-      const isMod = (f) => ov[f]?.enabled === false;
-      return [
-        {
+      const isRadarr = (this.profileDetail?.instance?.type || this.activeAppType) === 'radarr';
+      const rows = [];
+      if (isRadarr) {
+        const langDefault = pd.language?.name || pd.language || 'Original';
+        const langValue = ov.language?.value || langDefault;
+        rows.push({
           label: 'Language',
-          value: ov.language?.value || pd.language?.name || 'Original',
-          modified: isMod('language'),
-          defaultValue: pd.language?.name || 'Original',
-        },
+          value: langValue,
+          modified: langValue !== langDefault,
+          defaultValue: langDefault,
+        });
+      }
+      const minDefault = pd.minFormatScore ?? 0;
+      const minValue = ov.minFormatScore?.value ?? minDefault;
+      const minUpDefault = pd.minUpgradeFormatScore ?? 1;
+      const minUpValue = ov.minUpgradeFormatScore?.value ?? minUpDefault;
+      const cutScoreDefault = pd.cutoffFormatScore ?? 10000;
+      const cutScoreValue = ov.cutoffFormatScore?.value ?? cutScoreDefault;
+      const upDefault = !!pd.upgradeAllowed;
+      const upValue = ov.upgradeAllowed?.value === true || ov.upgradeAllowed?.value === 'true' || (ov.upgradeAllowed?.value === undefined && upDefault);
+      rows.push(
+        ...[
         {
           label: 'Min score',
-          value: ov.minFormatScore?.value ?? pd.minFormatScore ?? 0,
-          modified: isMod('minFormatScore'),
-          defaultValue: pd.minFormatScore ?? 0,
+          value: minValue,
+          modified: Number(minValue) !== Number(minDefault),
+          defaultValue: minDefault,
         },
         {
           label: 'Min upgrade',
-          value: ov.minUpgradeFormatScore?.value ?? pd.minUpgradeFormatScore ?? 1,
-          modified: isMod('minUpgradeFormatScore'),
-          defaultValue: pd.minUpgradeFormatScore ?? 1,
+          value: minUpValue,
+          modified: Number(minUpValue) !== Number(minUpDefault),
+          defaultValue: minUpDefault,
         },
         {
           label: 'Cutoff score',
-          value: ov.cutoffFormatScore?.value ?? pd.cutoffFormatScore ?? 10000,
-          modified: isMod('cutoffFormatScore'),
-          defaultValue: pd.cutoffFormatScore ?? 10000,
+          value: cutScoreValue,
+          modified: Number(cutScoreValue) !== Number(cutScoreDefault),
+          defaultValue: cutScoreDefault,
         },
         {
           label: 'Upgrades allowed',
-          value: (ov.upgradeAllowed?.value ?? pd.upgradeAllowed) ? 'On' : 'Off',
-          modified: isMod('upgradeAllowed'),
-          defaultValue: pd.upgradeAllowed ? 'On' : 'Off',
+          value: upValue ? 'On' : 'Off',
+          modified: upValue !== upDefault,
+          defaultValue: upDefault ? 'On' : 'Off',
         },
         {
           label: 'Cutoff quality',
@@ -455,7 +484,8 @@ export default {
                  && this.pdOverrides.cutoffQuality !== pd.cutoff,
           defaultValue: pd.cutoff || '—',
         },
-      ];
+      ]);
+      return rows;
     },
 
     // CFs grouped by source (Required first, then by in-profile group,
@@ -563,31 +593,77 @@ export default {
       const overrides = this.cfScoreOverrides || {};
       const pd = this.profileDetail?.detail?.profile;
 
-      // 1. Modified basics
+      // 1. Modified basics — value-comparison detection (matches
+      // pdGeneralChangeCount, profiles.js:2963-2968). The .enabled flag
+      // on pdOverrides is only set when loading a saved rule; live
+      // edits don't flip it. Language is radarr-only.
       const ov = this.pdOverrides || {};
-      const basicSpec = {
-        language: { label: 'Language', display: (v) => v },
-        minFormatScore: { label: 'Min score', display: (v) => v },
-        minUpgradeFormatScore: { label: 'Min upgrade', display: (v) => v },
-        cutoffFormatScore: { label: 'Cutoff score', display: (v) => v },
-        upgradeAllowed: { label: 'Upgrades allowed', display: (v) => v ? 'On' : 'Off' },
-      };
-      for (const [field, spec] of Object.entries(basicSpec)) {
-        if (ov[field]?.enabled === false) {
+      const isRadarr = (this.profileDetail?.instance?.type || this.activeAppType) === 'radarr';
+      const checks = [
+        {
+          field: 'minFormatScore', label: 'Min score',
+          defaultVal: pd?.minFormatScore ?? 0,
+          curVal: ov.minFormatScore?.value ?? (pd?.minFormatScore ?? 0),
+          numeric: true,
+          display: (v) => v,
+        },
+        {
+          field: 'minUpgradeFormatScore', label: 'Min upgrade',
+          defaultVal: pd?.minUpgradeFormatScore ?? 1,
+          curVal: ov.minUpgradeFormatScore?.value ?? (pd?.minUpgradeFormatScore ?? 1),
+          numeric: true,
+          display: (v) => v,
+        },
+        {
+          field: 'cutoffFormatScore', label: 'Cutoff score',
+          defaultVal: pd?.cutoffFormatScore ?? 10000,
+          curVal: ov.cutoffFormatScore?.value ?? (pd?.cutoffFormatScore ?? 10000),
+          numeric: true,
+          display: (v) => v,
+        },
+        {
+          field: 'upgradeAllowed', label: 'Upgrades allowed',
+          defaultVal: !!pd?.upgradeAllowed,
+          curVal: ov.upgradeAllowed?.value === undefined ? !!pd?.upgradeAllowed : !!ov.upgradeAllowed.value,
+          numeric: false,
+          display: (v) => v ? 'On' : 'Off',
+        },
+      ];
+      if (isRadarr) {
+        const langDefault = pd?.language?.name || pd?.language || 'Original';
+        checks.push({
+          field: 'language', label: 'Language',
+          defaultVal: langDefault,
+          curVal: ov.language?.value || langDefault,
+          numeric: false,
+          display: (v) => v,
+        });
+      }
+      for (const c of checks) {
+        const changed = c.numeric
+          ? Number(c.curVal) !== Number(c.defaultVal)
+          : c.curVal !== c.defaultVal;
+        if (changed) {
           out.modifiedBasics.push({
-            label: spec.label,
-            current: spec.display(ov[field].value),
-            original: spec.display(field === 'language' ? (pd?.language?.name || 'Original') : pd?.[field]),
+            label: c.label,
+            field: c.field,
+            current: c.display(c.curVal),
+            original: c.display(c.defaultVal),
+            originalRaw: c.defaultVal,
           });
         }
       }
       // Same pattern as profiles.js:1601 — only flag as modified when
-      // the override actually differs from the profile default.
+      // the override actually differs from the profile default. Include
+      // `field` so the Diffs row's reset-button knows what to restore
+      // (pdResetBasic dispatches on the field name).
       if (this.pdOverrides?.cutoffQuality && this.pdOverrides.cutoffQuality !== pd?.cutoff) {
         out.modifiedBasics.push({
           label: 'Cutoff quality',
+          field: 'cutoffQuality',
           current: this.pdOverrides.cutoffQuality,
           original: pd?.cutoff || '—',
+          originalRaw: pd?.cutoff || '',
         });
       }
 
@@ -598,7 +674,7 @@ export default {
         const o = overrides[cf.trashId];
         if (o !== undefined && o !== cf.score) {
           seenScoreOv.add(cf.trashId);
-          out.scoreOverrides.push({ name: cf.name, current: o, original: cf.score, fromGroup });
+          out.scoreOverrides.push({ trashId: cf.trashId, name: cf.name, current: o, original: cf.score, fromGroup });
         }
       };
       for (const cf of (this.profileDetail.detail?.formatItemNames || [])) collectScoreOv(cf, 'Required CFs');
@@ -613,13 +689,43 @@ export default {
         for (const cf of g.cfs) collectScoreOv(cf, shortName + ' (Additional)');
       }
 
-      // 3. Additional CFs activated — CFs from extraCFGroups the user
-      // turned on (these are entirely outside the profile's default
-      // scope, so any opt-in counts as a deviation).
+      // 3. Additional CFs activated — CFs the user opted into from
+      // extraCFGroups that are TRULY outside the profile's default
+      // scope. Two filters:
+      //   a) Skip groups whose name matches a profile trashGroup name
+      //      (Default Unwanted is in profile.trashGroups; the same
+      //      group in extraCFGroups isn't an "addition").
+      //   b) Skip CFs whose trashId is already in the profile-default
+      //      active set (the CF syncs via a profile group, even when
+      //      it also appears in a regional variant like French).
+      // Without (b), the same CF appears 3-4 times in the Diffs list,
+      // once per Additional variant group it overlaps with — pure
+      // noise since the user hasn't actually opted into anything.
+      const inProfileGroup = new Set();
+      const profileActiveCFs = new Set();
+      for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+        if (g.name) inProfileGroup.add(g.name);
+        const grpKey = '__grp_' + g.name;
+        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
+        if (!grpOn) continue;
+        for (const cf of (g.cfs || [])) {
+          // CF is active via this profile group if it's required OR
+          // user-opted-in (sel[trashId] truthy).
+          if (cf.required || sel[cf.trashId]) {
+            profileActiveCFs.add(cf.trashId);
+          }
+        }
+      }
+      // formatItemNames also count as in-profile active.
+      for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) {
+        profileActiveCFs.add(fi.trashId);
+      }
       for (const g of (this.extraCFGroups || [])) {
+        if (!g.name || inProfileGroup.has(g.name)) continue;
         const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
         const shortName = m ? (m[2].trim() || g.name) : g.name;
-        for (const cf of g.cfs) {
+        for (const cf of (g.cfs || [])) {
+          if (profileActiveCFs.has(cf.trashId)) continue; // already in profile, not an addition
           if (!!sel[cf.trashId]) {
             out.additionalCFs.push({
               name: cf.name,
@@ -656,6 +762,129 @@ export default {
       return out;
     },
 
+    // Additional CF groups — extraCFGroups minus groups already part
+    // of the profile's trashGroups (by name). CF-level overlap
+    // filtering happens in the template (via spAdditionalGroupCFs +
+    // spActiveCFIdSet getter) so a group with one unique CF still
+    // shows with just that CF; a group whose CFs are all already
+    // active falls out via the visibility check on the resulting
+    // length.
+    spAdditionalCFGroups() {
+      const all = this.extraCFGroups || [];
+      const inProfile = new Set();
+      for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+        if (g.name) inProfile.add(g.name);
+      }
+      return all.filter(g => g.name && !inProfile.has(g.name));
+    },
+
+    // CFs in the given Additional CF group that aren't already
+    // syncing from another active group. Used by the template to
+    // render the CF list AND to gate group visibility.
+    //
+    // Computes the "active set" as a plain object keyed by trashId
+    // rather than a JS Set — Alpine's reactive Proxy intercepts
+    // method calls on returned values (Set's `.has` came back
+    // un-callable in v2.5.10 Alpine wrappers). Plain object property
+    // access (`active[id]`) bypasses the Proxy's method-get trap.
+    spAdditionalGroupCFs(g) {
+      const cfs = g?.cfs || [];
+      if (cfs.length === 0) return cfs;
+      const active = {};
+      const sel = this.selectedOptionalCFs || {};
+      // Explicit opt-ins: selectedOptionalCFs[trashId] = true entries
+      for (const k in sel) {
+        if (sel[k] && !k.startsWith('__grp_')) active[k] = true;
+      }
+      // Required CFs in active trashGroups (default-on or user-enabled)
+      const groups = (this.profileDetail?.detail?.trashGroups) || [];
+      for (const group of groups) {
+        const grpKey = '__grp_' + group.name;
+        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : group.defaultEnabled;
+        if (!grpOn) continue;
+        for (const cf of (group.cfs || [])) {
+          if (cf.required) active[cf.trashId] = true;
+        }
+      }
+      // CFs with score overrides — they sync even if not in a group
+      const sov = this.cfScoreOverrides || {};
+      for (const tid in sov) active[tid] = true;
+      return cfs.filter(cf => !active[cf.trashId]);
+    },
+
+    // Sort CFActions / ScoreActions by the profile's natural order so
+    // dry-run + apply results match the structure the user sees in the
+    // editor (formatItems first, then default-on groups in declared
+    // order, then Additional CFs). Backend currently returns these in
+    // Go map iteration order (randomized per Go spec since 1.0).
+    //
+    // TODO (deferred — backend fix, ~30-45 min): sort.SliceStable inside
+    // BuildSyncPlan + ExecuteSyncPlan so EVERY consumer (Classic editor,
+    // sync history, API responses) gets natural-order results, not just
+    // Sync Preview. Tracked in container CLAUDE.md.
+    //
+    // @param actions  array of {name, ...} or {cfName, ...} objects
+    // @param nameKey  which field carries the CF name ("name" or "cfName")
+    spSortActions(actions, nameKey) {
+      if (!Array.isArray(actions) || actions.length === 0 || !this.profileDetail) return actions || [];
+      const order = new Map();
+      let idx = 0;
+      for (const fi of (this.profileDetail.detail?.formatItemNames || [])) {
+        if (fi.name && !order.has(fi.name)) order.set(fi.name, idx++);
+      }
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        for (const cf of (g.cfs || [])) {
+          if (cf.name && !order.has(cf.name)) order.set(cf.name, idx++);
+        }
+      }
+      for (const g of (this.extraCFGroups || [])) {
+        for (const cf of (g.cfs || [])) {
+          if (cf.name && !order.has(cf.name)) order.set(cf.name, idx++);
+        }
+      }
+      return [...actions].sort((a, b) => {
+        const an = a[nameKey] || '';
+        const bn = b[nameKey] || '';
+        const ai = order.has(an) ? order.get(an) : Infinity;
+        const bi = order.has(bn) ? order.get(bn) : Infinity;
+        if (ai !== bi) return ai - bi;
+        return an.localeCompare(bn);
+      });
+    },
+
+    // Reset a single basics field to the profile's TRaSH default.
+    // Called from the Diffs view + General section reset icons.
+    // cutoffQuality is stored on pdOverrides directly (not under .value)
+    // — separate-case to keep the rest of the fields uniform.
+    pdResetBasic(field) {
+      const pd = this.profileDetail?.detail?.profile || {};
+      if (field === 'cutoffQuality') {
+        this.pdOverrides.cutoffQuality = pd.cutoff || '';
+        return;
+      }
+      if (!this.pdOverrides[field]) return;
+      let def;
+      switch (field) {
+        case 'language': def = pd.language?.name || pd.language || 'Original'; break;
+        case 'minFormatScore': def = pd.minFormatScore ?? 0; break;
+        case 'minUpgradeFormatScore': def = pd.minUpgradeFormatScore ?? 1; break;
+        case 'cutoffFormatScore': def = pd.cutoffFormatScore ?? 10000; break;
+        case 'upgradeAllowed': def = !!pd.upgradeAllowed; break;
+        default: return;
+      }
+      this.pdOverrides[field].value = def;
+    },
+
+    // Drop a CF score override so the CF reverts to its TRaSH-baseline
+    // score. Replace the whole map so Alpine picks up the change (delete
+    // alone on a reactive proxy can miss).
+    pdResetCFScore(trashId) {
+      if (!trashId) return;
+      const updated = { ...this.cfScoreOverrides };
+      delete updated[trashId];
+      this.cfScoreOverrides = updated;
+    },
+
     // Total diff count for the sub-nav badge.
     spOverviewDiffCount() {
       const d = this.spOverviewDiffs();
@@ -664,6 +893,10 @@ export default {
 
     // Allowed qualities in their qualityStructure order. Falls back to
     // profile.items if qualityStructure isn't populated (initial load).
+    // Each entry is { name, isGroup, members[] } so the Overview tab
+    // can render groups (e.g. "WEB 2160p" containing WEBDL-2160p +
+    // WEBRip-2160p) with their members nested. Singles have isGroup
+    // false and members empty.
     spOverviewQualities() {
       const items = (this.qualityStructure && this.qualityStructure.length)
         ? this.qualityStructure
@@ -671,12 +904,16 @@ export default {
       const out = [];
       for (const item of items) {
         if (!item.allowed) continue;
-        // Quality items can be either single qualities (item.quality.name)
-        // or groups (item.name + item.items[]). For overview-rendering we
-        // surface the top-level label.
-        out.push(item.name || item.quality?.name || '');
+        const name = item.name || item.quality?.name || '';
+        if (!name) continue;
+        const rawMembers = item.items || [];
+        const members = rawMembers.map(m => {
+          if (typeof m === 'string') return m;
+          return m.quality?.name || m.name || '';
+        }).filter(n => n);
+        out.push({ name, isGroup: members.length > 0, members });
       }
-      return out.filter(n => n);
+      return out;
     },
 
     // Click-handler for the primary "Use →" CTA on a card. Opens the

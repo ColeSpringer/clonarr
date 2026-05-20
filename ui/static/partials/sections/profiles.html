@@ -234,16 +234,18 @@
                                  'in-use': tpdProfileInUse(activeAppType, d.trashId),
                                  'open': tpdIsOpen(d.trashId)
                                }">
-                        <div class="tpd-card-title-row" @click="tpdView === 'list' && tpdToggleOpen(d.trashId)">
+                        <div class="tpd-card-title-row"
+                             :class="{ 'no-tagline': tpdIsMinimalCard(d) }"
+                             @click="tpdView === 'list' && tpdToggleOpen(d.trashId)">
                           <span class="tpd-card-chevron">&#9654;</span>
                           <h3 class="tpd-card-title" x-text="d.name"></h3>
-                          <span x-show="tpdView === 'list'" class="tpd-card-list-tagline"
+                          <span x-show="tpdView === 'list' && !tpdIsMinimalCard(d)" class="tpd-card-list-tagline"
                                 x-text="(d.tagline || '') + (d.axes?.avgSize ? ' · ' + d.axes.avgSize : '')"></span>
                           <span class="tpd-used-mark" x-show="tpdProfileInUse(activeAppType, d.trashId)" x-tt="tpdInUseTooltip(activeAppType, d.trashId)" @click.stop>in use</span>
                         </div>
 
                         <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
-                          <p class="tpd-card-tagline" x-show="d.tagline" x-text="d.tagline"></p>
+                          <p class="tpd-card-tagline" x-show="d.tagline && !tpdIsMinimalCard(d)" x-text="d.tagline"></p>
                           <div class="tpd-disclaimer" x-show="d.disclaimer">
                             <strong>Notice from TRaSH-Guides</strong>
                             <span>
@@ -256,7 +258,7 @@
                             <span class="tpd-pill" :class="d.axes?.audio?.scored ? 'aud' : ''" x-text="tpdAudioPillText(d)"></span>
                             <span class="tpd-pill vid" x-show="d.axes?.hdr?.scored" x-text="tpdHDRPillText(d)"></span>
                           </div>
-                          <div class="tpd-section" x-show="d.highlights && d.highlights.length">
+                          <div class="tpd-section" x-show="d.highlights && d.highlights.length && !tpdIsMinimalCard(d)">
                             <div class="tpd-section-label">What you get</div>
                             <ul class="tpd-section-list">
                               <template x-for="(h, idx) in (d.highlights || [])" :key="idx">

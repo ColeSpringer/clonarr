@@ -5,8 +5,12 @@
 .sp-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   padding: 0;
+  /* Breathing room between the app banner (Radarr / Profiles / TRaSH
+     Profiles breadcrumb) and the Sync Preview's own sticky action bar
+     below it. Without this they read as one squished header. */
+  margin-top: 12px;
 }
 
 /* ===== Action bar (sticky) ===== */
@@ -15,7 +19,7 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 16px;
-  padding: 10px 16px;
+  padding: 6px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
@@ -57,9 +61,9 @@
 .sp-basics {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
-  padding: 10px 16px;
+  padding: 6px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
@@ -78,12 +82,39 @@
   color: var(--text-primary);
   font-weight: 500;
 }
-.sp-basics-val.overridden { color: var(--accent-orange); }
+/* Modified-value affordance is the red reset button next to the field
+   (presence = "this is modified"). The orange .overridden colour
+   treatment is dropped — reset icon + tooltip ("Reset to <default>")
+   communicates both "this changed" and "click to restore" in one
+   element, less visual noise than colour + value + extra hint text. */
 .sp-basics-default {
   color: var(--text-muted);
   font-size: 11px;
   font-style: italic;
 }
+.sp-basics-input {
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.sp-basics-input-num { width: 70px; }
+.sp-basics-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
+.sp-basics-toggle { transform: translateY(2px); }
+.sp-basics-reset {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--accent-red);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sp-basics-reset:hover { color: var(--accent-red-strong, var(--accent-red)); }
 .sp-basics-divider {
   width: 1px;
   height: 18px;
@@ -244,7 +275,7 @@
 
 /* ===== Main content ===== */
 .sp-content {
-  padding: 14px 18px;
+  padding: 10px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
@@ -324,13 +355,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .sp-action-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 5px 10px;
   background: var(--bg-page);
   border-radius: 4px;
   font-size: 13px;
@@ -378,7 +409,7 @@
   grid-template-columns: 22px 1fr 70px;
   align-items: center;
   gap: 10px;
-  padding: 5px 8px;
+  padding: 3px 8px;
   border-radius: 3px;
   font-size: 13px;
 }
@@ -470,7 +501,7 @@
 .sp-overview-content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -480,13 +511,13 @@
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
-  padding: 14px 18px;
+  padding: 10px 14px;
 }
 .sp-ov-card-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -497,23 +528,27 @@
   font-weight: 400;
 }
 
-/* Basics — 2-column grid (label | value), with modified-marker
-   wrapping in additional row affordances. */
+/* Basics — horizontal flex-wrap, same pattern as the top header
+   strip so the General section reads like an at-a-glance summary
+   instead of a vertical 6-row list. Each row becomes an inline
+   `label value` cluster; modified items inline their customized
+   tag + struck-through default after the value. Wraps to additional
+   rows as needed for narrow viewports. */
 .sp-ov-basics-grid {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 .sp-ov-basics-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 3px 0;
+  gap: 6px;
+  padding: 0;
   font-size: 13px;
 }
 .sp-ov-basics-lbl {
   color: var(--text-muted);
-  min-width: 130px;
   font-size: 12px;
 }
 .sp-ov-basics-val {
@@ -538,7 +573,7 @@
    the section-title's left border so user can tell at a glance which
    block the CFs come from. */
 .sp-ov-cf-section {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   --cat: var(--cat-other);
   border-left: 2px solid var(--cat);
   padding-left: 10px;
@@ -567,18 +602,18 @@
   color: var(--cat);
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .sp-ov-cf-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 .sp-ov-cf-row {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 3px 0;
+  padding: 2px 0;
   font-size: 13px;
 }
 .sp-ov-cf-name {
@@ -598,6 +633,76 @@
 .sp-ov-cf-score.positive { color: var(--accent-green); }
 .sp-ov-cf-score.negative { color: var(--accent-red); }
 .sp-ov-cf-score.zero     { color: var(--text-muted); }
+/* Diffs card — fixed-column grid so reset, label, old-value, arrow,
+   new-value land in the same x-position across rows. Reset-icon at
+   column 1 (far left) keeps it in a consistent place regardless of
+   value-content length. Old + new values both left-aligned within
+   their 100px columns so the start-position aligns ("0", "Original",
+   "Remux-2160p" all begin at the same x). No strikethrough on the
+   old value — dimmed colour + opacity is easier to read. */
+.sp-ov-card-diffs .sp-ov-diff-row {
+  display: grid;
+  grid-template-columns: 20px 150px 110px 14px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-name {
+  flex: 0 0 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "from <group>" meta on score-override rows lives under the label
+   in a second visual line — moves to grid-column 1 / row 2 so the
+   data columns aren't pushed sideways. */
+/* Score-override rows carry a "from <group>" meta line that lives in
+   a second visual row, indented to start under the label (column 2). */
+.sp-ov-card-diffs .sp-ov-cf-default {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 10.5px;
+  margin-top: -2px;
+}
+.sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-default + * {
+  /* When fromGroup is present, the diff row uses 2 visual rows. */
+}
+.sp-ov-diff-old {
+  color: var(--text-muted);
+  opacity: 0.7;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-ov-diff-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.sp-ov-diff-new {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-ov-diff-new.positive { color: var(--accent-green); }
+.sp-ov-diff-new.negative { color: var(--accent-red); }
+.sp-ov-diff-new.zero     { color: var(--text-muted); }
+.sp-ov-diff-reset {
+  grid-column: 1;
+  grid-row: 1;
+  text-align: center;
+}
+
 /* Original value rendered struck-through next to the new value so a
    customized field/score reads as "what changed from default" inline
    without a separate diff card. */
@@ -635,7 +740,10 @@
   padding: 8px 0;
 }
 
-/* Quality items — wrapping chip-list */
+/* Quality items — flat wrapping chip list. Groups distinguished by a
+   stronger background + small downward arrow + tooltip listing the
+   members. Singles are plain chips. Keeps the section compact even
+   for profiles with 15+ qualities. */
 .sp-ov-quality-list {
   display: flex;
   flex-wrap: wrap;
@@ -648,5 +756,18 @@
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-ov-quality-chip.is-group {
+  background: var(--bg-elevated);
+  border-color: var(--app-color);
+  cursor: help;
+}
+.sp-ov-quality-group-marker {
+  font-size: 9px;
+  color: var(--app-color);
+  line-height: 1;
 }
 
