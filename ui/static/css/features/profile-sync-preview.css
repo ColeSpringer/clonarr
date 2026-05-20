@@ -426,3 +426,227 @@
 .sp-cf-score.negative { color: var(--accent-red); }
 .sp-cf-score.zero     { color: var(--text-muted); }
 
+/* ===== Profile overview tab =====
+   Uses the same .sp-body two-column layout as Profile default (sub-nav
+   + main content). Right side stacks cards for the sections the user
+   has selected — "All" shows every card; the other filter views show
+   just one. Customizations render INLINE on the rows they apply to
+   (struck-through original + new value + small "customized" tag)
+   rather than in a separate summary card.
+
+   Sub-nav in this tab is a FLAT list — there are no real categories
+   here (every item is a view of the same data), so the cat-color
+   border-left + tinted text the Profile default sub-nav uses is
+   neutralized. A subtle divider visually separates summary views
+   (Overview / Diffs) from filter views (the rest). */
+.sp-overview-nav {
+  /* The parent .sp-sub-nav already gives us the card chrome. We just
+     need to strip the category-style affordances that .sp-sub-nav-item
+     inherits when wrapped in .sp-sub-nav-group, and reset spacing so
+     items start at the same x-offset. */
+  gap: 0;
+}
+.sp-overview-nav .sp-sub-nav-item {
+  /* No left-border, no inherited --cat color, no margin shifts. */
+  border-left: 0;
+  padding-left: 10px;
+  margin-left: 0;
+  color: var(--text-secondary);
+}
+.sp-overview-nav .sp-sub-nav-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+.sp-overview-nav .sp-sub-nav-item.active {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  font-weight: 500;
+}
+.sp-overview-nav-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 6px;
+}
+.sp-overview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  min-height: auto;
+}
+.sp-ov-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 14px 18px;
+}
+.sp-ov-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sp-ov-card-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Basics — 2-column grid (label | value), with modified-marker
+   wrapping in additional row affordances. */
+.sp-ov-basics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sp-ov-basics-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.sp-ov-basics-lbl {
+  color: var(--text-muted);
+  min-width: 130px;
+  font-size: 12px;
+}
+.sp-ov-basics-val {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sp-ov-basics-default {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+.sp-ov-modified-tag {
+  font-size: 10px;
+  color: var(--accent-orange);
+  font-weight: 500;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+}
+.sp-ov-modified .sp-ov-basics-val { color: var(--accent-orange); }
+
+/* Enabled CFs — section per source, with optional category color on
+   the section-title's left border so user can tell at a glance which
+   block the CFs come from. */
+.sp-ov-cf-section {
+  margin-bottom: 10px;
+  --cat: var(--cat-other);
+  border-left: 2px solid var(--cat);
+  padding-left: 10px;
+}
+.sp-ov-cf-section:last-child { margin-bottom: 0; }
+.sp-ov-cf-section.cat-audio              { --cat: var(--cat-audio); }
+.sp-ov-cf-section.cat-hdr                { --cat: var(--cat-hdr); }
+.sp-ov-cf-section.cat-streaming          { --cat: var(--cat-streaming); }
+.sp-ov-cf-section.cat-unwanted           { --cat: var(--cat-unwanted); }
+.sp-ov-cf-section.cat-optional           { --cat: var(--cat-optional); }
+.sp-ov-cf-section.cat-anime              { --cat: var(--cat-anime); }
+.sp-ov-cf-section.cat-french             { --cat: var(--cat-french); }
+.sp-ov-cf-section.cat-german             { --cat: var(--cat-german); }
+.sp-ov-cf-section.cat-language           { --cat: var(--cat-language); }
+.sp-ov-cf-section.cat-resolution         { --cat: var(--cat-resolution); }
+.sp-ov-cf-section.cat-hq-release-groups  { --cat: var(--cat-hq-release-groups); }
+.sp-ov-cf-section.cat-golden-rule        { --cat: var(--cat-golden-rule); }
+.sp-ov-cf-section.cat-miscellaneous      { --cat: var(--cat-miscellaneous); }
+.sp-ov-cf-section.cat-required-core      { --cat: var(--cat-required-core); }
+.sp-ov-cf-section.cat-required           { --cat: var(--cat-required); }
+.sp-ov-cf-section.cat-sqp                { --cat: var(--cat-sqp); }
+.sp-ov-cf-section.cat-other              { --cat: var(--cat-other); }
+.sp-ov-cf-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cat);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.sp-ov-cf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sp-ov-cf-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.sp-ov-cf-name {
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-ov-cf-score {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  min-width: 60px;
+  text-align: right;
+}
+.sp-ov-cf-score.positive { color: var(--accent-green); }
+.sp-ov-cf-score.negative { color: var(--accent-red); }
+.sp-ov-cf-score.zero     { color: var(--text-muted); }
+/* Original value rendered struck-through next to the new value so a
+   customized field/score reads as "what changed from default" inline
+   without a separate diff card. */
+.sp-ov-original-strike {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+}
+/* Excluded-CF row in the Diffs view — name gets struck-through too
+   since the row represents "this CF would normally sync but you
+   removed it from the active set". */
+.sp-ov-cf-excluded .sp-ov-cf-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+/* Source-of-CF tag in Diffs rows ("from <group name>") */
+.sp-ov-cf-default {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.sp-ov-section-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+  font-style: italic;
+}
+.sp-ov-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Quality items — wrapping chip-list */
+.sp-ov-quality-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sp-ov-quality-chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+}
+

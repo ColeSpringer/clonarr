@@ -398,6 +398,287 @@ export default {
       return cfs.filter(cf => cf.required || cfOn(cf)).length;
     },
 
+    // === Sync Preview "Profile overview" tab helpers ===
+    // Read-only summary of what's currently configured on the profile —
+    // built so the user can see the whole spec at a glance without
+    // navigating into each group. Edit-affordances layer on top later
+    // once the Customize button wires basics-editing.
+
+    // The 6 basics fields with effective value + whether the user has
+    // overridden them. pdOverrides legacy semantics: `.enabled === false`
+    // means "override is active". Returns one row per field.
+    spOverviewBasics() {
+      const pd = this.profileDetail?.detail?.profile;
+      const ov = this.pdOverrides || {};
+      if (!pd) return [];
+      const isMod = (f) => ov[f]?.enabled === false;
+      return [
+        {
+          label: 'Language',
+          value: ov.language?.value || pd.language?.name || 'Original',
+          modified: isMod('language'),
+          defaultValue: pd.language?.name || 'Original',
+        },
+        {
+          label: 'Min score',
+          value: ov.minFormatScore?.value ?? pd.minFormatScore ?? 0,
+          modified: isMod('minFormatScore'),
+          defaultValue: pd.minFormatScore ?? 0,
+        },
+        {
+          label: 'Min upgrade',
+          value: ov.minUpgradeFormatScore?.value ?? pd.minUpgradeFormatScore ?? 1,
+          modified: isMod('minUpgradeFormatScore'),
+          defaultValue: pd.minUpgradeFormatScore ?? 1,
+        },
+        {
+          label: 'Cutoff score',
+          value: ov.cutoffFormatScore?.value ?? pd.cutoffFormatScore ?? 10000,
+          modified: isMod('cutoffFormatScore'),
+          defaultValue: pd.cutoffFormatScore ?? 10000,
+        },
+        {
+          label: 'Upgrades allowed',
+          value: (ov.upgradeAllowed?.value ?? pd.upgradeAllowed) ? 'On' : 'Off',
+          modified: isMod('upgradeAllowed'),
+          defaultValue: pd.upgradeAllowed ? 'On' : 'Off',
+        },
+        {
+          label: 'Cutoff quality',
+          value: this.pdOverrides?.cutoffQuality || pd.cutoff || '—',
+          // pdInitOverrides seeds cutoffQuality with the profile's default
+          // (profiles.js:3523 / :3417) so it's always non-empty. A truthy
+          // check would falsely flag it as modified — compare against the
+          // default like profiles.js:1601 does in its canonical "did it
+          // actually change?" check.
+          modified: !!this.pdOverrides?.cutoffQuality
+                 && this.pdOverrides.cutoffQuality !== pd.cutoff,
+          defaultValue: pd.cutoff || '—',
+        },
+      ];
+    },
+
+    // CFs grouped by source (Required first, then by in-profile group,
+    // then by Additional CF group). Each section carries a `kind` flag
+    // so sub-nav filter views can pick a subset:
+    //   'required'   — formatItemNames (profile-level required CFs)
+    //   'in-profile' — TRaSH groups inside profile.quality_profiles.include
+    //   'additional' — extraCFGroups (opt-in pool outside profile)
+    // Each CF carries `_isRequired` + a `_score` object with effective +
+    // original + isOverridden, so the row can render strikethrough on
+    // the original when the user has overridden a score (customizations
+    // shown inline, not in a separate card).
+    // De-dupes by trashId in case the same CF lives in multiple groups.
+    spOverviewEnabledCFs() {
+      if (!this.profileDetail) return [];
+      const sel = this.selectedOptionalCFs || {};
+      const overrides = this.cfScoreOverrides || {};
+      const scoreInfo = (cf) => {
+        const orig = cf.score;
+        const o = overrides[cf.trashId];
+        if (o !== undefined && o !== orig) {
+          return { effective: o, original: orig, isOverridden: true };
+        }
+        return { effective: orig, original: orig, isOverridden: false };
+      };
+      const seen = new Set();
+      const sections = [];
+      const pushSection = (label, category, cfs, kind) => {
+        const filtered = cfs.filter(cf => {
+          if (seen.has(cf.trashId)) return false;
+          seen.add(cf.trashId);
+          return true;
+        });
+        if (filtered.length > 0) sections.push({ source: label, sourceCategory: category, cfs: filtered, kind });
+      };
+
+      // 1. Required CFs at profile level — formatItemNames
+      pushSection(
+        'Required CFs',
+        'required',
+        (this.profileDetail.detail?.formatItemNames || []).map(fi => ({
+          ...fi, _isRequired: true, _score: scoreInfo(fi),
+        })),
+        'required'
+      );
+
+      // 2. In-profile trashGroups
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        const hasToggle = g.cfs.some(cf => cf.required)
+          || (!g.exclusive && g.cfs.some(cf => cf.default));
+        const grpKey = '__grp_' + g.name;
+        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
+        if (hasToggle && !grpOn) continue;
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        const enabled = [];
+        for (const cf of g.cfs) {
+          let isOn;
+          if (cf.required) {
+            isOn = !hasToggle || grpOn;
+          } else {
+            const cfOn = sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
+            isOn = (!hasToggle || grpOn) && cfOn;
+          }
+          if (isOn) enabled.push({ ...cf, _isRequired: !!cf.required, _score: scoreInfo(cf) });
+        }
+        pushSection(shortName, g.category, enabled, 'in-profile');
+      }
+
+      // 3. Additional CF groups (opt-in pool outside the profile)
+      for (const g of (this.extraCFGroups || [])) {
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        const enabled = g.cfs
+          .filter(cf => !!sel[cf.trashId])
+          .map(cf => ({ ...cf, _isRequired: false, _score: scoreInfo(cf) }));
+        pushSection(shortName, g.category, enabled, 'additional');
+      }
+
+      return sections;
+    },
+
+    // Diffs view — everything that diverges from the TRaSH default for
+    // this profile. Four buckets in priority order:
+    //   1. modifiedBasics — pdOverrides where .enabled === false (legacy
+    //      inverse semantics) + cutoffQuality if set.
+    //   2. scoreOverrides — CFs with cfScoreOverrides[trashId] !== cf.score.
+    //   3. additionalCFs — CFs from extraCFGroups the user has opted into
+    //      (outside the profile's default scope entirely).
+    //   4. excludedCFs — default-on CFs in still-active groups that the
+    //      user has explicitly turned off (selectedOptionalCFs[id] === false).
+    //
+    // Intentionally NOT included: optional CFs the user has activated
+    // within in-profile groups. Those live inside the profile's own
+    // structure and aren't considered "external" deviations — they're
+    // visible via the "Optional CF" sub-nav view.
+    //
+    // Each bucket returns rich objects so the template can render the
+    // diff with original-vs-current side by side. Computed lazily on
+    // each access (Alpine reactivity tracks the dependencies).
+    spOverviewDiffs() {
+      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [] };
+      if (!this.profileDetail) return out;
+      const sel = this.selectedOptionalCFs || {};
+      const overrides = this.cfScoreOverrides || {};
+      const pd = this.profileDetail?.detail?.profile;
+
+      // 1. Modified basics
+      const ov = this.pdOverrides || {};
+      const basicSpec = {
+        language: { label: 'Language', display: (v) => v },
+        minFormatScore: { label: 'Min score', display: (v) => v },
+        minUpgradeFormatScore: { label: 'Min upgrade', display: (v) => v },
+        cutoffFormatScore: { label: 'Cutoff score', display: (v) => v },
+        upgradeAllowed: { label: 'Upgrades allowed', display: (v) => v ? 'On' : 'Off' },
+      };
+      for (const [field, spec] of Object.entries(basicSpec)) {
+        if (ov[field]?.enabled === false) {
+          out.modifiedBasics.push({
+            label: spec.label,
+            current: spec.display(ov[field].value),
+            original: spec.display(field === 'language' ? (pd?.language?.name || 'Original') : pd?.[field]),
+          });
+        }
+      }
+      // Same pattern as profiles.js:1601 — only flag as modified when
+      // the override actually differs from the profile default.
+      if (this.pdOverrides?.cutoffQuality && this.pdOverrides.cutoffQuality !== pd?.cutoff) {
+        out.modifiedBasics.push({
+          label: 'Cutoff quality',
+          current: this.pdOverrides.cutoffQuality,
+          original: pd?.cutoff || '—',
+        });
+      }
+
+      // 2. Score overrides — walk every CF source and pick out diffs
+      const seenScoreOv = new Set();
+      const collectScoreOv = (cf, fromGroup) => {
+        if (seenScoreOv.has(cf.trashId)) return;
+        const o = overrides[cf.trashId];
+        if (o !== undefined && o !== cf.score) {
+          seenScoreOv.add(cf.trashId);
+          out.scoreOverrides.push({ name: cf.name, current: o, original: cf.score, fromGroup });
+        }
+      };
+      for (const cf of (this.profileDetail.detail?.formatItemNames || [])) collectScoreOv(cf, 'Required CFs');
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        for (const cf of g.cfs) collectScoreOv(cf, shortName);
+      }
+      for (const g of (this.extraCFGroups || [])) {
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        for (const cf of g.cfs) collectScoreOv(cf, shortName + ' (Additional)');
+      }
+
+      // 3. Additional CFs activated — CFs from extraCFGroups the user
+      // turned on (these are entirely outside the profile's default
+      // scope, so any opt-in counts as a deviation).
+      for (const g of (this.extraCFGroups || [])) {
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        for (const cf of g.cfs) {
+          if (!!sel[cf.trashId]) {
+            out.additionalCFs.push({
+              name: cf.name,
+              score: overrides[cf.trashId] !== undefined ? overrides[cf.trashId] : cf.score,
+              fromGroup: shortName,
+              sourceCategory: g.category,
+            });
+          }
+        }
+      }
+
+      // 4. Excluded default-on CFs — only counted when the group is
+      // still active (an inactive group's CFs aren't "excluded" — the
+      // whole group is off).
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        const grpKey = '__grp_' + g.name;
+        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
+        if (!grpOn) continue;
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        for (const cf of g.cfs) {
+          if (cf.required) continue;
+          if (cf.default && sel[cf.trashId] === false) {
+            out.excludedCFs.push({
+              name: cf.name,
+              score: cf.score,
+              fromGroup: shortName,
+              sourceCategory: g.category,
+            });
+          }
+        }
+      }
+
+      return out;
+    },
+
+    // Total diff count for the sub-nav badge.
+    spOverviewDiffCount() {
+      const d = this.spOverviewDiffs();
+      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length;
+    },
+
+    // Allowed qualities in their qualityStructure order. Falls back to
+    // profile.items if qualityStructure isn't populated (initial load).
+    spOverviewQualities() {
+      const items = (this.qualityStructure && this.qualityStructure.length)
+        ? this.qualityStructure
+        : (this.profileDetail?.detail?.profile?.items || []);
+      const out = [];
+      for (const item of items) {
+        if (!item.allowed) continue;
+        // Quality items can be either single qualities (item.quality.name)
+        // or groups (item.name + item.items[]). For overview-rendering we
+        // surface the top-level label.
+        out.push(item.name || item.quality?.name || '');
+      }
+      return out.filter(n => n);
+    },
+
     // Click-handler for the primary "Use →" CTA on a card. Opens the
     // detail/editor overlay so the user can configure customizations and
     // pick their target instance in Save & Sync's picker. We pass insts[0]

@@ -107,9 +107,13 @@
       </div>
     </div>
 
-    <!-- ===== Tabs ===== -->
+    <!-- ===== Tabs =====
+         Profile default — group/CF browsing & toggle
+         Profile overview — read-only summary of what's currently on
+         Additional CF — Customize-gated opt-in groups outside the profile -->
     <div class="sp-tabs">
       <button class="sp-tab" :class="{ active: spActiveTab === 'default' }" @click="spActiveTab = 'default'">Profile default</button>
+      <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'additional' }" x-show="pdOverridesEnabled" @click="spActiveTab = 'additional'">
         Additional CF
         <template x-if="(profileDetail?.detail?.cfCategories || []).length > 0">
@@ -356,6 +360,277 @@
             </div>
           </div>
         </template>
+      </main>
+    </div>
+
+    <!-- ===== Profile overview tab (read-only, phase 1) =====
+         Sub-nav on the left rail with filter views (matches Profile
+         default tab's layout pattern). "All" stacks every section;
+         the others show one slice so the user can quickly answer
+         "what optionals did I activate?" / "what's outside the
+         profile defaults?". Customizations show INLINE on the row
+         they apply to: score override = strikethrough original +
+         new score + small "customized" tag. Modified basics show
+         the same way on the General section. Excluded default-on
+         CFs aren't surfaced here (they're not enabled — the
+         Profile default tab visualizes them via dimmed rows). -->
+    <div class="sp-body" x-show="spActiveTab === 'overview'">
+      <!-- Flat sub-nav with a subtle divider between summary-views
+           (Overview / Diffs) and filter-views (General / Quality /
+           All CF / Optional CF / Additional CF). No category coloring
+           because none of these items are "categories" — they're
+           orthogonal views of the same data. The scoped .sp-overview-nav
+           class neutralizes the border-left + cat-color rules the
+           .sp-sub-nav-* selectors apply by default. -->
+      <nav class="sp-sub-nav sp-overview-nav">
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'all' }"
+                @click="spOverviewSection = 'all'">
+          <span class="sp-sub-nav-label">Overview</span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'diffs', inactive: spOverviewDiffCount() === 0 }"
+                @click="spOverviewSection = 'diffs'"
+                x-tt="'Only items that deviate from this profile\\'s TRaSH default — modified basics, score overrides, added Additional CFs, and excluded default-on CFs.'">
+          <span class="sp-sub-nav-label">Diffs</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewDiffCount() || ''"></span>
+        </button>
+        <div class="sp-overview-nav-divider" aria-hidden="true"></div>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'general' }"
+                @click="spOverviewSection = 'general'">
+          <span class="sp-sub-nav-label">General</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewBasics().filter(b => b.modified).length || ''"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'quality' }"
+                @click="spOverviewSection = 'quality'">
+          <span class="sp-sub-nav-label">Quality items</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewQualities().length"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'all-cf' }"
+                @click="spOverviewSection = 'all-cf'">
+          <span class="sp-sub-nav-label">All active CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().reduce((n, s) => n + s.cfs.length, 0)"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'optional-cf' }"
+                @click="spOverviewSection = 'optional-cf'">
+          <span class="sp-sub-nav-label">Optional CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().filter(s => s.kind === 'in-profile').reduce((n, s) => n + s.cfs.filter(cf => !cf._isRequired).length, 0)"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'additional-cf' }"
+                @click="spOverviewSection = 'additional-cf'">
+          <span class="sp-sub-nav-label">Additional CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().filter(s => s.kind === 'additional').reduce((n, s) => n + s.cfs.length, 0)"></span>
+        </button>
+      </nav>
+
+      <main class="sp-content sp-overview-content">
+        <!-- ===== Diffs view — only deviations from TRaSH default =====
+             Surfaces things the user changed: modified basics, score
+             overrides, Additional CFs they added (groups outside the
+             profile), and default-on CFs they explicitly turned off.
+             Optional CFs activated within in-profile groups are NOT
+             listed here — they're inside the profile's own structure
+             and visible via the "Optional CF" sub-nav view instead. -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'diffs'"
+                 x-data="{ get _d() { return spOverviewDiffs(); } }">
+          <h3 class="sp-ov-card-title">
+            Diffs from TRaSH default
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewDiffCount() + ')'"></span>
+          </h3>
+
+          <!-- Modified basics -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.modifiedBasics.length > 0">
+            <div class="sp-ov-cf-section-title">Modified basics</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="b in _d.modifiedBasics" :key="'diff-mb-'+b.label">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="b.label"></span>
+                  <span class="sp-ov-modified-tag">customized</span>
+                  <span class="sp-ov-original-strike" x-text="b.original"></span>
+                  <span class="sp-ov-cf-score zero" x-text="b.current"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Score overrides -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.scoreOverrides.length > 0">
+            <div class="sp-ov-cf-section-title">Score overrides</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="o in _d.scoreOverrides" :key="'diff-so-'+o.name">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="o.name"></span>
+                  <span class="sp-ov-cf-default" x-text="'from ' + o.fromGroup"></span>
+                  <span class="sp-ov-original-strike" x-text="(o.original > 0 ? '+' : '') + o.original"></span>
+                  <span class="sp-ov-cf-score" :class="(o.current > 0 ? 'positive' : o.current < 0 ? 'negative' : 'zero')"
+                        x-text="(o.current > 0 ? '+' : '') + o.current"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Additional CFs added — CFs outside profile's default scope -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.additionalCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Added Additional CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="a in _d.additionalCFs" :key="'diff-add-'+a.name+a.fromGroup">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="a.name"></span>
+                  <span class="sp-ov-cf-default" x-text="'from ' + a.fromGroup"></span>
+                  <span class="sp-ov-cf-score" :class="(a.score > 0 ? 'positive' : a.score < 0 ? 'negative' : 'zero')"
+                        x-text="a.score != null ? ((a.score > 0 ? '+' : '') + a.score) : ''"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Excluded default-on CFs — would normally be on but user turned off -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Excluded default-on CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="e in _d.excludedCFs" :key="'diff-ex-'+e.name+e.fromGroup">
+                <div class="sp-ov-cf-row sp-ov-cf-excluded">
+                  <span class="sp-ov-cf-name" x-text="e.name"></span>
+                  <span class="sp-ov-cf-default" x-text="'from ' + e.fromGroup"></span>
+                  <span class="sp-ov-original-strike" x-text="e.score != null ? ((e.score > 0 ? '+' : '') + e.score) : ''"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-empty" x-show="spOverviewDiffCount() === 0">
+            Nothing customized — this profile matches the TRaSH default exactly.
+          </div>
+        </section>
+
+        <!-- ===== General (basics) — modifications shown inline ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'general'">
+          <h3 class="sp-ov-card-title">General</h3>
+          <div class="sp-ov-basics-grid">
+            <template x-for="b in spOverviewBasics()" :key="b.label">
+              <div class="sp-ov-basics-row" :class="b.modified ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl" x-text="b.label"></span>
+                <span class="sp-ov-basics-val" x-text="b.value"></span>
+                <template x-if="b.modified">
+                  <span class="sp-ov-modified-tag" x-tt="'You customized this. TRaSH default shown alongside.'">customized</span>
+                </template>
+                <template x-if="b.modified">
+                  <span class="sp-ov-original-strike" x-text="b.defaultValue"></span>
+                </template>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <!-- ===== Quality items ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'quality'">
+          <h3 class="sp-ov-card-title">
+            Quality items
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewQualities().length + ')'"></span>
+          </h3>
+          <div class="sp-ov-quality-list">
+            <template x-for="q in spOverviewQualities()" :key="q">
+              <span class="sp-ov-quality-chip" x-text="q"></span>
+            </template>
+          </div>
+        </section>
+
+        <!-- ===== All active CF — every CF that will sync, grouped by source ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'all-cf'">
+          <h3 class="sp-ov-card-title">
+            All active Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewEnabledCFs().reduce((n, s) => n + s.cfs.length, 0) + ' total)'"></span>
+          </h3>
+          <template x-for="section in spOverviewEnabledCFs()" :key="'ov-all-'+section.source">
+            <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+              <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+              <div class="sp-ov-cf-list">
+                <template x-for="cf in section.cfs" :key="cf.trashId">
+                  <div class="sp-ov-cf-row">
+                    <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-modified-tag" x-tt="'You overrode this score. TRaSH default shown struck-through.'">customized</span>
+                    </template>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-original-strike" x-text="(cf._score.original > 0 ? '+' : '') + cf._score.original"></span>
+                    </template>
+                    <span class="sp-ov-cf-score"
+                          :class="(cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
+                          x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewEnabledCFs().length === 0">No CFs enabled.</div>
+        </section>
+
+        <!-- ===== Optional CF — only non-required CFs from in-profile groups ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'optional-cf'">
+          <h3 class="sp-ov-card-title">
+            Optional Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewEnabledCFs().filter(s => s.kind === 'in-profile').reduce((n, s) => n + s.cfs.filter(cf => !cf._isRequired).length, 0) + ' enabled)'"></span>
+          </h3>
+          <p class="sp-ov-section-hint">Non-required CFs you've activated within in-profile groups. Required CFs sync as a unit with their group — see "All active CF" for the full picture.</p>
+          <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'in-profile' && s.cfs.some(cf => !cf._isRequired))" :key="'ov-opt-'+section.source">
+            <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+              <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+              <div class="sp-ov-cf-list">
+                <template x-for="cf in section.cfs.filter(c => !c._isRequired)" :key="cf.trashId">
+                  <div class="sp-ov-cf-row">
+                    <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-modified-tag" x-tt="'You overrode this score. TRaSH default shown struck-through.'">customized</span>
+                    </template>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-original-strike" x-text="(cf._score.original > 0 ? '+' : '') + cf._score.original"></span>
+                    </template>
+                    <span class="sp-ov-cf-score"
+                          :class="(cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
+                          x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewEnabledCFs().filter(s => s.kind === 'in-profile' && s.cfs.some(cf => !cf._isRequired)).length === 0">No optional CFs activated.</div>
+        </section>
+
+        <!-- ===== Additional CF — opt-in groups outside the profile ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'additional-cf'">
+          <h3 class="sp-ov-card-title">
+            Additional Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewEnabledCFs().filter(s => s.kind === 'additional').reduce((n, s) => n + s.cfs.length, 0) + ' enabled)'"></span>
+          </h3>
+          <p class="sp-ov-section-hint">Groups you've opted into that aren't part of this profile's defaults. Available via the "Additional CF" tab when Customize is on.</p>
+          <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'additional')" :key="'ov-add-'+section.source">
+            <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+              <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+              <div class="sp-ov-cf-list">
+                <template x-for="cf in section.cfs" :key="cf.trashId">
+                  <div class="sp-ov-cf-row">
+                    <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-modified-tag" x-tt="'You overrode this score. TRaSH default shown struck-through.'">customized</span>
+                    </template>
+                    <template x-if="cf._score.isOverridden">
+                      <span class="sp-ov-original-strike" x-text="(cf._score.original > 0 ? '+' : '') + cf._score.original"></span>
+                    </template>
+                    <span class="sp-ov-cf-score"
+                          :class="(cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
+                          x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewEnabledCFs().filter(s => s.kind === 'additional').length === 0">No additional CFs activated.</div>
+        </section>
       </main>
     </div>
 

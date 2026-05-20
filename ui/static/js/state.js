@@ -132,8 +132,9 @@ export default function baseState() {
     // mid-edit preserves work. Removed entirely once Sync Preview is signed
     // off and replaces profile-detail.html.
     usePreviewEditor: false,
-    spActiveTab: 'default',     // 'default' | 'additional' (Customize-gated)
+    spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
+    spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
     // Sync Preview's Customize state reads pdOverridesEnabled directly —
     // no separate spCustomize field. A separate field could drift when
     // user toggles Customize in one overlay then switches to the other.
