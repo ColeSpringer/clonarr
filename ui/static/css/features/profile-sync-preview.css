@@ -1,0 +1,428 @@
+/* Sync Preview overlay — parallel rewrite of profile-detail.
+   All classes prefixed sp- to avoid clashing with existing profile/detail styles.
+   Removed when Sync Preview ships and profile-detail.html is retired. */
+
+.sp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+/* ===== Action bar (sticky) ===== */
+.sp-action-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.sp-classic-link {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sp-classic-link:hover { color: var(--app-color); }
+.sp-action-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.sp-action-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.sp-action-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sp-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ===== Basics strip ===== */
+.sp-basics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+}
+.sp-basics-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.sp-basics-lbl {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sp-basics-val {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sp-basics-val.overridden { color: var(--accent-orange); }
+.sp-basics-default {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+.sp-basics-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-muted);
+}
+.sp-basics-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* ===== Tabs ===== */
+.sp-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sp-tab {
+  padding: 8px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-tab:hover { color: var(--text-primary); }
+.sp-tab.active {
+  color: var(--app-color);
+  border-bottom-color: var(--app-color);
+}
+.sp-tab-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+/* ===== Body — two-column layout (sub-nav + content) ===== */
+.sp-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.sp-sub-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.sp-sub-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+  /* Category colour lives here — the group inherits its --cat token
+     from the matching cat-* class so the section header + active item
+     pick it up via currentColor / var lookup. */
+  --cat: var(--cat-other);
+  border-left: 2px solid var(--cat);
+  padding-left: 6px;
+  margin-left: 2px;
+}
+.sp-sub-nav-section {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--cat);
+  padding: 3px 6px 2px;
+  margin-top: 2px;
+}
+.sp-sub-nav-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.sp-sub-nav-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.sp-sub-nav-item.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+/* Group has 0 active CFs — dim the whole row so the user can skim
+   past unused groups. Active-state styling overrides this so the
+   currently-viewed group stays readable even if it's empty. */
+.sp-sub-nav-item.inactive { opacity: 0.5; }
+.sp-sub-nav-item.inactive.active { opacity: 1; }
+/* Required CFs is the lone item that has no section header above it,
+   so it carries its own coloured left-border + label tint to stay
+   visually parallel with the section-grouped items. */
+.sp-sub-nav-standalone {
+  border-left: 2px solid var(--cat-required);
+  padding-left: 6px;
+  margin-left: 2px;
+  color: var(--cat-required);
+}
+.sp-sub-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-sub-nav-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Category colour lookup — wire each canonical cat-* class to its
+   --cat-<id> token so the group's --cat var resolves to the right
+   colour for the section header + left-border. Same token set as
+   Custom Formats, Classic editor, Profile Builder, Sandbox CF
+   browser — adding a category in backend categories.go propagates
+   here automatically via tokens.css. */
+.sp-sub-nav-group.cat-audio              { --cat: var(--cat-audio); }
+.sp-sub-nav-group.cat-hdr                { --cat: var(--cat-hdr); }
+.sp-sub-nav-group.cat-streaming          { --cat: var(--cat-streaming); }
+.sp-sub-nav-group.cat-unwanted           { --cat: var(--cat-unwanted); }
+.sp-sub-nav-group.cat-optional           { --cat: var(--cat-optional); }
+.sp-sub-nav-group.cat-anime              { --cat: var(--cat-anime); }
+.sp-sub-nav-group.cat-french             { --cat: var(--cat-french); }
+.sp-sub-nav-group.cat-german             { --cat: var(--cat-german); }
+.sp-sub-nav-group.cat-language           { --cat: var(--cat-language); }
+.sp-sub-nav-group.cat-resolution         { --cat: var(--cat-resolution); }
+.sp-sub-nav-group.cat-hq-release-groups  { --cat: var(--cat-hq-release-groups); }
+.sp-sub-nav-group.cat-golden-rule        { --cat: var(--cat-golden-rule); }
+.sp-sub-nav-group.cat-miscellaneous      { --cat: var(--cat-miscellaneous); }
+.sp-sub-nav-group.cat-required-core      { --cat: var(--cat-required-core); }
+.sp-sub-nav-group.cat-required           { --cat: var(--cat-required); }
+.sp-sub-nav-group.cat-sqp                { --cat: var(--cat-sqp); }
+.sp-sub-nav-group.cat-other              { --cat: var(--cat-other); }
+
+/* ===== Main content ===== */
+.sp-content {
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  min-height: 200px;
+}
+.sp-content-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-content-title-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.sp-content-section {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 15px;
+}
+.sp-content-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+/* TRaSH group description — same italic prose treatment as the existing
+   classic editor uses for group descriptions, but with looser line-height
+   so the multi-line HTML from TRaSH (often with <br> and <a> tags) reads
+   comfortably above the compact CF list. */
+.sp-group-desc {
+  font-size: 13px;
+  color: var(--text-body);
+  margin: 0 0 14px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  background: var(--bg-page);
+  border-left: 3px solid var(--app-color);
+  border-radius: 3px;
+}
+.sp-group-desc a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+.sp-group-desc a:hover { text-decoration: underline; }
+.sp-group-desc code {
+  background: var(--bg-muted);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+.sp-group-badges {
+  display: inline-flex;
+  gap: 6px;
+}
+.sp-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+/* ===== Action rows (group toggle + All-optional) =====
+   Both rows share the same left-aligned layout so the user's eye
+   scans a single column of switches that continues into the CF list
+   below. Count info pushed to the right with margin-left:auto. */
+.sp-action-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.sp-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-page);
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: default;
+}
+.sp-action-row .toggle { flex-shrink: 0; }
+/* Combined single-CF row — lock icon between toggle and label, score
+   on the right where the count usually sits. */
+.sp-action-row-combined .sp-cf-icon {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.sp-action-row-combined .sp-cf-score {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+}
+.sp-action-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sp-action-state {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.sp-action-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== CF list ===== */
+.sp-cf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sp-cf-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+.sp-cf-row:hover {
+  background: var(--bg-elevated);
+}
+.sp-cf-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.sp-cf-icon svg { display: block; }
+.sp-cf-row .toggle { justify-self: start; }
+.sp-cf-locked .sp-cf-icon { color: var(--text-muted); }
+.sp-cf-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* "recommended" is our UI translation of TRaSH's `cf.default: true`
+   — the CF auto-checks when its group is enabled. Rendered as muted
+   meta-text rather than a pill so a group like Unwanted Formats with
+   12 of 16 default-on CFs doesn't read as a wall of green badges. */
+.sp-cf-recommended {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+.sp-cf-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+.sp-cf-score.positive { color: var(--accent-green); }
+.sp-cf-score.negative { color: var(--accent-red); }
+.sp-cf-score.zero     { color: var(--text-muted); }
+

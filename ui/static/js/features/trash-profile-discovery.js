@@ -338,6 +338,66 @@ export default {
       return m ? m[1] : raw;
     },
 
+    // Returns the auto-derived ProfileDescription for the profile currently
+    // open in the editor overlay, or null. Reused by the Sync Preview's
+    // profile-info panel so the editor opens with the same rich axes /
+    // highlights / disclaimer copy as the TPD profile card.
+    spProfileDescription() {
+      const appType = this.profileDetail?.instance?.type;
+      const trashId = this.profileDetail?.profile?.trashId;
+      if (!appType || !trashId) return null;
+      const list = this.trashProfileDescriptions?.[appType] || [];
+      return list.find(d => d.trashId === trashId) || null;
+    },
+
+    // Parses TRaSH cf-group names like "[Streaming Services] General" and
+    // returns a sectioned structure for the Sync Preview sub-nav:
+    //   [{ section: 'STREAMING SERVICES', items: [{ ...group, _shortName: 'General' }, ...] }, ...]
+    // Groups without a bracket prefix fall into "OTHER". Section order is
+    // preserved from the input list (TRaSH sorts groups by its own `group`
+    // field, so categories come out in the same order as TRaSH renders
+    // them on its website).
+    spGroupBySection(groups) {
+      const re = /^\[([^\]]+)\]\s*(.*)$/;
+      const sections = new Map();
+      for (const g of (groups || [])) {
+        const m = (g.name || '').match(re);
+        const section = m ? m[1].trim().toUpperCase() : 'OTHER';
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        if (!sections.has(section)) sections.set(section, []);
+        sections.get(section).push({ ...g, _shortName: shortName });
+      }
+      return Array.from(sections, ([section, items]) => ({ section, items }));
+    },
+
+    // Effective active-CF count for a group, mirroring the action-row
+    // counter logic but resolving group-state via selectedOptionalCFs +
+    // group.defaultEnabled fallback. Used by the sub-nav to render
+    // "X / total" so the user can scan which groups are in use without
+    // clicking through each one.
+    //
+    // Rules (same as the action-row counter):
+    //  - Group with required and/or default-on CFs (hasToggle): when group
+    //    is OFF, count is 0; when ON, count = required + effectively-on
+    //    optional CFs.
+    //  - Group without auto-includes (opt-in only — no required, no
+    //    default-on): group-toggle is irrelevant; count purely by per-CF
+    //    effective state.
+    spGroupActiveCount(g) {
+      const cfs = g.cfs || [];
+      const hasToggle = cfs.some(cf => cf.required)
+        || (!g.exclusive && cfs.some(cf => cf.default));
+      const sel = this.selectedOptionalCFs || {};
+      const grpKey = '__grp_' + g.name;
+      const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
+      const cfOn = (cf) => sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
+      if (!hasToggle) {
+        return cfs.filter(cf => cfOn(cf)).length;
+      }
+      if (!grpOn) return 0;
+      return cfs.filter(cf => cf.required || cfOn(cf)).length;
+    },
+
     // Click-handler for the primary "Use →" CTA on a card. Opens the
     // detail/editor overlay so the user can configure customizations and
     // pick their target instance in Save & Sync's picker. We pass insts[0]

@@ -1,7 +1,11 @@
 {{define "overlays/profile-detail"}}
-  <!-- ==================== PROFILE DETAIL ==================== -->
-  <div class="page" x-show="profileDetail && !['settings','about'].includes(currentSection)" x-cloak>
-    <a class="back-link" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">&larr; Back to Profiles</a>
+  <!-- ==================== PROFILE DETAIL (CLASSIC) ====================
+       Active when usePreviewEditor is false. The Sync Preview rewrite at
+       overlays/profile-sync-preview.html is the new editor — both read the
+       same profileDetail state, so users can toggle between via the
+       "Try Sync Preview" / "Classic editor" buttons mid-flow. -->
+  <div class="page" x-show="profileDetail && !usePreviewEditor && !['settings','about'].includes(currentSection)" x-cloak>
+    <a class="back-link" @click="profileDetail = null; usePreviewEditor = false; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">&larr; Back to Profiles</a>
 
     <div style="margin-top:16px" x-show="profileDetail">
       <!-- Sync result banner -->

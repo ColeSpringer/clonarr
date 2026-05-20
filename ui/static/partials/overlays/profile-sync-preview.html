@@ -1,0 +1,422 @@
+{{define "overlays/profile-sync-preview"}}
+  <!-- ==================== SYNC PREVIEW (NEW EDITOR) ====================
+       Parallel rewrite of profile-detail.html. Shares profileDetail state
+       and all save/sync/dryrun functions with the classic editor, so
+       toggling usePreviewEditor mid-flow preserves work. Once signed off
+       this replaces overlays/profile-detail.html outright.
+
+       Layout (top-to-bottom):
+         1. Sticky action bar — profile name + meta + Save/Save&Sync + back to Classic
+         2. Basics strip — Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities + Customize toggle
+         3. Tabs — Profile default (always) + Additional CF (visible only when Customize on)
+         4. Sub-nav + main content — Required CFs + each default-on group in left rail,
+            selected sub-nav item's CFs render compactly in the main area. -->
+  <div class="page sp-page" x-show="profileDetail && usePreviewEditor && !['settings','about'].includes(currentSection)" x-cloak>
+
+    <!-- ===== Action bar (sticky) ===== -->
+    <div class="sp-action-bar">
+      <a class="sp-classic-link" @click="usePreviewEditor = false" x-tt="'Switch to the current Classic editor — same data, scrollable form layout.'">&larr; Classic editor</a>
+      <div class="sp-action-title">
+        <span class="sp-action-name" x-text="profileDetail?.profile?.name"></span>
+        <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx"></span>
+        <span class="sp-action-meta">
+          <template x-if="profileDetail?.instance?.name && !profileDetail?._browseMode">
+            <span><span x-text="profileDetail.instance.name"></span><template x-if="profileDetail._arrProfileName"><span> &rarr; <span x-text="profileDetail._arrProfileName"></span></span></template> &middot; </span>
+          </template>
+          <span x-text="(profileDetail?.detail?.totalCoreCFs || 0) + ' Required CFs'"></span>
+          <template x-if="countAllCategoryCFs() > 0">
+            <span> + <span x-text="countAllCategoryCFs()"></span> from groups</span>
+          </template>
+        </span>
+      </div>
+      <!-- Two action-button branches mirror Classic editor exactly:
+           - Imported profiles (Recyclarr-import / custom-built) route
+             through openImportedSyncModal + AsNew, plus Edit/Export
+             affordances that only make sense for imported sources.
+           - Native TRaSH profiles use openSyncModal + AsNew.
+           Cancel resets the full state surface the Classic Back-link
+           clears, so closing Sync Preview can't leak selectedOptionalCFs
+           / groupExpanded / pdOverrides into the next overlay open. -->
+      <div class="sp-action-buttons">
+        <button class="btn btn-sm" @click="profileDetail = null; usePreviewEditor = false; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">Cancel</button>
+        <template x-if="profileDetail?.detail?.imported">
+          <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
+            <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
+            <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openImportedSyncModalAsNew()" x-tt="'Create a new Arr profile with these settings'">Create New</button>
+          </span>
+        </template>
+        <template x-if="!profileDetail?.detail?.imported">
+          <span class="sp-action-buttons-native" style="display:flex;gap:8px">
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
+          </span>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== Basics strip =====
+         pdOverrides shape (per pdInitOverrides):
+           { minFormatScore: { enabled: bool, value: number }, ... }
+         where .enabled === FALSE means an override is active (legacy
+         naming — "enabled: true" means "follows TRaSH default"). The
+         template reads .value and tags the field as overridden when
+         .enabled === false. -->
+    <div class="sp-basics">
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Language</span>
+        <span class="sp-basics-val" :class="pdOverrides?.language?.enabled === false ? 'overridden' : ''" x-text="pdOverrides?.language?.value || 'Original'"></span>
+      </div>
+      <div class="sp-basics-divider"></div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Min score</span>
+        <span class="sp-basics-val" :class="pdOverrides?.minFormatScore?.enabled === false ? 'overridden' : ''" x-text="pdOverrides?.minFormatScore?.value ?? profileDetail?.detail?.profile?.minFormatScore ?? 0"></span>
+        <template x-if="pdOverrides?.minFormatScore?.enabled === false">
+          <span class="sp-basics-default" x-text="'(default ' + (profileDetail?.detail?.profile?.minFormatScore ?? 0) + ')'"></span>
+        </template>
+      </div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Min upgrade</span>
+        <span class="sp-basics-val" :class="pdOverrides?.minUpgradeFormatScore?.enabled === false ? 'overridden' : ''" x-text="pdOverrides?.minUpgradeFormatScore?.value ?? profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1"></span>
+      </div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Cutoff score</span>
+        <span class="sp-basics-val" :class="pdOverrides?.cutoffFormatScore?.enabled === false ? 'overridden' : ''" x-text="pdOverrides?.cutoffFormatScore?.value ?? profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000"></span>
+      </div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Upgrades</span>
+        <span class="sp-basics-val" :class="pdOverrides?.upgradeAllowed?.enabled === false ? 'overridden' : ''" x-text="((pdOverrides?.upgradeAllowed?.value ?? profileDetail?.detail?.profile?.upgradeAllowed) ? 'On' : 'Off')"></span>
+      </div>
+      <div class="sp-basics-divider"></div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Cutoff quality</span>
+        <span class="sp-basics-val" :class="pdOverrides?.cutoffQuality ? 'overridden' : ''" x-text="pdOverrides?.cutoffQuality || profileDetail?.detail?.profile?.cutoff || '—'"></span>
+      </div>
+      <div class="sp-basics-item">
+        <span class="sp-basics-lbl">Qualities allowed</span>
+        <span class="sp-basics-val" x-text="(() => {
+          const items = qualityStructure.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []);
+          return items.filter(i => i.allowed).length + ' of ' + items.length;
+        })()"></span>
+      </div>
+      <div class="sp-basics-actions">
+        <button class="btn btn-sm" :class="{ 'btn-primary': pdOverridesEnabled }" @click="pdOverridesEnabled = !pdOverridesEnabled" x-tt="'Edit Language, scores, quality, and add extra CF groups'" x-text="pdOverridesEnabled ? 'Done customizing' : 'Customize'"></button>
+      </div>
+    </div>
+
+    <!-- ===== Tabs ===== -->
+    <div class="sp-tabs">
+      <button class="sp-tab" :class="{ active: spActiveTab === 'default' }" @click="spActiveTab = 'default'">Profile default</button>
+      <button class="sp-tab" :class="{ active: spActiveTab === 'additional' }" x-show="pdOverridesEnabled" @click="spActiveTab = 'additional'">
+        Additional CF
+        <template x-if="(profileDetail?.detail?.cfCategories || []).length > 0">
+          <span class="sp-tab-count" x-text="(profileDetail?.detail?.cfCategories || []).length"></span>
+        </template>
+      </button>
+    </div>
+
+    <!-- ===== Profile default tab ===== -->
+    <div class="sp-body" x-show="spActiveTab === 'default'">
+      <!-- Sub-nav: Required CFs (top) + each default-on TRaSH group,
+           grouped by the [Category] prefix of the group name so users
+           with many groups can scan by section ("STREAMING SERVICES"
+           → General / Premium / ...) instead of by truncated full names. -->
+      <nav class="sp-sub-nav">
+        <!-- Required CFs sits outside any category section, so it carries
+             its own colored left-border via the cat-required class. -->
+        <button class="sp-sub-nav-item sp-sub-nav-standalone cat-required"
+                :class="{ active: spActiveGroup === '__required' }"
+                @click="spActiveGroup = '__required'">
+          <span class="sp-sub-nav-label">Required CFs</span>
+          <span class="sp-sub-nav-count" x-text="(profileDetail?.detail?.formatItemNames || []).length"></span>
+        </button>
+        <!-- All TRaSH cf-groups that are PART of this profile (in the
+             profile's quality_profiles.include map). Includes both
+             default-on (synced automatically) and default-off (you can
+             opt into). Same set Classic editor renders in its Groups
+             section — no filter. Additional CF tab handles groups OUTSIDE
+             the profile (via extraCFGroups).
+             Category colour now lives on the section header alone; the
+             individual items inherit visual grouping from their position
+             under the colored header rather than carrying redundant dots. -->
+        <template x-for="section in spGroupBySection(profileDetail?.detail?.trashGroups || [])" :key="'def-'+section.section">
+          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
+            <div class="sp-sub-nav-section" x-text="section.section"></div>
+            <template x-for="g in section.items" :key="g.name">
+              <button class="sp-sub-nav-item"
+                      :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
+                      @click="spActiveGroup = g.name">
+                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                <span class="sp-sub-nav-count" x-text="(g.cfs || []).length"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </nav>
+
+      <!-- Main content: selected sub-nav item's CFs -->
+      <main class="sp-content">
+        <!-- Required CFs view. Profile-info panel intentionally NOT shown
+             here — users already see the full description on the TRaSH
+             Profile card before clicking through, so re-rendering it inside
+             the editor wastes screen space and pushes the actual CF list
+             below the fold. The editor stays focused on configuration. -->
+        <template x-if="spActiveGroup === '__required'">
+          <div>
+            <h2 class="sp-content-title">Required CFs</h2>
+            <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup — always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
+            <div class="sp-cf-list">
+              <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
+                <div class="sp-cf-row sp-cf-locked">
+                  <span class="sp-cf-icon"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  <div class="sp-cf-name" x-text="fi.name"></div>
+                  <div class="sp-cf-score" :class="(fi.score > 0 ? 'positive' : fi.score < 0 ? 'negative' : 'zero')" x-text="fi.score != null ? ((fi.score > 0 ? '+' : '') + fi.score) : ''"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Each TRaSH group view. Mirrors Classic editor semantics:
+             - Group toggle uses pdToggleGroup (which auto-checks/clears
+               recommended CFs based on group's exclusive flag).
+             - CF toggle uses toggleExclusiveCF for exclusive groups,
+               toggleOptionalCF otherwise.
+             - CF "checked" state: explicit selectedOptionalCFs entry
+               wins; otherwise falls back to TRaSH's cf.default.
+             - Required CFs (cf.required) show lock icon, can't toggle.
+             - Greying (opacity 0.35): required CF when group off, or
+               optional CF when group off OR cf explicitly off.
+             Category prefix stripped from h2 — sub-nav section header
+             already conveys it. -->
+        <template x-for="g in (profileDetail?.detail?.trashGroups || [])" :key="g.name">
+          <div x-show="spActiveGroup === g.name"
+               x-data="{
+                 get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
+                 get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
+                 get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; },
+                 /* _hasToggle: does the group toggle actually do anything?
+                    pdToggleGroup auto-enables CFs that are cf.required or
+                    (non-exclusive) cf.default=true. If neither exists, the
+                    toggle just flips __grp_<name> with no functional impact
+                    — getSelectedCFIds only uses __grp_ to include REQUIRED
+                    CFs from active groups. So for opt-in-only groups (e.g.
+                    Movie Versions exclusive, HDR Formats SDR), hiding the
+                    toggle removes a meaningless click. */
+                 get _hasToggle() {
+                   return g.cfs.some(cf => cf.required)
+                       || (!g.exclusive && g.cfs.some(cf => cf.default));
+                 },
+                 /* Single-CF group: action row + CF row collapse to one
+                    combined row. 'Enable the group' is functionally the
+                    same as 'enable that single CF', so showing the CF
+                    name twice (in the action label + below in the list)
+                    is pure noise. */
+                 get _singleCF() { return (g.cfs || []).length === 1; }
+               }">
+            <h2 class="sp-content-title">
+              <div class="sp-content-title-name">
+                <template x-if="_section">
+                  <span class="sp-content-section" x-text="_section + ' › '"></span>
+                </template>
+                <span x-text="_shortName"></span>
+                <span class="sp-group-badges">
+                  <span class="sp-badge" x-show="g.exclusive">pick one</span>
+                </span>
+              </div>
+            </h2>
+            <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
+            <!-- Single-CF group: collapse action row + CF row into one.
+                 'Enable group' = 'enable that CF' when there's only one,
+                 so the toggle drives the single CF directly (lock if
+                 required so the structural semantic stays visible).
+                 Score lives on the row since there's no separate CF
+                 list to put it on. -->
+            <template x-if="_singleCF">
+              <label class="sp-action-row sp-action-row-combined toggle-row">
+                <span class="toggle toggle-sm"
+                      x-tt="'On = sync this CF. Off = skip it.'"
+                      @click.stop>
+                  <input type="checkbox"
+                         :checked="g.cfs[0].required ? _groupOn : (selectedOptionalCFs[g.cfs[0].trashId] === undefined ? !!g.cfs[0].default : !!selectedOptionalCFs[g.cfs[0].trashId])"
+                         @change="g.cfs[0].required ? pdToggleGroup(g, $event.target.checked) : toggleOptionalCF(g.cfs[0].trashId)">
+                  <span class="slider"></span>
+                </span>
+                <template x-if="g.cfs[0].required">
+                  <span class="sp-cf-icon" x-tt="'Required CF — synced as a unit when on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                </template>
+                <span class="sp-action-label">
+                  <span x-text="g.cfs[0].name"></span>
+                  <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
+                </span>
+                <span class="sp-cf-score"
+                      :class="(g.cfs[0].score > 0 ? 'positive' : g.cfs[0].score < 0 ? 'negative' : 'zero')"
+                      x-text="g.cfs[0].score != null ? ((g.cfs[0].score > 0 ? '+' : '') + g.cfs[0].score) : ''"></span>
+              </label>
+            </template>
+            <!-- Multi-CF group: standard layout — action rows above,
+                 CF list below. -->
+            <div class="sp-action-rows" x-show="!_singleCF">
+              <template x-if="_hasToggle">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'On = sync this group. Off = none of its CFs sync, regardless of individual CF state.'"
+                        @click.stop>
+                    <input type="checkbox" :checked="_groupOn"
+                           @change="pdToggleGroup(g, $event.target.checked)">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">
+                    <span x-text="_shortName"></span>
+                    <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
+                  </span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const total = g.cfs.length;
+                          const on = g.cfs.filter(cf => {
+                            if (cf.required) return _groupOn;
+                            return _groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]);
+                          }).length;
+                          return on + ' of ' + total + ' included';
+                        })()"></span>
+                </label>
+              </template>
+              <template x-if="!g.cfs.every(cf => cf.required) && !g.exclusive && g.cfs.length >= 3 && (_groupOn || !_hasToggle)">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'Toggle every optional CF in this group on or off. Required CFs (locked) stay on regardless.'"
+                        @click.stop>
+                    <input type="checkbox"
+                           :checked="g.cfs.filter(cf => !cf.required).every(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId])"
+                           @change="(() => {
+                             /* Route through toggleOptionalCF so cross-group
+                                conflicts (conflicts.json) deactivate when a CF
+                                flips on. Raw selectedOptionalCFs[id] = true
+                                would skip that and let conflicting CFs co-
+                                exist, diverging from Classic's sync result. */
+                             const enabling = $event.target.checked;
+                             for (const cf of g.cfs) {
+                               if (cf.required) continue;
+                               const currentlyOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                               if (enabling !== currentlyOn) toggleOptionalCF(cf.trashId);
+                             }
+                           })()">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">All optional CFs</span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const opt = g.cfs.filter(cf => !cf.required);
+                          const optOn = opt.filter(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]).length;
+                          return optOn + ' of ' + opt.length + ' optional on';
+                        })()"></span>
+                </label>
+              </template>
+            </div>
+            <div class="sp-cf-list" x-show="!_singleCF">
+              <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
+                <div class="sp-cf-row"
+                     :class="cf.required ? 'sp-cf-locked' : ''"
+                     :style="{
+                       /* Object-form :style so any future inline static
+                          style attribute survives — string-form would wipe
+                          the row's other inline styles. The dimming logic:
+                          - hidden group toggle (opt-in only): dim purely on
+                            per-CF off (no group state to express).
+                          - required CF: dim only when group is off.
+                          - optional CF: dim when group is off OR cf is off. */
+                       opacity: (() => {
+                         const cfOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                         if (!_hasToggle) return cfOn ? 1 : 0.35;
+                         if (cf.required) return _groupOn ? 1 : 0.35;
+                         return (_groupOn && cfOn) ? 1 : 0.35;
+                       })()
+                     }">
+                  <template x-if="cf.required">
+                    <span class="sp-cf-icon" x-tt="'Required by the group — included when the group is on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  </template>
+                  <template x-if="!cf.required">
+                    <label class="toggle toggle-sm" x-tt="'Include this Custom Format when the group is on.'" @click.stop>
+                      <input type="checkbox"
+                             :checked="selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]"
+                             @change="g.exclusive ? toggleExclusiveCF(cf.trashId, g.cfs) : toggleOptionalCF(cf.trashId)">
+                      <span class="slider"></span>
+                    </label>
+                  </template>
+                  <div class="sp-cf-name">
+                    <span x-text="cf.name"></span>
+                    <span class="sp-cf-recommended" x-show="cf.default && !cf.required" x-tt="'TRaSH recommends keeping this on'">recommended</span>
+                  </div>
+                  <div class="sp-cf-score" :class="(cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero')" x-text="cf.score != null ? ((cf.score > 0 ? '+' : '') + cf.score) : ''"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </main>
+    </div>
+
+    <!-- ===== Additional CF tab (gated behind Customize) =====
+         Driven by extraCFGroups — TRaSH cf-groups that are NOT part of
+         this profile's quality_profiles.include map, i.e. add-on groups
+         users can opt into beyond what the profile pulls in by default.
+         Section grouping ("STREAMING SERVICES", "HDR FORMATS") makes the
+         long list scannable. -->
+    <div class="sp-body" x-show="spActiveTab === 'additional' && pdOverridesEnabled">
+      <nav class="sp-sub-nav">
+        <template x-for="section in spGroupBySection(extraCFGroups || [])" :key="'add-'+section.section">
+          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
+            <div class="sp-sub-nav-section" x-text="section.section"></div>
+            <template x-for="g in section.items" :key="g.name">
+              <button class="sp-sub-nav-item"
+                      :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
+                      @click="spActiveGroup = g.name">
+                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                <span class="sp-sub-nav-count" x-text="(g.cfs || []).length"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </nav>
+      <main class="sp-content">
+        <template x-for="g in (extraCFGroups || [])" :key="g.name">
+          <div x-show="spActiveGroup === g.name"
+               x-data="{
+                 get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
+                 get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }
+               }">
+            <h2 class="sp-content-title">
+              <div class="sp-content-title-name">
+                <template x-if="_section">
+                  <span class="sp-content-section" x-text="_section + ' › '"></span>
+                </template>
+                <span x-text="_shortName"></span>
+                <span class="sp-group-badges">
+                  <span class="sp-badge" x-show="g.exclusive">pick one</span>
+                </span>
+              </div>
+            </h2>
+            <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
+            <p class="sp-content-sub" x-show="!g.trashDescription">Optional CFs you can add to this profile. Toggle individual entries below.</p>
+            <div class="sp-cf-list">
+              <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
+                <div class="sp-cf-row">
+                  <label class="toggle toggle-sm" @click.stop>
+                    <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]" @change="selectedOptionalCFs = { ...selectedOptionalCFs, [cf.trashId]: $event.target.checked }">
+                    <span class="slider"></span>
+                  </label>
+                  <div class="sp-cf-name" x-text="cf.name"></div>
+                  <div class="sp-cf-score" :class="(cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero')" x-text="cf.score != null ? ((cf.score > 0 ? '+' : '') + cf.score) : ''"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </main>
+    </div>
+
+  </div>
+{{end}}

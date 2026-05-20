@@ -155,7 +155,10 @@
                         <button class="v3-action-icon" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634;</button>
                       </template>
                       <template x-if="!sh.orphanedAt">
-                        <button class="v3-action-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync rule'">&#9998;</button>
+                        <button class="v3-action-icon" @click.stop="usePreviewEditor = false; resyncProfile(inst, sh)" x-tt="'Edit sync rule'">&#9998;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="usePreviewEditor = true; resyncProfile(inst, sh)" x-tt="'Open Sync Preview — new editor layout (in development)'">&#10070;</button>
                       </template>
                       <template x-if="!sh.orphanedAt">
                         <button class="v3-action-icon" @click.stop="quickSync(inst, sh)" x-tt="'Re-sync with saved settings'">&#8635;</button>
@@ -262,7 +265,8 @@
                             </ul>
                           </div>
                           <div class="tpd-card-footer">
-                            <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use →</button>
+                            <button class="btn btn-primary" @click="usePreviewEditor = false; tpdUseProfile(activeAppType, d.trashId)">Use →</button>
+                            <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="usePreviewEditor = true; tpdUseProfile(activeAppType, d.trashId)" x-tt="'Open the new Sync Preview editor (in development — Classic editor is still the default).'">Sync Preview</button>
                             <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">
                               📖 <span x-text="d.name && d.name.startsWith('[SQP]') ? 'TRaSH-Guide Discord' : 'TRaSH guide'"></span>
                             </a>

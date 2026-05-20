@@ -126,6 +126,17 @@ export default function baseState() {
     // Auto-enabled by restoreFromSyncHistory when any saved override is detected, so the
     // toggle always reflects the actual persisted state of the rule (no silent "default" lie).
     pdOverridesEnabled: false,
+    // Sync Preview overlay — parallel rewrite of the profile editor. Toggled
+    // per-rule via the "Sync Preview" entry-button (TPD card + Sync Rules
+    // row). Both overlays read the same profileDetail state, so flipping
+    // mid-edit preserves work. Removed entirely once Sync Preview is signed
+    // off and replaces profile-detail.html.
+    usePreviewEditor: false,
+    spActiveTab: 'default',     // 'default' | 'additional' (Customize-gated)
+    spActiveGroup: '__required', // '__required' | <trashGroup.name>
+    // Sync Preview's Customize state reads pdOverridesEnabled directly —
+    // no separate spCustomize field. A separate field could drift when
+    // user toggles Customize in one overlay then switches to the other.
     pdGeneralCollapsed: false,  // Profile-detail General card chevron collapse state (default expanded)
     pdQualityCollapsed: false,  // Profile-detail Quality card chevron collapse state (default expanded)
     pdCFScoresCollapsed: true,  // Profile-detail Overridden Scores card chevron collapse state (default collapsed — list-style sections opened on demand)
