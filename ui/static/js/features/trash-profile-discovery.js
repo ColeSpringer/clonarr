@@ -764,11 +764,13 @@ export default {
         const shortName = m ? (m[2].trim() || g.name) : g.name;
         for (const cf of g.cfs) collectScoreOv(cf, shortName);
       }
-      for (const g of (this.extraCFGroups || [])) {
-        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
-        const shortName = m ? (m[2].trim() || g.name) : g.name;
-        for (const cf of g.cfs) collectScoreOv(cf, shortName + ' (Additional)');
-      }
+      // Note: extraCFGroups are intentionally NOT iterated here.
+      // Their cf.score is undefined (only trashScores map is populated),
+      // so `o !== cf.score` would falsely flag any override as different
+      // from a meaningless undefined baseline and produce "undefined → N"
+      // rows. Opted-in Additional CFs with score overrides surface in
+      // bucket 3 (Added Additional CFs) below — that row uses
+      // resolveCFDefaultScore as fallback and renders the correct value.
 
       // 3. Additional CFs activated — CFs the user opted into from
       // extraCFGroups that are TRULY outside the profile's default
@@ -801,13 +803,19 @@ export default {
       for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) {
         profileActiveCFs.add(fi.trashId);
       }
+      // Same trashId can appear in multiple Additional groups (e.g.
+      // regional Unwanted variants share several CFs). Guard so each
+      // opted-in CF appears exactly once in the Diffs list.
+      const seenAddCF = new Set();
       for (const g of (this.extraCFGroups || [])) {
         if (!g.name || inProfileGroup.has(g.name)) continue;
         const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
         const shortName = m ? (m[2].trim() || g.name) : g.name;
         for (const cf of (g.cfs || [])) {
           if (profileActiveCFs.has(cf.trashId)) continue; // already in profile, not an addition
+          if (seenAddCF.has(cf.trashId)) continue;
           if (!!sel[cf.trashId]) {
+            seenAddCF.add(cf.trashId);
             // Additional CFs come from extraCFGroups (raw catalog) with
             // trashScores map but no resolved cf.score — fall back to
             // resolveCFDefaultScore which picks via profile's scoreCtx.
@@ -1019,24 +1027,31 @@ export default {
     },
 
     // Reset action for the Diffs view's Excluded default-on CFs row —
-    // re-includes the CF that was previously turned off.
+    // re-includes the CF that was previously turned off. Deletes the
+    // entry (rather than writing explicit `true`) so the CF tracks its
+    // upstream default — if TRaSH later flips the CF's default to off,
+    // we don't keep it pinned on against the new default.
     spReincludeExcludedCF(trashId) {
       if (!trashId) return;
       const updated = { ...(this.selectedOptionalCFs || {}) };
-      updated[trashId] = true;
+      delete updated[trashId];
       this.selectedOptionalCFs = updated;
     },
 
     // Persist (or clear) a CF score override from an inline editor. If
-    // the new value parses to NaN or equals the CF's TRaSH default, the
+    // the new value is empty / NaN / equals the CF's TRaSH default, the
     // override entry is deleted so the rule payload stays clean
     // (matches save-time filter at profiles.js:1601 pattern). Otherwise
-    // the override map is written.
+    // the override map is written. Empty-string check is explicit
+    // because Number("") === 0 — without the guard, clearing the field
+    // would silently write a 0 override for CFs whose TRaSH default
+    // is non-zero (e.g. HQ Source Groups at +500).
     spApplyCFScore(trashId, value, defaultScore) {
       if (!trashId) return;
-      const v = Number(value);
+      const isEmpty = value === '' || value == null;
+      const v = isEmpty ? NaN : Number(value);
       const updated = { ...this.cfScoreOverrides };
-      if (Number.isNaN(v) || v === Number(defaultScore)) {
+      if (isEmpty || Number.isNaN(v) || v === Number(defaultScore)) {
         delete updated[trashId];
       } else {
         updated[trashId] = v;
