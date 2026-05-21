@@ -16,7 +16,12 @@
 /* ===== Action bar (sticky) ===== */
 .sp-action-bar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* Two columns: title block flexes (1fr), action buttons stick to the
+     right (auto). Removed the leading auto-column that used to hold
+     the "← Classic editor" link — without that slot the layout was
+     "title auto / buttons 1fr", which made the buttons drift with
+     title length. */
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 16px;
   padding: 6px 14px;
@@ -27,14 +32,6 @@
   top: 0;
   z-index: 10;
 }
-.sp-classic-link {
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.sp-classic-link:hover { color: var(--app-color); }
 .sp-action-title {
   display: flex;
   align-items: baseline;
