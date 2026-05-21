@@ -145,8 +145,8 @@
         </template>
         <template x-if="profileDetail?._arrProfileName">
           <span class="sp-action-source"
-                x-tt="'TRaSH-Guides template this profile is synced from.'">
-            (based on <span x-text="profileDetail?.profile?.name"></span>)
+                x-tt="'TRaSH-Guides profile this rule syncs from.'">
+            (<span x-text="profileDetail?.profile?.name"></span>)
           </span>
         </template>
         <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx"></span>
