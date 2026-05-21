@@ -2472,6 +2472,27 @@ export default {
         }
         this.selectedOptionalCFs = { ...this.selectedOptionalCFs };
       }
+      // Phase 2c — restore required-CF exclusions from rule.ExcludedCFs.
+      // The optional-CF restore loop above intentionally skips required
+      // CFs (their inclusion is driven by group state). But Phase 2c
+      // lets users opt out of required CFs via the lock-icon UI, so the
+      // rule can carry excludedCFs entries that target required CFs
+      // (both formatItemNames and required-in-group). Without this
+      // restore step, the editor reopens with the exclusion silently
+      // dropped from sel — the Diffs view + lock-icon visuals show the
+      // CF as included even though the rule on disk still excludes it.
+      // applyRuleStateToEditor handles this for the single-matching-
+      // rule case via openProfileDetail; this is the resyncProfile path
+      // that runs after that and must not undo it. Belt-and-braces: we
+      // re-apply the rule's excludedCFs here so the state is consistent
+      // regardless of which load path ran.
+      if (ruleForRestore && Array.isArray(ruleForRestore.excludedCFs)) {
+        const sel = { ...this.selectedOptionalCFs };
+        for (const tid of ruleForRestore.excludedCFs) {
+          sel[tid] = false;
+        }
+        this.selectedOptionalCFs = sel;
+      }
       // Restore overrides. ruleData prefers the rule (saved intent) over
       // sync history, so Save-only edits are visible on reopen. Values are
       // written to pdOverrides; pdOverridesEnabled flips on at the end if
