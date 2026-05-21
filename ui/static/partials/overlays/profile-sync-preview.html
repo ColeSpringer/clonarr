@@ -323,6 +323,12 @@
           })()"></span>
         </template>
         <template x-if="pdOverridesEnabled">
+          <!-- qsInitFromProfile seeds qualityStructure from profile.items
+               AND wipes legacy qualityOverrides as a one-time migration
+               (single source of truth — see profiles.js:3727). The
+               qualityStructure.length guard makes subsequent opens no-ops.
+               Anyone refactoring this launcher should preserve the guard
+               so we don't re-wipe overrides on every modal open. -->
           <button class="sp-basics-val sp-basics-quality-launcher"
                   @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
                   x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
@@ -553,14 +559,21 @@
                   <span x-text="g.cfs[0].name"></span>
                   <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
                 </span>
+                <!-- _defScore: prefer pre-resolved cf.score (always set
+                     for profile.trashGroups); fall back to
+                     resolveCFDefaultScore so the row keeps working if
+                     the combined-row template is ever reused for
+                     extraCFGroups (cf.score is undefined there — see
+                     spOverviewEnabledCFs scoreInfo). -->
                 <template x-if="!pdOverridesEnabled">
                   <span class="sp-cf-score"
-                        :class="((cfScoreOverrides[g.cfs[0].trashId] ?? g.cfs[0].score) > 0 ? 'positive' : (cfScoreOverrides[g.cfs[0].trashId] ?? g.cfs[0].score) < 0 ? 'negative' : 'zero')"
-                        x-text="(() => { const s = cfScoreOverrides[g.cfs[0].trashId] ?? g.cfs[0].score; return s != null ? ((s > 0 ? '+' : '') + s) : ''; })()"></span>
+                        x-data="{ get _defScore() { return g.cfs[0].score ?? resolveCFDefaultScore(g.cfs[0].trashId); }, get _eff() { return cfScoreOverrides[g.cfs[0].trashId] ?? this._defScore; } }"
+                        :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')"
+                        x-text="_eff != null && _eff !== '?' ? ((_eff > 0 ? '+' : '') + _eff) : ''"></span>
                 </template>
                 <template x-if="pdOverridesEnabled">
                   <span class="sp-cf-score-edit"
-                        x-data="{ get _def() { return g.cfs[0].score; }, get _eff() { const o = cfScoreOverrides[g.cfs[0].trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[g.cfs[0].trashId] !== undefined && cfScoreOverrides[g.cfs[0].trashId] !== this._def; } }">
+                        x-data="{ get _def() { const s = g.cfs[0].score ?? resolveCFDefaultScore(g.cfs[0].trashId); return s === '?' ? null : s; }, get _eff() { const o = cfScoreOverrides[g.cfs[0].trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[g.cfs[0].trashId] !== undefined && cfScoreOverrides[g.cfs[0].trashId] !== this._def; } }">
                     <template x-if="_mod">
                       <button class="sp-basics-reset sp-cf-score-reset" @click.stop="pdResetCFScore(g.cfs[0].trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                     </template>
@@ -887,7 +900,7 @@
             </div>
           </div>
 
-          <div class="sp-ov-empty" x-show="spOverviewDiffCount() === 0">
+          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) === 0">
             Nothing customized — this profile matches the TRaSH default exactly.
           </div>
         </section>

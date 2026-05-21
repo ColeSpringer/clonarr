@@ -499,7 +499,10 @@ export default {
     // the original when the user has overridden a score (customizations
     // shown inline, not in a separate card).
     // De-dupes by trashId in case the same CF lives in multiple groups.
-    spOverviewEnabledCFs() {
+    // skipSort skips the per-section sort applied at the end. Used by
+    // spOverviewFlatCFs which re-sorts across the flattened list — the
+    // per-section sort would otherwise be wasted work.
+    spOverviewEnabledCFs(skipSort) {
       if (!this.profileDetail) return [];
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
@@ -581,7 +584,7 @@ export default {
       // Apply user-selected sort within each section. Default keeps the
       // natural source order (formatItems then group order then category).
       const sort = this.spOverviewSort || 'default';
-      if (sort !== 'default') {
+      if (!skipSort && sort !== 'default') {
         const cmp = {
           'name-asc':   (a, b) => (a.name || '').localeCompare(b.name || ''),
           'name-desc':  (a, b) => (b.name || '').localeCompare(a.name || ''),
@@ -606,7 +609,10 @@ export default {
     // Sorting honours spOverviewSort the same way the grouped path
     // does, but applies across the FULL list rather than per-section.
     spOverviewFlatCFs(kindFilter) {
-      const sections = this.spOverviewEnabledCFs();
+      // skipSort=true: we re-sort across the flat list below, so the
+      // per-section sort that spOverviewEnabledCFs normally applies
+      // would be wasted work.
+      const sections = this.spOverviewEnabledCFs(true);
       const out = [];
       for (const s of sections) {
         if (kindFilter === 'optional-in-profile') {

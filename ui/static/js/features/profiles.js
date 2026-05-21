@@ -3861,6 +3861,10 @@ export default {
       this.qualityStructureExpanded = {};
       this.qualityStructureRenaming = null;
       this.qsResetDrag();
+      // Defensive: reset qualityEditorTarget so a future opener that
+      // forgets to set it lands on a safe default ('builder') rather
+      // than a stale 'edit' that would mis-route writes.
+      this.qualityEditorTarget = 'builder';
     },
 
     // Drag-drop on a gap → reorder (or ungroup-and-insert if dragging a member)

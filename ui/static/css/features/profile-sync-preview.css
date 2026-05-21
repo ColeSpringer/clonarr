@@ -688,14 +688,6 @@
   font-size: 11px;
   font-style: italic;
 }
-.sp-ov-modified-tag {
-  font-size: 10px;
-  color: var(--accent-orange);
-  font-weight: 500;
-  text-transform: lowercase;
-  letter-spacing: 0.2px;
-}
-.sp-ov-modified .sp-ov-basics-val { color: var(--accent-orange); }
 
 /* Enabled CFs — section per source, with optional category color on
    the section-title's left border so user can tell at a glance which
@@ -815,19 +807,6 @@
   align-items: baseline;
   padding: 3px 0;
 }
-/* Column header row above the diff rows — explains what "old" and
-   "new" mean ("TRaSH default" vs "Your value"). Tiny uppercase
-   muted text aligned to the same grid as the data rows. */
-.sp-ov-card-diffs .sp-ov-diff-header {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 2px 0 4px;
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 4px;
-}
 .sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-name {
   display: inline-flex;
   align-items: baseline;
@@ -863,9 +842,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-}
-.sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-default + * {
-  /* When fromGroup is present, the diff row uses 2 visual rows. */
 }
 .sp-ov-diff-old {
   color: var(--text-muted);
@@ -918,28 +894,12 @@
   text-align: center;
 }
 
-/* Original value rendered struck-through next to the new value so a
-   customized field/score reads as "what changed from default" inline
-   without a separate diff card. */
-.sp-ov-original-strike {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-decoration: line-through;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono, monospace);
-}
 /* Excluded-CF row in the Diffs view — name gets struck-through too
    since the row represents "this CF would normally sync but you
    removed it from the active set". */
 .sp-ov-cf-excluded .sp-ov-cf-name {
   text-decoration: line-through;
   color: var(--text-muted);
-}
-/* Source-of-CF tag in Diffs rows ("from <group name>") */
-.sp-ov-cf-default {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
 }
 .sp-ov-section-hint {
   font-size: 12px;
