@@ -499,11 +499,58 @@ export default {
     // the original when the user has overridden a score (customizations
     // shown inline, not in a separate card).
     // De-dupes by trashId in case the same CF lives in multiple groups.
+    // Compose a cheap snapshot of the inputs the Overview helpers read.
+    // Same-key calls return the cached result; any input change produces
+    // a new key array and triggers recomputation. Reference equality
+    // works for the maps that get reassigned via spread on every change
+    // (selectedOptionalCFs, cfScoreOverrides). pdOverrides mutates
+    // nested fields in-place so we snapshot the specific values we
+    // actually read. Cheap to build, much cheaper to compare than
+    // walking ~300 CF iterations.
+    _spOverviewCacheKey() {
+      const ov = this.pdOverrides || {};
+      return [
+        this.profileDetail,
+        this.selectedOptionalCFs,
+        this.cfScoreOverrides,
+        this.extraCFGroups,
+        this.spOverviewSort,
+        ov.language?.value,
+        ov.language?.enabled,
+        ov.minFormatScore?.value,
+        ov.minFormatScore?.enabled,
+        ov.minUpgradeFormatScore?.value,
+        ov.minUpgradeFormatScore?.enabled,
+        ov.cutoffFormatScore?.value,
+        ov.cutoffFormatScore?.enabled,
+        ov.upgradeAllowed?.value,
+        ov.upgradeAllowed?.enabled,
+        ov.cutoffQuality,
+        this.activeAppType,
+      ];
+    },
+    _spCacheHit(prev, cur) {
+      if (!prev || prev.length !== cur.length) return false;
+      for (let i = 0; i < cur.length; i++) if (prev[i] !== cur[i]) return false;
+      return true;
+    },
+
     // skipSort skips the per-section sort applied at the end. Used by
     // spOverviewFlatCFs which re-sorts across the flattened list — the
     // per-section sort would otherwise be wasted work.
     spOverviewEnabledCFs(skipSort) {
-      if (!this.profileDetail) return [];
+      // Memo: same inputs + same skipSort → reuse last result. Cuts the
+      // 5-9 calls-per-Alpine-tick the sub-nav badges + counts + empty
+      // checks + x-for sources produce down to a single computation.
+      const key = this._spOverviewCacheKey();
+      const cache = skipSort ? '_enabledNoSort' : '_enabledSorted';
+      const keyCache = skipSort ? '_enabledNoSortKey' : '_enabledSortedKey';
+      if (this._spCacheHit(this[keyCache], key)) return this[cache];
+      if (!this.profileDetail) {
+        this[cache] = [];
+        this[keyCache] = key;
+        return [];
+      }
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
       // Resolve TRaSH default score per CF — formatItems and trashGroups
@@ -596,6 +643,8 @@ export default {
         }
       }
 
+      this[cache] = sections;
+      this[keyCache] = key;
       return sections;
     },
 
@@ -672,8 +721,17 @@ export default {
     // diff with original-vs-current side by side. Computed lazily on
     // each access (Alpine reactivity tracks the dependencies).
     spOverviewDiffs() {
+      // Memoise — see _spOverviewCacheKey. Diffs view's sub-nav badge +
+      // card title + 5 section-show checks + 5 x-for sources call this
+      // 8-12 times per render; cache turns that into one walk.
+      const key = this._spOverviewCacheKey();
+      if (this._spCacheHit(this._diffsKey, key)) return this._diffsCache;
       const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [] };
-      if (!this.profileDetail) return out;
+      if (!this.profileDetail) {
+        this._diffsCache = out;
+        this._diffsKey = key;
+        return out;
+      }
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
       const pd = this.profileDetail?.detail?.profile;
@@ -907,6 +965,8 @@ export default {
         }
       }
 
+      this._diffsCache = out;
+      this._diffsKey = key;
       return out;
     },
 
