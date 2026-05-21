@@ -11,7 +11,12 @@ on:
       # here. Merged into main as v3.0.0 when feature-complete.
       # See dev/docs/layout-v2-plan.md for the full strategy.
       - feature/v3-modern
-    tags: ['v*']
+    # Semver-only — vX.Y.Z and pre-releases like vX.Y.Z-rc1. Restore
+    # tags or other named markers (e.g. v3-pre-classic-removal) must
+    # not trigger a build: the metadata-action's tag rules don't
+    # produce a docker tag for non-semver refs, so buildx errors out
+    # with "tag is needed when pushing to registry".
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
   workflow_dispatch:
     inputs:
       push_image:
