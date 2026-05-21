@@ -532,13 +532,15 @@ export default {
         if (filtered.length > 0) sections.push({ source: label, sourceCategory: category, cfs: filtered, kind });
       };
 
-      // 1. Required CFs at profile level — formatItemNames
+      // 1. Required CFs at profile level — formatItemNames.
+      // Phase 2c: skip CFs the user excluded via lock-icon click (they
+      // won't sync, so showing them as "enabled" would lie).
       pushSection(
         'Required CFs',
         'required',
-        (this.profileDetail.detail?.formatItemNames || []).map(fi => ({
-          ...fi, _isRequired: true, _score: scoreInfo(fi),
-        })),
+        (this.profileDetail.detail?.formatItemNames || [])
+          .filter(fi => sel[fi.trashId] !== false)
+          .map(fi => ({ ...fi, _isRequired: true, _score: scoreInfo(fi) })),
         'required'
       );
 
@@ -555,7 +557,8 @@ export default {
         for (const cf of g.cfs) {
           let isOn;
           if (cf.required) {
-            isOn = !hasToggle || grpOn;
+            // Phase 2c: required CF can be individually excluded.
+            isOn = (!hasToggle || grpOn) && sel[cf.trashId] !== false;
           } else {
             const cfOn = sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
             isOn = (!hasToggle || grpOn) && cfOn;
@@ -663,7 +666,7 @@ export default {
     // diff with original-vs-current side by side. Computed lazily on
     // each access (Alpine reactivity tracks the dependencies).
     spOverviewDiffs() {
-      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [] };
+      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [] };
       if (!this.profileDetail) return out;
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
@@ -862,6 +865,42 @@ export default {
         }
       }
 
+      // 5. Excluded required CFs — Phase 2c. Two sources:
+      //    a) formatItemNames the user explicitly excluded (lock-icon
+      //       click in the standalone Required CFs tab).
+      //    b) Group-required CFs from active groups that the user
+      //       excluded individually. Inactive groups don't count — the
+      //       whole group is off, so the CF isn't being filtered out
+      //       specifically.
+      for (const fi of (this.profileDetail.detail?.formatItemNames || [])) {
+        if (sel[fi.trashId] === false) {
+          out.excludedRequiredCFs.push({
+            trashId: fi.trashId,
+            name: fi.name,
+            score: fi.score,
+            fromGroup: 'Required CFs',
+          });
+        }
+      }
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        const grpKey = '__grp_' + g.name;
+        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
+        if (!grpOn) continue;
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        for (const cf of g.cfs) {
+          if (cf.required && sel[cf.trashId] === false) {
+            out.excludedRequiredCFs.push({
+              trashId: cf.trashId,
+              name: cf.name,
+              score: cf.score,
+              fromGroup: shortName,
+              sourceCategory: g.category,
+            });
+          }
+        }
+      }
+
       return out;
     },
 
@@ -1038,6 +1077,23 @@ export default {
       this.selectedOptionalCFs = updated;
     },
 
+    // Phase 2c — toggle a required CF between excluded and included.
+    // sel[trashId] === false → re-include (delete entry, tracks upstream
+    // default). Anything else → exclude (write false). Backend's
+    // getExcludedCFIds picks it up via computeTrashDefaults, which
+    // already covers formatItemNames + required CFs from default-on
+    // groups, so the sync engine filters them out end-to-end.
+    spToggleRequiredCF(trashId) {
+      if (!trashId) return;
+      const updated = { ...(this.selectedOptionalCFs || {}) };
+      if (updated[trashId] === false) {
+        delete updated[trashId];
+      } else {
+        updated[trashId] = false;
+      }
+      this.selectedOptionalCFs = updated;
+    },
+
     // Persist (or clear) a CF score override from an inline editor. If
     // the new value is empty / NaN / equals the CF's TRaSH default, the
     // override entry is deleted so the rule payload stays clean
@@ -1062,7 +1118,7 @@ export default {
     // Total diff count for the sub-nav badge.
     spOverviewDiffCount() {
       const d = this.spOverviewDiffs();
-      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length;
+      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length + d.excludedRequiredCFs.length;
     },
 
     // Allowed qualities in their qualityStructure order. Falls back to

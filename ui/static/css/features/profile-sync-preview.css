@@ -475,6 +475,38 @@
 .sp-cf-icon svg { display: block; }
 .sp-cf-row .toggle { justify-self: start; }
 .sp-cf-locked .sp-cf-icon { color: var(--text-muted); }
+/* Phase 2c — lock icon turns into a button when Customize is on so
+   the user can opt out of a required CF. Clickable affordance keeps
+   the icon glyph but adds hover/focus chrome and a state colour. */
+.sp-cf-icon-clickable {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+.sp-cf-icon-clickable:hover { color: var(--accent-orange); }
+.sp-cf-icon-clickable:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+/* Pressed state — required CF currently excluded. Red leans the
+   icon visually toward "this is opted out" and matches the strike
+   on the CF name. */
+.sp-cf-icon-clickable.sp-cf-icon-excluded { color: var(--accent-red); }
+.sp-cf-icon-clickable.sp-cf-icon-excluded:hover { color: var(--accent-orange); }
+/* Strikethrough on the CF name when a required CF is excluded.
+   Mirrors the .sp-ov-cf-excluded treatment in the Profile overview /
+   Diffs view so the visual language is consistent across both
+   editor mode and summary mode. */
+.sp-cf-name-excluded {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
 .sp-cf-name {
   color: var(--text-primary);
   overflow: hidden;

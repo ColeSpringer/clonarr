@@ -425,13 +425,31 @@
             <div class="sp-cf-list">
               <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
                 <div class="sp-cf-row sp-cf-locked"
+                     :class="(selectedOptionalCFs[fi.trashId] === false) ? 'sp-cf-req-excluded' : ''"
                      x-data="{
                        get _def() { return fi.score; },
                        get _eff() { const o = cfScoreOverrides[fi.trashId]; return o !== undefined ? o : this._def; },
-                       get _mod() { return cfScoreOverrides[fi.trashId] !== undefined && cfScoreOverrides[fi.trashId] !== this._def; }
+                       get _mod() { return cfScoreOverrides[fi.trashId] !== undefined && cfScoreOverrides[fi.trashId] !== this._def; },
+                       get _excluded() { return selectedOptionalCFs[fi.trashId] === false; }
                      }">
-                  <span class="sp-cf-icon"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-                  <div class="sp-cf-name" x-text="fi.name"></div>
+                  <!-- Lock-icon: static when Customize is off; clickable
+                       button when Customize is on so the user can opt out
+                       of a required CF. State swap: red ✕-style on hover
+                       when excluded reads as "click to re-include". -->
+                  <template x-if="!pdOverridesEnabled">
+                    <span class="sp-cf-icon" x-tt="'Required by the profile — always synced.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
+                            :class="{ 'sp-cf-icon-excluded': _excluded }"
+                            :aria-label="(_excluded ? 'Re-include ' : 'Exclude ') + fi.name"
+                            :aria-pressed="_excluded ? 'true' : 'false'"
+                            x-tt="_excluded ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
+                            @click="spToggleRequiredCF(fi.trashId)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
+                  </template>
+                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': _excluded }" x-text="fi.name"></div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
                   </template>
@@ -599,24 +617,38 @@
             <div class="sp-cf-list" x-show="!_singleCF">
               <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
                 <div class="sp-cf-row"
-                     :class="cf.required ? 'sp-cf-locked' : ''"
+                     :class="{
+                       'sp-cf-locked': cf.required,
+                       'sp-cf-req-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false,
+                     }"
                      :style="{
                        /* Object-form :style so any future inline static
                           style attribute survives — string-form would wipe
                           the row's other inline styles. The dimming logic:
                           - hidden group toggle (opt-in only): dim purely on
                             per-CF off (no group state to express).
-                          - required CF: dim only when group is off.
+                          - required CF: dim when group is off OR Phase 2c
+                            user-excluded.
                           - optional CF: dim when group is off OR cf is off. */
                        opacity: (() => {
                          const cfOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
                          if (!_hasToggle) return cfOn ? 1 : 0.35;
-                         if (cf.required) return _groupOn ? 1 : 0.35;
+                         if (cf.required) return (_groupOn && selectedOptionalCFs[cf.trashId] !== false) ? 1 : 0.35;
                          return (_groupOn && cfOn) ? 1 : 0.35;
                        })()
                      }">
-                  <template x-if="cf.required">
+                  <template x-if="cf.required && !pdOverridesEnabled">
                     <span class="sp-cf-icon" x-tt="'Required by the group — included when the group is on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  </template>
+                  <template x-if="cf.required && pdOverridesEnabled">
+                    <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
+                            :class="{ 'sp-cf-icon-excluded': selectedOptionalCFs[cf.trashId] === false }"
+                            :aria-label="(selectedOptionalCFs[cf.trashId] === false ? 'Re-include ' : 'Exclude ') + cf.name"
+                            :aria-pressed="selectedOptionalCFs[cf.trashId] === false ? 'true' : 'false'"
+                            x-tt="selectedOptionalCFs[cf.trashId] === false ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
+                            @click="spToggleRequiredCF(cf.trashId)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
                   </template>
                   <template x-if="!cf.required">
                     <label class="toggle toggle-sm" x-tt="'Include this Custom Format when the group is on.'" @click.stop>
@@ -626,7 +658,7 @@
                       <span class="slider"></span>
                     </label>
                   </template>
-                  <div class="sp-cf-name">
+                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false }">
                     <span x-text="cf.name"></span>
                     <span class="sp-cf-recommended" x-show="cf.default && !cf.required" x-tt="'TRaSH recommends keeping this on'">recommended</span>
                   </div>
@@ -806,6 +838,26 @@
                     <span class="sp-ov-cf-source" x-text="'· ' + e.fromGroup"></span>
                   </span>
                   <span class="sp-ov-diff-old" x-text="e.score != null ? ((e.score > 0 ? '+' : '') + e.score) : ''"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new sp-ov-diff-excluded-tag">excluded</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Excluded required CFs — Phase 2c. Required CFs the user
+               explicitly opted out of via the lock-icon click. -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedRequiredCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Excluded required CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="r in _d.excludedRequiredCFs" :key="'diff-exreq-'+r.name+r.fromGroup">
+                <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
+                  <button class="sp-basics-reset sp-ov-diff-reset" @click="spToggleRequiredCF(r.trashId)" x-tt="'Re-include this required CF'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="r.name"></span>
+                    <span class="sp-ov-cf-source" x-text="'· ' + r.fromGroup"></span>
+                  </span>
+                  <span class="sp-ov-diff-old" x-text="r.score != null ? ((r.score > 0 ? '+' : '') + r.score) : ''"></span>
                   <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
                   <span class="sp-ov-diff-new sp-ov-diff-excluded-tag">excluded</span>
                 </div>
