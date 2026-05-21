@@ -2583,6 +2583,19 @@ export default {
         const appType = this.profileDetail?.instance?.type;
         if (appType) this.loadExtraCFList();
       }
+      // Phase 2c — excludedCFs (required opt-outs + default-on opt-outs)
+      // counts as customization. Without this, a rule whose only edit is
+      // an excluded required CF reopens with Customize off and the
+      // "Customize this profile" CTA — even though the rule clearly IS
+      // customized (Sync Rules pill correctly shows N excluded). Mirror
+      // backend ComputeRuleCustomizations bucket 4 / frontend
+      // pdExcludedCFCount: count entries that resolve to default CFs.
+      if (Array.isArray(ruleData.excludedCFs) && ruleData.excludedCFs.length > 0) {
+        const defaults = this.computeTrashDefaults();
+        for (const tid of ruleData.excludedCFs) {
+          if (defaults.has(tid)) { anyOverride = true; break; }
+        }
+      }
       // Restore behavior — prefer rule's behavior (current intent) over sync
       // history (last applied).
       if (ruleData.behavior) {
