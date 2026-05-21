@@ -1098,14 +1098,15 @@ export default {
     // change scores, exclude required CFs, add extras — each of which
     // shifts how Sonarr/Radarr selects releases. A user who flips
     // Customize on without thinking can produce a profile that
-    // syncs nothing or that ignores the TRaSH curated baseline. The
-    // modal makes that risk explicit before they enter editor mode.
+    // syncs nothing or that ignores the curated baseline. The modal
+    // makes that risk explicit before they enter editor mode.
     spConfirmEnableCustomize() {
       this.confirmModal = {
         show: true,
         title: 'Customize this profile',
-        message: 'Customizing this profile lets you change scores, exclude required CFs, and add extras beyond the TRaSH defaults.\n\nThese edits can materially affect how the profile selects releases — make sure you understand what each setting does before changing it.\n\nProceed?',
-        confirmLabel: 'Customize',
+        message: 'Customizing this profile lets you change scores, exclude required CFs, and add extras beyond the profile defaults.\n\nThese edits can change how the profile picks releases — make sure you understand what each setting does before changing it.',
+        cancelLabel: 'Use defaults',
+        confirmLabel: 'I understand',
         onConfirm: () => { this.pdOverridesEnabled = true; },
         onCancel: () => {},
       };
