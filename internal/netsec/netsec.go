@@ -127,12 +127,12 @@ func mustParseCIDRs(cidrs ...string) []*net.IPNet {
 // value (e.g. SWAG / nginx `proxy_set_header X-Forwarded-For $remote_addr`).
 // The rightmost algorithm is a defense against misconfigured proxies, not
 // a substitute for proxy hygiene.
-func ParseClientIP(r *http.Request, trustedProxies []net.IP) net.IP {
+func ParseClientIP(r *http.Request, trustedProxies []*net.IPNet) net.IP {
 	remoteIP := remoteAddrIP(r.RemoteAddr)
 	if remoteIP == nil {
 		return nil
 	}
-	if len(trustedProxies) == 0 || !containsIP(trustedProxies, remoteIP) {
+	if len(trustedProxies) == 0 || !containsIPNet(trustedProxies, remoteIP) {
 		return remoteIP
 	}
 	xff := r.Header.Get("X-Forwarded-For")
@@ -147,7 +147,7 @@ func ParseClientIP(r *http.Request, trustedProxies []net.IP) net.IP {
 		if ip == nil {
 			continue
 		}
-		if containsIP(trustedProxies, ip) {
+		if containsIPNet(trustedProxies, ip) {
 			continue
 		}
 		return ip
@@ -164,6 +164,23 @@ func remoteAddrIP(addr string) net.IP {
 	return net.ParseIP(host)
 }
 
+// containsIPNet returns true when ip falls inside any of the supplied
+// networks. Used by ParseClientIP + auth.IsRequestFromTrustedProxy to
+// honour both literal-IP entries (promoted to /32 in v4 or /128 in v6
+// by ResolveTrustedProxies) and CIDR ranges (passed through as-is).
+func containsIPNet(list []*net.IPNet, ip net.IP) bool {
+	for _, n := range list {
+		if n != nil && n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsIP is the literal-IP-equality variant kept for the SafeHTTP
+// allowlist path, which deliberately uses a flat []net.IP set instead
+// of CIDR ranges (the allowlist matches the post-resolution IP of a
+// destination host, not a subnet).
 func containsIP(list []net.IP, ip net.IP) bool {
 	for _, p := range list {
 		if p.Equal(ip) {
@@ -171,6 +188,19 @@ func containsIP(list []net.IP, ip net.IP) bool {
 		}
 	}
 	return false
+}
+
+// ipToIPNet promotes a literal IP to a /32 (IPv4) or /128 (IPv6) network
+// so it can live alongside CIDR entries in a uniform []*net.IPNet slice.
+// Returns nil for invalid inputs — callers should filter.
+func ipToIPNet(ip net.IP) *net.IPNet {
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
 }
 
 // ParseTrustedNetworks parses a comma-separated list of IP addresses
@@ -226,13 +256,13 @@ func ParseTrustedNetworks(csv string) ([]*net.IPNet, error) {
 }
 
 // ParseTrustedProxies parses a comma-separated list of trusted-proxy
-// entries (IPs or hostnames) and resolves hostnames to IPs at parse
-// time. Returns the combined []net.IP — equivalent to dropping the
-// hostname list from ResolveTrustedProxies. Kept as a thin wrapper so
-// existing callers that don't need re-resolution stay simple. New code
-// that should track container-IP changes (e.g. proxy container restart
-// in docker-compose) should use ResolveTrustedProxies + a periodic
-// refresh.
+// entries (IPs, CIDR ranges, or hostnames) and resolves hostnames to
+// IPs at parse time. Returns the combined []*net.IPNet — equivalent to
+// dropping the hostname list from ResolveTrustedProxies. Kept as a
+// thin wrapper so existing callers that don't need re-resolution stay
+// simple. New code that should track container-IP changes (e.g. proxy
+// container restart in docker-compose) should use ResolveTrustedProxies
+// + a periodic refresh.
 //
 // Returns an error on syntactic problems — misconfiguration should be
 // loud, not silently produce an empty list (which would disable XFF
@@ -240,23 +270,23 @@ func ParseTrustedNetworks(csv string) ([]*net.IPNet, error) {
 // for syntactically-valid hostnames are NOT errors here: container-
 // start-order issues (the proxy isn't up yet) are recoverable on the
 // next refresh.
-func ParseTrustedProxies(csv string) ([]net.IP, error) {
-	ips, _, err := ResolveTrustedProxies(csv)
-	return ips, err
+func ParseTrustedProxies(csv string) ([]*net.IPNet, error) {
+	nets, _, err := ResolveTrustedProxies(csv)
+	return nets, err
 }
 
 // ParseTrustedProxyEntries splits a CSV of trusted-proxy entries into
-// literal IPs and hostname strings WITHOUT resolving anything. Used as
-// the parse-only step shared between initial-resolution at startup
-// and periodic refresh — both need to know which entries are static
-// literals vs which need DNS lookup.
+// literal IPs, CIDR ranges, and hostname strings WITHOUT resolving any
+// hostnames. Used as the parse-only step shared between initial-
+// resolution at startup and periodic refresh — both need to know which
+// entries are static (literals/CIDRs) vs which need DNS lookup.
 //
 // Returns an error only for SYNTAX problems (an entry that is neither
-// a valid IP nor a valid hostname). Empty CSV returns (nil, nil, nil).
-func ParseTrustedProxyEntries(csv string) (literalIPs []net.IP, hostnames []string, err error) {
+// a valid IP, CIDR, nor hostname). Empty CSV returns (nil, nil, nil, nil).
+func ParseTrustedProxyEntries(csv string) (literalIPs []net.IP, cidrs []*net.IPNet, hostnames []string, err error) {
 	csv = strings.TrimSpace(csv)
 	if csv == "" {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	for _, piece := range strings.Split(csv, ",") {
 		piece = strings.TrimSpace(piece)
@@ -267,21 +297,26 @@ func ParseTrustedProxyEntries(csv string) (literalIPs []net.IP, hostnames []stri
 			literalIPs = append(literalIPs, ip)
 			continue
 		}
-		// Not a literal IP — treat as hostname. Validate syntax so we
-		// reject pure garbage (whitespace, control chars) at parse time
-		// rather than waiting for the lookup to fail at refresh time.
+		if _, ipnet, cerr := net.ParseCIDR(piece); cerr == nil {
+			cidrs = append(cidrs, ipnet)
+			continue
+		}
+		// Not a literal IP or CIDR — treat as hostname. Validate syntax
+		// so we reject pure garbage (whitespace, control chars) at parse
+		// time rather than waiting for the lookup to fail at refresh.
 		if !isValidHostname(piece) {
-			return nil, nil, fmt.Errorf("invalid entry in trusted_proxies: %q (expected IP or hostname)", piece)
+			return nil, nil, nil, fmt.Errorf("invalid entry in trusted_proxies: %q (expected IP, CIDR, or hostname)", piece)
 		}
 		hostnames = append(hostnames, piece)
 	}
-	return literalIPs, hostnames, nil
+	return literalIPs, cidrs, hostnames, nil
 }
 
-// ResolveTrustedProxies parses a CSV of IP addresses and/or hostnames,
-// resolves each hostname to one or more IPs via the system resolver,
-// and returns:
-//   - ips: combined []net.IP (literal IPs ∪ resolved hostnames)
+// ResolveTrustedProxies parses a CSV of IP addresses, CIDR ranges,
+// and/or hostnames, resolves each hostname to one or more IPs via the
+// system resolver, and returns:
+//   - nets: combined []*net.IPNet (literal IPs promoted to /32, CIDRs
+//     pass through, resolved hostnames promoted to /32 per record)
 //   - hostnames: original hostname strings — caller should retain
 //     these to drive periodic re-resolution (issue #40 use-case:
 //     docker-compose container IPs can change across restarts)
@@ -290,12 +325,18 @@ func ParseTrustedProxyEntries(csv string) (literalIPs []net.IP, hostnames []stri
 //     caller's refresh cycle gets another chance.
 //
 // Empty CSV returns (nil, nil, nil) for parity with the old behaviour.
-func ResolveTrustedProxies(csv string) ([]net.IP, []string, error) {
-	literalIPs, hostnames, err := ParseTrustedProxyEntries(csv)
+func ResolveTrustedProxies(csv string) ([]*net.IPNet, []string, error) {
+	literalIPs, cidrs, hostnames, err := ParseTrustedProxyEntries(csv)
 	if err != nil {
 		return nil, nil, err
 	}
-	out := append([]net.IP(nil), literalIPs...)
+	var out []*net.IPNet
+	for _, ip := range literalIPs {
+		if n := ipToIPNet(ip); n != nil {
+			out = append(out, n)
+		}
+	}
+	out = append(out, cidrs...)
 	if len(hostnames) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -310,7 +351,11 @@ func ResolveTrustedProxies(csv string) ([]net.IP, []string, error) {
 			// of DNS state. (Issue #40 follow-up: hostname registered as
 			// service in compose but Go resolver returned empty.)
 			if hostsIPs := lookupHostsFile(host); len(hostsIPs) > 0 {
-				out = append(out, hostsIPs...)
+				for _, ip := range hostsIPs {
+					if n := ipToIPNet(ip); n != nil {
+						out = append(out, n)
+					}
+				}
 				continue
 			}
 			// DNS fallback for hostnames not in /etc/hosts.
@@ -322,7 +367,9 @@ func ResolveTrustedProxies(csv string) ([]net.IP, []string, error) {
 			}
 			for _, a := range addrs {
 				if ip := net.ParseIP(a); ip != nil {
-					out = append(out, ip)
+					if n := ipToIPNet(ip); n != nil {
+						out = append(out, n)
+					}
 				}
 			}
 		}

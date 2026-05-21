@@ -384,8 +384,8 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			newAuthCfg.SessionTTL = time.Duration(cfg.SessionTTLDays) * 24 * time.Hour
 		}
 		if !s.AuthStore.TrustedProxiesLocked() {
-			if ips, hostnames, perr := netsec.ResolveTrustedProxies(cfg.TrustedProxies); perr == nil {
-				newAuthCfg.TrustedProxies = ips
+			if nets, hostnames, perr := netsec.ResolveTrustedProxies(cfg.TrustedProxies); perr == nil {
+				newAuthCfg.TrustedProxies = nets
 				newAuthCfg.TrustedProxyHostnames = hostnames
 				// Persist the raw CSV so the periodic refresh can rebuild
 				// literals precisely instead of deriving them by subtracting

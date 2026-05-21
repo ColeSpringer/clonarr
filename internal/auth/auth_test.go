@@ -13,6 +13,20 @@ import (
 	"time"
 )
 
+// hostNet wraps a literal IP string in a /32 (v4) / /128 (v6) net.IPNet
+// so test fixtures can declare TrustedProxies slices the same shape the
+// production code uses. Mirrors the production ipToIPNet helper.
+func hostNet(ipStr string) *net.IPNet {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 	dir := t.TempDir()
@@ -598,7 +612,7 @@ func TestValidateConfig_RejectsExtremeTTL(t *testing.T) {
 
 func TestIsRequestFromTrustedProxy(t *testing.T) {
 	cfg := testConfig(t)
-	cfg.TrustedProxies = []net.IP{net.ParseIP("172.17.0.1")}
+	cfg.TrustedProxies = []*net.IPNet{hostNet("172.17.0.1")}
 	s := NewStore(cfg)
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -624,7 +638,7 @@ func TestTrustedProxy_SpoofedLeftmost(t *testing.T) {
 	// trusted proxy APPENDS their real IP (8.8.8.8). A leftmost-parser would
 	// read 127.0.0.1 → auth bypass. Rightmost reads 8.8.8.8 → blocked.
 	cfg := testConfig(t)
-	cfg.TrustedProxies = []net.IP{net.ParseIP("172.17.0.1")}
+	cfg.TrustedProxies = []*net.IPNet{hostNet("172.17.0.1")}
 	s := NewStore(cfg)
 	_ = s.Setup("admin", "Password12")
 	h := s.Middleware(okHandler())
@@ -642,7 +656,7 @@ func TestTrustedProxy_SpoofedLeftmost(t *testing.T) {
 func TestTrustedProxy_LegitimateLocal(t *testing.T) {
 	// Legitimate: LAN user → trusted proxy → app. XFF is just "192.168.0.20".
 	cfg := testConfig(t)
-	cfg.TrustedProxies = []net.IP{net.ParseIP("172.17.0.1")}
+	cfg.TrustedProxies = []*net.IPNet{hostNet("172.17.0.1")}
 	s := NewStore(cfg)
 	_ = s.Setup("admin", "Password12")
 	h := s.Middleware(okHandler())
