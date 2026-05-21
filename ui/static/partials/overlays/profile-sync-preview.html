@@ -126,12 +126,39 @@
 
     <!-- ===== Action bar (sticky) ===== -->
     <div class="sp-action-bar">
+      <!-- Title block — two layouts based on edit-vs-create context:
+           Edit (rule exists, _arrProfileName populated): the Arr-side
+             profile name is what the user manages day-to-day, so it
+             gets the big-font slot. TRaSH source goes in parentheses
+             after with a tooltip explaining it's the guide template
+             this profile was originally synced from.
+           Create / browse (no Arr profile bound yet): TRaSH guide
+             name is what the user is choosing FROM, so it stays big. -->
       <div class="sp-action-title">
-        <span class="sp-action-name" x-text="profileDetail?.profile?.name"></span>
+        <template x-if="profileDetail?._arrProfileName">
+          <span class="sp-action-name"
+                x-tt="'Profile name in ' + (profileDetail?.instance?.name || 'Arr') + ' — what this rule manages.'"
+                x-text="profileDetail._arrProfileName"></span>
+        </template>
+        <template x-if="!profileDetail?._arrProfileName">
+          <span class="sp-action-name" x-text="profileDetail?.profile?.name"></span>
+        </template>
+        <template x-if="profileDetail?._arrProfileName">
+          <span class="sp-action-source"
+                x-tt="'TRaSH-Guides template this profile is synced from.'">
+            (based on <span x-text="profileDetail?.profile?.name"></span>)
+          </span>
+        </template>
         <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx"></span>
         <span class="sp-action-meta">
           <template x-if="profileDetail?.instance?.name && !profileDetail?._browseMode">
-            <span><span x-text="profileDetail.instance.name"></span><template x-if="profileDetail._arrProfileName"><span> &rarr; <span x-text="profileDetail._arrProfileName"></span></span></template> &middot; </span>
+            <span>
+              <span x-text="profileDetail.instance.name"></span>
+              <template x-if="profileDetail._editLockedArrProfileId">
+                <span> &middot; ID #<span x-text="profileDetail._editLockedArrProfileId"></span></span>
+              </template>
+              &middot;
+            </span>
           </template>
           <span x-text="(profileDetail?.detail?.totalCoreCFs || 0) + ' Required CFs'"></span>
           <template x-if="countAllCategoryCFs() > 0">

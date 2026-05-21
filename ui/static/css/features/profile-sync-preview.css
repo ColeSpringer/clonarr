@@ -43,6 +43,16 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  cursor: help;
+}
+/* "based on <trash name>" appears next to the Arr profile name in
+   Edit mode. Muted + smaller so the Arr name stays dominant; the
+   "based on" wording keeps the relationship explicit without
+   requiring a tooltip read. */
+.sp-action-source {
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: help;
 }
 .sp-action-meta {
   font-size: 12px;
