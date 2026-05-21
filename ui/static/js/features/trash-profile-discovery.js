@@ -1008,27 +1008,33 @@ export default {
     spAdditionalGroupCFs(g) {
       const cfs = g?.cfs || [];
       if (cfs.length === 0) return cfs;
-      const active = {};
-      const sel = this.selectedOptionalCFs || {};
+      // Filter structurally — any CF that EXISTS in a profile-default
+      // group (regardless of whether it's currently active) is hidden
+      // from the Additional picker. Two reasons:
+      //   1. Activating an opt-in CF inside the Additional group when
+      //      it ALSO lives as an opt-in inside a profile-default group
+      //      is just confusing — the CF has a natural home in the
+      //      profile-default group (e.g. Scene / Retag in Unwanted),
+      //      activating from there is the obvious path. Showing it in
+      //      both places (Profile default's Unwanted + Additional's
+      //      Unwanted SQP / German / French) produces visual duplicates.
+      //   2. The previous active-only filter caused activated
+      //      Additional CFs to vanish from the picker the moment the
+      //      user toggled them on — sel[id] = true → "active" → filter
+      //      excluded them. The user couldn't deactivate without
+      //      navigating elsewhere. Structural filtering separates
+      //      "where it lives" from "is it currently on".
+      const inProfile = {};
       const groups = (this.profileDetail?.detail?.trashGroups) || [];
       for (const group of groups) {
-        const grpKey = '__grp_' + group.name;
-        const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : group.defaultEnabled;
-        if (!grpOn) continue;
         for (const cf of (group.cfs || [])) {
-          if (cf.required) {
-            active[cf.trashId] = true;
-          } else {
-            const cfOn = sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
-            if (cfOn) active[cf.trashId] = true;
-          }
+          if (cf?.trashId) inProfile[cf.trashId] = true;
         }
       }
-      // Profile-level required CFs
       for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) {
-        if (fi?.trashId) active[fi.trashId] = true;
+        if (fi?.trashId) inProfile[fi.trashId] = true;
       }
-      return cfs.filter(cf => !active[cf.trashId]);
+      return cfs.filter(cf => !inProfile[cf.trashId]);
     },
 
     // Sort CFActions / ScoreActions by the profile's natural order so
