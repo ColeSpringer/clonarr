@@ -333,24 +333,26 @@
         </template>
       </div>
       <!-- Customize button has two distinct states with distinct actions:
-           OFF (Customize): enable inline editors, additional CF tab, score
-             overrides. State preserved across saves — once enabled,
-             customizations persist for the sync rule.
-           ON (Reset to profile defaults): destructive. Triggers Classic's
-             pdConfirmDisable() flow which shows a modal listing what will
-             be cleared, then on confirm wipes all overrides + extras +
-             score-overrides + re-seeds CF-group state from TRaSH defaults.
-           Mirrors Classic editor's two-button pattern (profile-detail.html
-             line 171 + 204) but kept as one button position since space
-             is tight in the basics strip. Red border on the destructive
-             state to make the action's intent unmistakable. -->
+           OFF (Customize this profile): enable inline editors, additional
+             CF tab, score overrides. Gated behind a confirmation modal
+             that warns the user about the impact of profile changes —
+             customizing scores / excluding CFs / adding extras can
+             materially affect how the profile behaves.
+           ON (Reset to profile defaults): destructive. Triggers
+             pdConfirmDisable() which shows a modal listing what will be
+             cleared, then on confirm wipes all overrides + extras +
+             score-overrides + re-seeds CF-group state from TRaSH
+             defaults.
+           Both states use red so the button reads as "this action
+             changes profile behavior — pay attention". Matches Classic
+             editor naming ("Customize this profile" / "Reset to profile
+             defaults") so the two editors feel like the same product. -->
       <div class="sp-basics-actions">
         <button class="btn btn-sm"
-                :class="{ 'btn-primary': !pdOverridesEnabled }"
-                :style="pdOverridesEnabled ? 'border-color:var(--accent-red);color:var(--accent-red)' : ''"
-                @click="pdOverridesEnabled ? pdConfirmDisable() : pdOverridesEnabled = true"
-                x-tt="pdOverridesEnabled ? 'Clear all overrides and revert this profile to TRaSH defaults' : 'Edit Language, scores, quality, and add extra CF groups'"
-                x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize'"></button>
+                style="border-color:var(--accent-red);color:var(--accent-red)"
+                @click="pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
+                x-tt="pdOverridesEnabled ? 'Clear all overrides and revert this profile to TRaSH defaults' : 'Override profile defaults for language, scores, quality, and custom formats'"
+                x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize this profile'"></button>
       </div>
     </div>
 
@@ -440,13 +442,25 @@
                     <span class="sp-cf-icon" x-tt="'Required by the profile — always synced.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                   </template>
                   <template x-if="pdOverridesEnabled">
+                    <!-- Customize ON: render the unlock glyph (Lucide
+                         "unlock") so the affordance reads as "this
+                         required CF is now editable — click to opt
+                         out". The lock pose returns when the CF is
+                         excluded (sp-cf-icon-excluded class also tints
+                         it red) — closed-lock there reinforces "this
+                         is locked out". -->
                     <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
                             :class="{ 'sp-cf-icon-excluded': _excluded }"
                             :aria-label="(_excluded ? 'Re-include ' : 'Exclude ') + fi.name"
                             :aria-pressed="_excluded ? 'true' : 'false'"
                             x-tt="_excluded ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
                             @click="spToggleRequiredCF(fi.trashId)">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      <template x-if="!_excluded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                      </template>
+                      <template x-if="_excluded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      </template>
                     </button>
                   </template>
                   <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': _excluded }" x-text="fi.name"></div>
@@ -641,13 +655,21 @@
                     <span class="sp-cf-icon" x-tt="'Required by the group — included when the group is on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                   </template>
                   <template x-if="cf.required && pdOverridesEnabled">
+                    <!-- Customize ON: unlock glyph signals "editable"; the
+                         closed-lock returns + tints red when the CF is
+                         excluded (sp-cf-icon-excluded class). -->
                     <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
                             :class="{ 'sp-cf-icon-excluded': selectedOptionalCFs[cf.trashId] === false }"
                             :aria-label="(selectedOptionalCFs[cf.trashId] === false ? 'Re-include ' : 'Exclude ') + cf.name"
                             :aria-pressed="selectedOptionalCFs[cf.trashId] === false ? 'true' : 'false'"
                             x-tt="selectedOptionalCFs[cf.trashId] === false ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
                             @click="spToggleRequiredCF(cf.trashId)">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      <template x-if="selectedOptionalCFs[cf.trashId] !== false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                      </template>
+                      <template x-if="selectedOptionalCFs[cf.trashId] === false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      </template>
                     </button>
                   </template>
                   <template x-if="!cf.required">

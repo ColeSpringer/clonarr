@@ -1094,6 +1094,23 @@ export default {
       this.selectedOptionalCFs = updated;
     },
 
+    // Customize-mode entry confirmation. Profile customization can
+    // change scores, exclude required CFs, add extras — each of which
+    // shifts how Sonarr/Radarr selects releases. A user who flips
+    // Customize on without thinking can produce a profile that
+    // syncs nothing or that ignores the TRaSH curated baseline. The
+    // modal makes that risk explicit before they enter editor mode.
+    spConfirmEnableCustomize() {
+      this.confirmModal = {
+        show: true,
+        title: 'Customize this profile',
+        message: 'Customizing this profile lets you change scores, exclude required CFs, and add extras beyond the TRaSH defaults.\n\nThese edits can materially affect how the profile selects releases — make sure you understand what each setting does before changing it.\n\nProceed?',
+        confirmLabel: 'Customize',
+        onConfirm: () => { this.pdOverridesEnabled = true; },
+        onCancel: () => {},
+      };
+    },
+
     // Persist (or clear) a CF score override from an inline editor. If
     // the new value is empty / NaN / equals the CF's TRaSH default, the
     // override entry is deleted so the rule payload stays clean
