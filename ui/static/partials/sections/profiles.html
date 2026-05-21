@@ -142,7 +142,7 @@
                       <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && v3RuleCustomizations(r).total > 0; })()">
                         <span class="v3-cust-pill"
                               x-data="{ get _summary() { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return v3RuleCustomizations(r); } }"
-                              x-tt="(() => { const p = []; if (_summary.quality)      p.push('Quality: '       + _summary.quality);      if (_summary.extraCFs)     p.push('Extra CFs: '     + _summary.extraCFs);     if (_summary.customScores) p.push('Custom scores: ' + _summary.customScores); if (_summary.general)      p.push('General: '       + _summary.general);      return p.join('\n'); })()"
+                              x-tt="(() => { const p = []; if (_summary.quality)      p.push('Quality: '       + _summary.quality);      if (_summary.extraCFs)     p.push('Extra CFs: '     + _summary.extraCFs);     if (_summary.customScores) p.push('Custom scores: ' + _summary.customScores); if (_summary.general)      p.push('General: '       + _summary.general);      if (_summary.excludedCFs)  p.push('Excluded CFs: '  + _summary.excludedCFs);  return p.join('\n'); })()"
                               x-text="_summary.total + ' change' + (_summary.total !== 1 ? 's' : '')"></span>
                       </template>
                       <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return !r || v3RuleCustomizations(r).total === 0; })()">

@@ -2760,7 +2760,7 @@ export default {
     // what the detail view's "Override mode · N changes" header shows
     // for the same rule.
     v3RuleCustomizations(rule) {
-      const empty = { total: 0, quality: 0, extraCFs: 0, customScores: 0, general: 0 };
+      const empty = { total: 0, quality: 0, extraCFs: 0, customScores: 0, general: 0, excludedCFs: 0 };
       if (!rule || !this.ruleCustomizationsLoaded) return empty;
       return this.ruleCustomizations[rule.id] || empty;
     },
@@ -3009,12 +3009,17 @@ export default {
       const cfScores = overridden;
       const extraCFs = added;
       const optional = this.pdOptionalCount();
+      // Phase 2c — excluded CFs (lock-icon opt-outs + default-on
+      // optional opt-outs) count toward total. Without this the
+      // header reads "0 changes" for a rule that materially excludes
+      // CFs from sync (the user's "no changes" confusion).
+      const excludedCFs = this.pdExcludedCFCount();
       // total = overrides only (profile-level settings the user changed).
       // optional = separate count of TRaSH optional CFs / groups
       //   activated outside the profile's defaults.
       return {
-        general, quality, cfScores, extraCFs, customizations, added, overridden, optional,
-        total: general + quality + customizations,
+        general, quality, cfScores, extraCFs, customizations, added, overridden, optional, excludedCFs,
+        total: general + quality + customizations + excludedCFs,
       };
     },
 
@@ -3146,6 +3151,24 @@ export default {
       }
       items.sort((a, b) => (a.groupName || '').localeCompare(b.groupName || '') || (a.name || '').localeCompare(b.name || ''));
       return items;
+    },
+
+    // Phase 2c — count of excluded CFs that affect the synced output
+    // (i.e. the CF would normally sync as part of the profile's
+    // defaults). Mirrors backend ComputeRuleCustomizations.ExcludedCFs
+    // so frontend + Sync Rules pill agree. Kept as a separate count
+    // (rather than folded into pdAllCustomizations) so the existing
+    // CF Customizations card render — which only knows how to show
+    // added / score-overridden CFs — stays unchanged. Sync Preview's
+    // Diffs view surfaces the detail via spOverviewDiffs bucket 5.
+    pdExcludedCFCount() {
+      const sel = this.selectedOptionalCFs || {};
+      const defaults = this.computeTrashDefaults();
+      let n = 0;
+      for (const tid of defaults) {
+        if (sel[tid] === false) n++;
+      }
+      return n;
     },
 
     // Hybrid layout for the CF Customizations card: split pdAllCustomizations()

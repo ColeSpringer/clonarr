@@ -197,6 +197,11 @@
                         x-tt="'CFs in the profile whose score you changed from the profile default'"
                         x-text="'Custom scores: ' + pdOverrideSummary().overridden"></span>
                 </template>
+                <template x-if="pdOverrideSummary().excludedCFs > 0">
+                  <span style="font-size:11px;color:var(--accent-orange)"
+                        x-tt="'Required and default-on CFs you opted out of via the lock icon'"
+                        x-text="'Excluded CFs: ' + pdOverrideSummary().excludedCFs"></span>
+                </template>
               </div>
               <button class="btn"
                       style="font-size:11px;padding:2px 10px;border-color:var(--accent-red);color:var(--accent-red)"
