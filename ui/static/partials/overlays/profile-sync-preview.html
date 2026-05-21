@@ -1,25 +1,22 @@
 {{define "overlays/profile-sync-preview"}}
-  <!-- ==================== SYNC PREVIEW (NEW EDITOR) ====================
-       Parallel rewrite of profile-detail.html. Shares profileDetail state
-       and all save/sync/dryrun functions with the classic editor, so
-       toggling usePreviewEditor mid-flow preserves work. Once signed off
-       this replaces overlays/profile-detail.html outright.
+  <!-- ==================== SYNC PREVIEW (PRIMARY EDITOR) ====================
+       The single profile editor. Replaced the parallel Classic editor
+       at overlays/profile-detail.html on 2026-05-21 (Classic markup
+       kept on disk for emergency rollback, no longer included).
 
        Layout (top-to-bottom):
-         1. Sticky action bar — profile name + meta + Save/Save&Sync + back to Classic
-         2. Basics strip — Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities + Customize toggle
-         3. Tabs — Profile default (always) + Additional CF (visible only when Customize on)
-         4. Sub-nav + main content — Required CFs + each default-on group in left rail,
+         1. Sticky action bar — profile name + meta + Cancel/Save/Save&Sync/Create new
+         2. Basics strip — Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities
+         3. Customizations summary — current state + Customize/Reset CTA
+         4. Tabs — Profile default (always) + Additional CF (Customize-gated) + Profile overview
+         5. Sub-nav + main content — Required CFs + each default-on group in left rail,
             selected sub-nav item's CFs render compactly in the main area. -->
-  <div class="page sp-page" x-show="profileDetail && usePreviewEditor && !['settings','about'].includes(currentSection)" x-cloak>
+  <div class="page sp-page" x-show="profileDetail && !['settings','about'].includes(currentSection)" x-cloak>
 
     <!-- ===== Sync result + Dry-run banners =====
-         Mirror Classic editor (profile-detail.html line 12-96). Both
-         banners share state with Classic — syncResult after applySync(),
-         syncPlan after fetchSyncPreview / dry-run. Without them, clicking
-         Save & Sync inside Sync Preview triggers the modal but the
-         resulting summary lands in Classic's banner area which is
-         hidden by !usePreviewEditor → user gets no feedback. -->
+         syncResult populates after applySync(), syncPlan after
+         fetchSyncPreview / dry-run. The Save & Sync modal pushes
+         results back here so the user sees confirmation inline. -->
     <template x-if="syncResult">
       <div class="result-banner" :class="syncResult.errors?.length ? 'error' : 'success'">
         <div class="result-title" x-text="syncResult.errors?.length ? 'Sync completed with errors' : 'Sync completed successfully'"></div>
@@ -129,7 +126,6 @@
 
     <!-- ===== Action bar (sticky) ===== -->
     <div class="sp-action-bar">
-      <a class="sp-classic-link" @click="usePreviewEditor = false" x-tt="'Switch to the current Classic editor — same data, scrollable form layout.'">&larr; Classic editor</a>
       <div class="sp-action-title">
         <span class="sp-action-name" x-text="profileDetail?.profile?.name"></span>
         <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx"></span>
@@ -152,7 +148,7 @@
            clears, so closing Sync Preview can't leak selectedOptionalCFs
            / groupExpanded / pdOverrides into the next overlay open. -->
       <div class="sp-action-buttons">
-        <button class="btn btn-sm" @click="profileDetail = null; usePreviewEditor = false; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">Cancel</button>
+        <button class="btn btn-sm" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">Cancel</button>
         <template x-if="profileDetail?.detail?.imported">
           <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
