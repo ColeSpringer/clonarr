@@ -360,28 +360,51 @@
                   })()"></button>
         </template>
       </div>
-      <!-- Customize button has two distinct states with distinct actions:
-           OFF (Customize this profile): enable inline editors, additional
-             CF tab, score overrides. Gated behind a confirmation modal
-             that warns the user about the impact of profile changes —
-             customizing scores / excluding CFs / adding extras can
-             materially affect how the profile behaves.
-           ON (Reset to profile defaults): destructive. Triggers
-             pdConfirmDisable() which shows a modal listing what will be
-             cleared, then on confirm wipes all overrides + extras +
-             score-overrides + re-seeds CF-group state from TRaSH
-             defaults.
-           Both states use red so the button reads as "this action
-             changes profile behavior — pay attention". Matches Classic
-             editor naming ("Customize this profile" / "Reset to profile
-             defaults") so the two editors feel like the same product. -->
-      <div class="sp-basics-actions">
-        <button class="btn btn-sm"
-                style="border-color:var(--accent-red);color:var(--accent-red)"
-                @click="pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
-                x-tt="pdOverridesEnabled ? 'Clear all overrides and revert this profile to TRaSH defaults' : 'Override profile defaults for language, scores, quality, and custom formats'"
-                x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize this profile'"></button>
-      </div>
+    </div>
+
+    <!-- ===== Customizations summary strip =====
+         Mirrors Classic editor's "Override mode · N changes" header
+         (profile-detail.html:181-200). Two states share the same row
+         so the layout stays stable when the user toggles Customize:
+           OFF: "All values follow profile defaults" + Customize CTA
+           ON:  "N customizations" + per-bucket badges + Reset CTA
+         The summary text itself is clickable when ON — jumps to
+         Profile overview → Diffs so the user can see exactly what
+         deviates from the profile defaults. Wording is "Customizations"
+         everywhere; we don't say "Override mode" elsewhere in the UI
+         and the inconsistency was confusing. -->
+    <div class="sp-summary"
+         x-data="{ get _s() { return pdOverrideSummary(); } }">
+      <template x-if="!pdOverridesEnabled">
+        <span class="sp-summary-status sp-summary-clean">&#10003; All values follow profile defaults</span>
+      </template>
+      <template x-if="pdOverridesEnabled">
+        <button class="sp-summary-status sp-summary-active"
+                @click="spActiveTab = 'overview'; spOverviewSection = 'diffs';"
+                x-tt="'Open Profile overview &rarr; Diffs to see exactly what deviates from the profile defaults.'">
+          <span class="sp-summary-lead" x-text="_s.total + ' customization' + (_s.total === 1 ? '' : 's')"></span>
+          <template x-if="_s.general > 0">
+            <span class="sp-summary-badge" x-text="'General: ' + _s.general"></span>
+          </template>
+          <template x-if="_s.quality > 0">
+            <span class="sp-summary-badge" x-text="'Quality: ' + _s.quality"></span>
+          </template>
+          <template x-if="_s.added > 0">
+            <span class="sp-summary-badge" x-text="'Extra CFs: ' + _s.added"></span>
+          </template>
+          <template x-if="_s.overridden > 0">
+            <span class="sp-summary-badge" x-text="'Custom scores: ' + _s.overridden"></span>
+          </template>
+          <template x-if="_s.excludedCFs > 0">
+            <span class="sp-summary-badge" x-text="'Excluded CFs: ' + _s.excludedCFs"></span>
+          </template>
+        </button>
+      </template>
+      <button class="btn btn-sm sp-summary-action"
+              style="border-color:var(--accent-red);color:var(--accent-red)"
+              @click="pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
+              x-tt="pdOverridesEnabled ? 'Clear all customizations and revert this profile to TRaSH defaults' : 'Override profile defaults for language, scores, quality, and custom formats'"
+              x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize this profile'"></button>
     </div>
 
     <!-- ===== Tabs =====
@@ -527,9 +550,16 @@
                optional CF when group off OR cf explicitly off.
              Category prefix stripped from h2 — sub-nav section header
              already conveys it. -->
+        <!-- Lazy-mount the active group only. Previously this was
+             x-show, which mounted every group's entire CF list (~30
+             groups × ~10 CFs = 300 Alpine x-data rows + nested
+             getters) into the DOM at once, blocking initial render
+             for ~3s. With x-if Alpine only mounts the matching group;
+             switching groups re-mounts on demand (small per-switch
+             cost, big initial-load win). -->
         <template x-for="g in (profileDetail?.detail?.trashGroups || [])" :key="g.name">
-          <div x-show="spActiveGroup === g.name"
-               x-data="{
+        <template x-if="spActiveGroup === g.name">
+          <div x-data="{
                  get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; },
@@ -755,6 +785,7 @@
               </template>
             </div>
           </div>
+        </template>
         </template>
       </main>
     </div>
@@ -1276,9 +1307,12 @@
         </template>
       </nav>
       <main class="sp-content">
+        <!-- Lazy-mount: same x-if pattern as the Profile default
+             group panes above. Without this Alpine mounts every
+             Additional CF group's content into DOM up front. -->
         <template x-for="g in spAdditionalCFGroups()" :key="g.name">
-          <div x-show="spActiveGroup === g.name && spAdditionalGroupCFs(g).length > 0"
-               x-data="{
+        <template x-if="spActiveGroup === g.name && spAdditionalGroupCFs(g).length > 0">
+          <div x-data="{
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }
                }">
@@ -1332,6 +1366,7 @@
               </template>
             </div>
           </div>
+        </template>
         </template>
       </main>
     </div>

@@ -100,6 +100,7 @@
   border-radius: 3px;
   color: var(--text-primary);
   font-family: inherit;
+  text-align: left;
 }
 .sp-basics-input-num { width: 70px; }
 .sp-basics-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
@@ -156,7 +157,7 @@
   color: var(--text-primary);
   font-family: var(--font-mono, monospace);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: left;
 }
 .sp-cf-score-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
 .sp-cf-score-reset { font-size: 13px; }
@@ -165,10 +166,67 @@
   height: 18px;
   background: var(--border-muted);
 }
-.sp-basics-actions {
-  margin-left: auto;
+/* ===== Customizations summary strip =====
+   Sits between the basics card and the tabs. Two-column layout: status
+   text (clickable when customizations exist — jumps to Diffs) + action
+   button (Customize this profile / Reset to profile defaults). Card
+   styling mirrors .sp-basics so the two read as a stacked pair. */
+.sp-summary {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  margin-top: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  font-size: 13px;
+}
+.sp-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Span variant (Customize OFF) — informational, non-clickable. */
+.sp-summary-clean {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+/* Button variant (Customize ON) — clickable, jumps to Diffs. */
+button.sp-summary-active {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex-wrap: wrap;
+}
+button.sp-summary-active:hover .sp-summary-lead {
+  text-decoration: underline;
+}
+button.sp-summary-active:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.sp-summary-lead {
+  color: var(--accent-orange);
+  font-weight: 600;
+}
+.sp-summary-badge {
+  font-size: 11px;
+  color: var(--accent-orange);
+  padding: 1px 6px;
+  border: 1px solid var(--accent-orange);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.sp-summary-action {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* ===== Tabs ===== */
