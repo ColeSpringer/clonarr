@@ -503,8 +503,18 @@ export default {
       if (!this.profileDetail) return [];
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
+      // Resolve TRaSH default score per CF — formatItems and trashGroups
+      // carry a pre-resolved cf.score, but extraCFGroups (Additional CFs)
+      // come from /api/trash/{type}/all-cfs which only sends the raw
+      // trashScores map (keyed by profile context). resolveCFDefaultScore
+      // walks formatItems → trashGroups → extraCFAllCFs[trashScores] in
+      // that order, picking the right score for the active scoreCtx.
       const scoreInfo = (cf) => {
-        const orig = cf.score;
+        let orig = cf.score;
+        if (orig === undefined || orig === null) {
+          const resolved = this.resolveCFDefaultScore?.(cf.trashId);
+          orig = (typeof resolved === 'number') ? resolved : null;
+        }
         const o = overrides[cf.trashId];
         if (o !== undefined && o !== orig) {
           return { effective: o, original: orig, isOverridden: true };
@@ -565,7 +575,73 @@ export default {
         pushSection(shortName, g.category, enabled, 'additional');
       }
 
+      // Apply user-selected sort within each section. Default keeps the
+      // natural source order (formatItems then group order then category).
+      const sort = this.spOverviewSort || 'default';
+      if (sort !== 'default') {
+        const cmp = {
+          'name-asc':   (a, b) => (a.name || '').localeCompare(b.name || ''),
+          'name-desc':  (a, b) => (b.name || '').localeCompare(a.name || ''),
+          'score-desc': (a, b) => (b._score?.effective ?? 0) - (a._score?.effective ?? 0),
+          'score-asc':  (a, b) => (a._score?.effective ?? 0) - (b._score?.effective ?? 0),
+        }[sort];
+        if (cmp) {
+          for (const s of sections) s.cfs = [...s.cfs].sort(cmp);
+        }
+      }
+
       return sections;
+    },
+
+    // Flat CF list for Overview when "Show CF Groups" is off. Flattens
+    // every section returned by spOverviewEnabledCFs() into a single
+    // list, with each CF carrying its source group name as `fromGroup`
+    // (used by the row template's secondary line). `kindFilter` lets
+    // the Optional CF / Additional CF cards restrict the flat list to
+    // their own subset.
+    //
+    // Sorting honours spOverviewSort the same way the grouped path
+    // does, but applies across the FULL list rather than per-section.
+    spOverviewFlatCFs(kindFilter) {
+      const sections = this.spOverviewEnabledCFs();
+      const out = [];
+      for (const s of sections) {
+        if (kindFilter === 'optional-in-profile') {
+          if (s.kind !== 'in-profile') continue;
+        } else if (kindFilter === 'additional') {
+          if (s.kind !== 'additional') continue;
+        }
+        for (const cf of s.cfs) {
+          if (kindFilter === 'optional-in-profile' && cf._isRequired) continue;
+          out.push({ ...cf, fromGroup: s.source, sourceCategory: s.sourceCategory });
+        }
+      }
+      const sort = this.spOverviewSort || 'default';
+      const cmp = {
+        'name-asc':   (a, b) => (a.name || '').localeCompare(b.name || ''),
+        'name-desc':  (a, b) => (b.name || '').localeCompare(a.name || ''),
+        'score-desc': (a, b) => (b._score?.effective ?? 0) - (a._score?.effective ?? 0),
+        'score-asc':  (a, b) => (a._score?.effective ?? 0) - (b._score?.effective ?? 0),
+      }[sort];
+      if (cmp) out.sort(cmp);
+      return out;
+    },
+
+    // Column-header click handler — cycles sort direction for the
+    // clicked field, drops sort on the other field.
+    spToggleOverviewSort(field) {
+      if (field === 'name') {
+        this.spOverviewSort = (this.spOverviewSort === 'name-asc') ? 'name-desc' : 'name-asc';
+      } else if (field === 'score') {
+        this.spOverviewSort = (this.spOverviewSort === 'score-desc') ? 'score-asc' : 'score-desc';
+      }
+    },
+
+    // Persistent setter for the "Show CF Groups" toggle — writes
+    // localStorage so the user's pick survives reloads.
+    spSetOverviewGroup(value) {
+      this.spOverviewGroupCFs = !!value;
+      try { window.localStorage.setItem('sp-ov-group-cfs', String(this.spOverviewGroupCFs)); } catch (e) {}
     },
 
     // Diffs view — everything that diverges from the TRaSH default for
@@ -671,6 +747,11 @@ export default {
       const seenScoreOv = new Set();
       const collectScoreOv = (cf, fromGroup) => {
         if (seenScoreOv.has(cf.trashId)) return;
+        // Custom CFs (user-created or imported) don't have a TRaSH default
+        // to deviate from — their score IS the user's score. Skip them in
+        // "Score overrides" so the column "Profile default" doesn't read
+        // a misleading 0. They surface in "Added Additional CFs" instead.
+        if (cf.isCustom || (cf.trashId || '').startsWith('custom:')) return;
         const o = overrides[cf.trashId];
         if (o !== undefined && o !== cf.score) {
           seenScoreOv.add(cf.trashId);
@@ -727,11 +808,24 @@ export default {
         for (const cf of (g.cfs || [])) {
           if (profileActiveCFs.has(cf.trashId)) continue; // already in profile, not an addition
           if (!!sel[cf.trashId]) {
+            // Additional CFs come from extraCFGroups (raw catalog) with
+            // trashScores map but no resolved cf.score — fall back to
+            // resolveCFDefaultScore which picks via profile's scoreCtx.
+            let score = overrides[cf.trashId];
+            if (score === undefined) {
+              score = cf.score;
+              if (score === undefined || score === null) {
+                const r = this.resolveCFDefaultScore?.(cf.trashId);
+                score = (typeof r === 'number') ? r : null;
+              }
+            }
             out.additionalCFs.push({
+              trashId: cf.trashId,
               name: cf.name,
-              score: overrides[cf.trashId] !== undefined ? overrides[cf.trashId] : cf.score,
+              score,
               fromGroup: shortName,
               sourceCategory: g.category,
+              isCustom: !!cf.isCustom || (cf.trashId || '').startsWith('custom:'),
             });
           }
         }
@@ -750,6 +844,7 @@ export default {
           if (cf.required) continue;
           if (cf.default && sel[cf.trashId] === false) {
             out.excludedCFs.push({
+              trashId: cf.trashId,
               name: cf.name,
               score: cf.score,
               fromGroup: shortName,
@@ -762,53 +857,81 @@ export default {
       return out;
     },
 
-    // Additional CF groups — extraCFGroups minus groups already part
-    // of the profile's trashGroups (by name). CF-level overlap
-    // filtering happens in the template (via spAdditionalGroupCFs +
-    // spActiveCFIdSet getter) so a group with one unique CF still
-    // shows with just that CF; a group whose CFs are all already
-    // active falls out via the visibility check on the resulting
-    // length.
+    // Additional CF groups — extraCFGroups minus:
+    //   1. Groups already part of the profile by name match.
+    //   2. Variant groups — Additional groups whose entire CF set
+    //      (by trashId) equals a profile-active group's CF set.
+    //      Catches Golden Rule HD vs UHD: identical CF lists, only
+    //      the description targets a different resolution tier.
+    //      When UHD is in profile.trashGroups, the user shouldn't
+    //      see HD as an "extra" — it's the same CFs.
+    // CF-level overlap filtering for non-variant partial-overlap
+    // groups (Unwanted French vs Default) happens in the template
+    // via spAdditionalGroupCFs which trims overlapping CFs and
+    // leaves the unique ones.
     spAdditionalCFGroups() {
       const all = this.extraCFGroups || [];
-      const inProfile = new Set();
+      const inProfileName = new Set();
+      const profileCFSets = new Set();
       for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
-        if (g.name) inProfile.add(g.name);
+        if (g.name) inProfileName.add(g.name);
+        const ids = (g.cfs || []).map(c => c.trashId).filter(Boolean).sort().join('|');
+        if (ids) profileCFSets.add(ids);
       }
-      return all.filter(g => g.name && !inProfile.has(g.name));
+      return all.filter(g => {
+        if (!g.name || inProfileName.has(g.name)) return false;
+        const ids = (g.cfs || []).map(c => c.trashId).filter(Boolean).sort().join('|');
+        if (ids && profileCFSets.has(ids)) return false; // variant of active profile group
+        return true;
+      });
     },
 
     // CFs in the given Additional CF group that aren't already
-    // syncing from another active group. Used by the template to
+    // syncing via a PROFILE-DEFAULT group. Used by the template to
     // render the CF list AND to gate group visibility.
     //
-    // Computes the "active set" as a plain object keyed by trashId
-    // rather than a JS Set — Alpine's reactive Proxy intercepts
-    // method calls on returned values (Set's `.has` came back
-    // un-callable in v2.5.10 Alpine wrappers). Plain object property
-    // access (`active[id]`) bypasses the Proxy's method-get trap.
+    // CRITICAL: active set is built ONLY from profile.trashGroups
+    // (the groups that ARE part of this profile via
+    // quality_profiles.include) — NOT from raw selectedOptionalCFs
+    // entries. selectedOptionalCFs is a flat map shared with
+    // Additional CF activations; if we read it directly, every CF
+    // the user toggles on in Additional CF would immediately
+    // disappear from view (filter sees its trashId in sel and
+    // excludes it). Source-tracking would require restructuring
+    // the map; computing active-via-profile-only sidesteps that.
+    //
+    // For each profile trashGroup that's on, we include:
+    //   - all required CFs (always sync when group is on)
+    //   - all optional CFs whose effective state is on (explicit
+    //     sel[trashId] truthy OR fall back to cf.default)
+    // formatItemNames at profile level always count as active.
+    //
+    // Plain-object active map (not Set) — Alpine's reactive Proxy
+    // strips Set's .has() method making it un-callable from
+    // template expressions. Property access bypasses the trap.
     spAdditionalGroupCFs(g) {
       const cfs = g?.cfs || [];
       if (cfs.length === 0) return cfs;
       const active = {};
       const sel = this.selectedOptionalCFs || {};
-      // Explicit opt-ins: selectedOptionalCFs[trashId] = true entries
-      for (const k in sel) {
-        if (sel[k] && !k.startsWith('__grp_')) active[k] = true;
-      }
-      // Required CFs in active trashGroups (default-on or user-enabled)
       const groups = (this.profileDetail?.detail?.trashGroups) || [];
       for (const group of groups) {
         const grpKey = '__grp_' + group.name;
         const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : group.defaultEnabled;
         if (!grpOn) continue;
         for (const cf of (group.cfs || [])) {
-          if (cf.required) active[cf.trashId] = true;
+          if (cf.required) {
+            active[cf.trashId] = true;
+          } else {
+            const cfOn = sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
+            if (cfOn) active[cf.trashId] = true;
+          }
         }
       }
-      // CFs with score overrides — they sync even if not in a group
-      const sov = this.cfScoreOverrides || {};
-      for (const tid in sov) active[tid] = true;
+      // Profile-level required CFs
+      for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) {
+        if (fi?.trashId) active[fi.trashId] = true;
+      }
       return cfs.filter(cf => !active[cf.trashId]);
     },
 
@@ -882,6 +1005,42 @@ export default {
       if (!trashId) return;
       const updated = { ...this.cfScoreOverrides };
       delete updated[trashId];
+      this.cfScoreOverrides = updated;
+    },
+
+    // Reset action for the Diffs view's Added Additional CFs row —
+    // un-opts the CF so it stops syncing. Equivalent to flipping the
+    // toggle off in the Additional CF tab.
+    spRemoveAdditionalCF(trashId) {
+      if (!trashId) return;
+      const updated = { ...(this.selectedOptionalCFs || {}) };
+      updated[trashId] = false;
+      this.selectedOptionalCFs = updated;
+    },
+
+    // Reset action for the Diffs view's Excluded default-on CFs row —
+    // re-includes the CF that was previously turned off.
+    spReincludeExcludedCF(trashId) {
+      if (!trashId) return;
+      const updated = { ...(this.selectedOptionalCFs || {}) };
+      updated[trashId] = true;
+      this.selectedOptionalCFs = updated;
+    },
+
+    // Persist (or clear) a CF score override from an inline editor. If
+    // the new value parses to NaN or equals the CF's TRaSH default, the
+    // override entry is deleted so the rule payload stays clean
+    // (matches save-time filter at profiles.js:1601 pattern). Otherwise
+    // the override map is written.
+    spApplyCFScore(trashId, value, defaultScore) {
+      if (!trashId) return;
+      const v = Number(value);
+      const updated = { ...this.cfScoreOverrides };
+      if (Number.isNaN(v) || v === Number(defaultScore)) {
+        delete updated[trashId];
+      } else {
+        updated[trashId] = v;
+      }
       this.cfScoreOverrides = updated;
     },
 

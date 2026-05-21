@@ -115,6 +115,51 @@
   flex-shrink: 0;
 }
 .sp-basics-reset:hover { color: var(--accent-red-strong, var(--accent-red)); }
+/* Qualities allowed launcher — looks like a value cell but clickable
+   with an underline-on-hover affordance so it reads as "interactive". */
+.sp-basics-quality-launcher {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent-blue);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+}
+.sp-basics-quality-launcher:hover { text-decoration: underline; }
+
+/* CF score inline editor — replaces .sp-cf-score in editor mode.
+   Compact number input + adjacent reset-icon (only when overridden).
+   Sits in the same right-aligned column as the read-only score so
+   row layout doesn't shift when Customize flips. */
+.sp-cf-score-edit {
+  /* Two-cell inner grid: 20px reserved for the reset button (rendered
+     when overridden, empty cell otherwise) + 70px input. With reset
+     in its own fixed-width column, toggling override on/off doesn't
+     shift the input field — input stays anchored at the same x. */
+  display: grid;
+  grid-template-columns: 20px 70px;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+}
+.sp-cf-score-edit > .sp-cf-score-reset { grid-column: 1 / 2; }
+.sp-cf-score-edit > .sp-cf-score-input { grid-column: 2 / 3; }
+.sp-cf-score-input {
+  width: 70px;
+  font-size: 12px;
+  padding: 1px 6px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.sp-cf-score-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
+.sp-cf-score-reset { font-size: 13px; }
 .sp-basics-divider {
   width: 1px;
   height: 18px;
@@ -406,9 +451,14 @@
 }
 .sp-cf-row {
   display: grid;
-  grid-template-columns: 22px 1fr 70px;
+  /* Fixed columns so the score lines up at the same x across every
+     row in the list — variable CF-name lengths don't shift the score
+     position. 240px name column fits the widest TRaSH names (~24
+     chars × 13px). 1fr trailing column absorbs remaining card width
+     so the cluster stays packed on the left. */
+  grid-template-columns: 22px 240px 100px 1fr;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 3px 8px;
   border-radius: 3px;
   font-size: 13px;
@@ -527,6 +577,52 @@
   color: var(--text-muted);
   font-weight: 400;
 }
+/* "Show CF Groups" toggle — pinned right in the card title. Shared
+   spOverviewGroupCFs state across all three CF section cards, persisted
+   per-browser via localStorage. */
+.sp-ov-group-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sp-ov-group-toggle input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+}
+/* Clickable column header row — sits above the CF list, click cycles
+   sort direction for that column. Active column gets app-color tint
+   + visible arrow indicator. */
+.sp-ov-cf-header {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+.sp-ov-cf-header-cell {
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.sp-ov-cf-header-cell:hover { color: var(--text-primary); }
+.sp-ov-cf-header-cell.active { color: var(--app-color); }
+.sp-ov-cf-header-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+}
 
 /* Basics — horizontal flex-wrap, same pattern as the top header
    strip so the General section reads like an at-a-glance summary
@@ -610,25 +706,61 @@
   gap: 0;
 }
 .sp-ov-cf-row {
-  display: flex;
+  display: grid;
+  /* Mirror .sp-cf-row column widths so name + score align identically
+     between Profile default editor and Profile overview's CF lists.
+     Customized info (default value → new value) lives INSIDE the score
+     cell so the score column starts at the same x across all rows
+     regardless of whether the row is overridden. Trailing 1fr column
+     absorbs remaining card width. */
+  grid-template-columns: 240px 160px 1fr;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
   padding: 2px 0;
   font-size: 13px;
 }
 .sp-ov-cf-name {
   color: var(--text-primary);
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 .sp-ov-cf-score {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-  min-width: 60px;
-  text-align: right;
+  text-align: left;
+}
+/* Customized value (basics or CF score) — orange so it stands out
+   from default values, tooltip on hover reveals the profile default.
+   Cleaner than the inline "default → new" pattern that visually
+   doubled up the value column. */
+.sp-ov-basics-row.sp-ov-modified .sp-ov-basics-val {
+  color: var(--accent-orange);
+  cursor: help;
+}
+.sp-ov-cf-score.overridden {
+  color: var(--accent-orange);
+  cursor: help;
+}
+/* General-section value as a click-to-scroll button when Customize
+   is on. Looks like the read-only val (no button chrome) but cursor
+   + hover-underline hints that it's interactive — clicking scrolls
+   to the basics-strip editor at the top of the page where the
+   actual inline inputs live. */
+.sp-ov-basics-editlink {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+.sp-ov-basics-editlink:hover { text-decoration: underline; }
+.sp-ov-basics-editlink.sp-ov-basics-val-modified {
+  color: var(--accent-orange);
 }
 .sp-ov-cf-score.positive { color: var(--accent-green); }
 .sp-ov-cf-score.negative { color: var(--accent-red); }
@@ -642,28 +774,63 @@
    old value — dimmed colour + opacity is easier to read. */
 .sp-ov-card-diffs .sp-ov-diff-row {
   display: grid;
-  grid-template-columns: 20px 150px 110px 14px 1fr;
-  gap: 10px;
+  /* Fixed widths so labels + values align across rows in the same
+     section. Trailing 1fr column absorbs remaining card width so the
+     data cluster stays packed next to the label on the left.
+     reset | label | old | → | new | spacer */
+  grid-template-columns: 20px 220px 80px 14px 80px 1fr;
+  gap: 12px;
   align-items: baseline;
   padding: 3px 0;
 }
+/* Column header row above the diff rows — explains what "old" and
+   "new" mean ("TRaSH default" vs "Your value"). Tiny uppercase
+   muted text aligned to the same grid as the data rows. */
+.sp-ov-card-diffs .sp-ov-diff-header {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
 .sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-name {
-  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
 }
 /* "from <group>" meta on score-override rows lives under the label
    in a second visual line — moves to grid-column 1 / row 2 so the
    data columns aren't pushed sideways. */
-/* Score-override rows carry a "from <group>" meta line that lives in
-   a second visual row, indented to start under the label (column 2). */
-.sp-ov-card-diffs .sp-ov-cf-default {
-  grid-column: 2;
-  grid-row: 2;
-  font-size: 10.5px;
-  margin-top: -2px;
+/* CF-name cell in Diffs rows can hold both the CF name and an inline
+   "· from <group>" source label. flex layout so both share one line;
+   long source names get truncated via the parent ellipsis rule. */
+.sp-ov-card-diffs .sp-ov-cf-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sp-ov-cf-name-text {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.sp-ov-cf-source {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-default + * {
   /* When fromGroup is present, the diff row uses 2 visual rows. */
@@ -697,6 +864,22 @@
 .sp-ov-diff-new.positive { color: var(--accent-green); }
 .sp-ov-diff-new.negative { color: var(--accent-red); }
 .sp-ov-diff-new.zero     { color: var(--text-muted); }
+/* Placeholder in the Profile default column when the row has no
+   meaningful baseline (custom CFs have no TRaSH default; opted-in
+   Additional CFs would just echo Your value). Muted + smaller so it
+   doesn't compete with real default values. */
+.sp-ov-diff-na {
+  font-style: italic;
+  opacity: 0.55;
+  font-size: 11px;
+}
+/* "excluded" tag in the Your value column for Excluded default-on CFs.
+   Communicates the state instead of an empty cell. */
+.sp-ov-diff-excluded-tag {
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 11px;
+}
 .sp-ov-diff-reset {
   grid-column: 1;
   grid-row: 1;

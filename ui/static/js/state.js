@@ -135,6 +135,18 @@ export default function baseState() {
     spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
     spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
+    spOverviewSort: 'default',   // 'default' | 'name-asc' | 'name-desc' | 'score-desc' | 'score-asc'
+    // Show CF section groupings on Overview (true) vs flat list (false).
+    // Persisted per-browser via localStorage so the user's choice
+    // survives reloads.
+    spOverviewGroupCFs: (() => {
+      try { return window.localStorage.getItem('sp-ov-group-cfs') === 'true'; } catch (e) { return false; }
+    })(),
+    // Quality editor modal target — drives which array the modal binds to:
+    //   'builder' → pb.qualityItems (Profile Builder flow)
+    //   'edit'    → qualityStructure (Profile Detail / Sync Preview flow)
+    // Set by the launcher button before flipping pb.qualityEditorOpen.
+    qualityEditorTarget: 'builder',
     // Sync Preview's Customize state reads pdOverridesEnabled directly —
     // no separate spCustomize field. A separate field could drift when
     // user toggles Customize in one overlay then switches to the other.
