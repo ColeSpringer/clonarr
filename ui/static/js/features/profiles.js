@@ -189,6 +189,15 @@ export default {
     async loadExtraCFList() {
       const t = this.profileDetail?.instance?.type;
       if (!t) return;
+      // Cache hit: same Arr type as the populated catalog → skip the
+      // network round-trip. extraCFGroups is the heavy /all-cfs payload
+      // (every TRaSH CF organised into picker groups); without this
+      // gate every profile-detail open refetches the same data.
+      // Invalidated by TRaSH Pull (clearTrashDerivedCaches resets the
+      // cache type marker too) so structural updates flow through.
+      if (this._extraCFGroupsCachedType === t && Array.isArray(this.extraCFGroups) && this.extraCFGroups.length > 0) {
+        return;
+      }
       try {
         const r = await fetch(`/api/trash/${t}/all-cfs`);
         if (!r.ok) return;
@@ -229,6 +238,10 @@ export default {
         const all = [];
         for (const g of groups) for (const cf of g.cfs) all.push(cf);
         this.extraCFAllCFs = all;
+        // Record which Arr type this catalog is for so the next
+        // openProfileDetail can hit the cache. Reset alongside the
+        // groups in pdResetDetailState / clearTrashDerivedCaches.
+        this._extraCFGroupsCachedType = t;
       } catch (e) { console.error('loadExtraCFs:', e); }
     },
 
@@ -611,6 +624,9 @@ export default {
 
       this.extraCFAllCFs = [];
       this.extraCFGroups = [];
+      // Invalidate /all-cfs cache marker so the next openProfileDetail
+      // refetches fresh after Pull/Reset.
+      this._extraCFGroupsCachedType = null;
       this._extraInProfileSet = null;
 
       this.cfgbCFs = [];
@@ -675,6 +691,15 @@ export default {
       if (!this.pbQualityPresets.length) {
         fetch(`/api/trash/${inst.type}/quality-presets`).then(r => r.ok ? r.json() : []).then(d => this.pbQualityPresets = d || []).catch(() => {});
       }
+      // Fire /all-cfs in parallel with the profile fetch. It's the
+      // heavy catalog the Additional CF picker + Diffs view rely on,
+      // and there's no dependency between the two requests — the
+      // previous sequential ordering (profile → applyRuleStateToEditor
+      // → loadExtraCFList) just cost a full round-trip's worth of
+      // latency. loadExtraCFList is idempotent + cache-gated by Arr
+      // type so the subsequent call from resyncProfile / applyRuleState
+      // becomes a no-op when the catalog already arrived.
+      this.loadExtraCFList();
       try {
         const r = await fetch(`/api/trash/${inst.type}/profiles/${profile.trashId}`);
         if (!r.ok) {
@@ -2579,6 +2604,23 @@ export default {
       if (Object.keys(extras).length > 0) {
         this.extraCFs = extras;
         anyOverride = true;
+        // Sync Preview's Additional CF picker + Profile overview's
+        // Additional CF + Diffs bucket 3 all read selectedOptionalCFs
+        // (NOT extraCFs) to decide whether an extra is activated.
+        // applyRuleStateToEditor sets sel[extras] = true via
+        // rule.selectedCFs, but only fires for the single-matching-
+        // rule case (multi-Arr profiles sharing a TRaSH profile skip
+        // it). The optional-CF restore loop above only visits
+        // profile.trashGroups, never extras. Result: extras land in
+        // extraCFs but NOT in sel, so Sync Preview's UI sees them as
+        // "not activated". Belt-and-braces: write sel[id] = true for
+        // every extra so both Classic (extraCFs) and Sync Preview
+        // (sel) agree.
+        const selWithExtras = { ...this.selectedOptionalCFs };
+        for (const tid of Object.keys(extras)) {
+          selWithExtras[tid] = true;
+        }
+        this.selectedOptionalCFs = selWithExtras;
         // Load all CFs for the browser
         const appType = this.profileDetail?.instance?.type;
         if (appType) this.loadExtraCFList();
@@ -3500,8 +3542,13 @@ export default {
       this.qualityStructureRenaming = null;
       this.extraCFs = {};
       this.extraCFSearch = '';
-      this.extraCFAllCFs = [];
-      this.extraCFGroups = [];
+      // NOTE: extraCFAllCFs + extraCFGroups deliberately NOT cleared.
+      // They hold the heavy /all-cfs catalog which is identical for
+      // every profile of the same Arr type. loadExtraCFList() checks
+      // _extraCFGroupsCachedType and skips the network fetch when the
+      // cache still matches — wiping it here would force a refetch on
+      // every profile-detail open. Invalidated by Pull/Reset via
+      // clearTrashDerivedCaches.
       this._extraInProfileSet = null;
     },
 

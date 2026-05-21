@@ -512,15 +512,26 @@ export default {
       // trashScores map (keyed by profile context). resolveCFDefaultScore
       // walks formatItems → trashGroups → extraCFAllCFs[trashScores] in
       // that order, picking the right score for the active scoreCtx.
+      // extraCFs: user-saved scores for opted-in Additional CFs
+      // (out-of-profile). Restored separately from cfScoreOverrides
+      // (which is reserved for in-profile overrides). Read it first so
+      // the Profile overview's Additional CF section + flat list show
+      // the user's saved score instead of the TRaSH-context default.
+      const extras = this.extraCFs || {};
       const scoreInfo = (cf) => {
         let orig = cf.score;
         if (orig === undefined || orig === null) {
           const resolved = this.resolveCFDefaultScore?.(cf.trashId);
           orig = (typeof resolved === 'number') ? resolved : null;
         }
-        const o = overrides[cf.trashId];
-        if (o !== undefined && o !== orig) {
-          return { effective: o, original: orig, isOverridden: true };
+        // Score priority for "effective": extras (out-of-profile saved
+        // score) → cfScoreOverrides (in-profile override) → original.
+        // isOverridden flags any deviation from orig, regardless of
+        // which map the override came from.
+        let effective = extras[cf.trashId];
+        if (effective === undefined) effective = overrides[cf.trashId];
+        if (effective !== undefined && effective !== orig) {
+          return { effective, original: orig, isOverridden: true };
         }
         return { effective: orig, original: orig, isOverridden: false };
       };
@@ -816,6 +827,13 @@ export default {
       // regional Unwanted variants share several CFs). Guard so each
       // opted-in CF appears exactly once in the Diffs list.
       const seenAddCF = new Set();
+      // extraCFs holds the user-saved score for opted-in Additional
+      // CFs (out-of-profile entries). Restored via resyncProfile's
+      // scoreOverrides split — entries land here, NOT in
+      // cfScoreOverrides (which is reserved for in-profile overrides).
+      // Read it first so the score column shows the user's value, not
+      // the TRaSH-context default.
+      const extras = this.extraCFs || {};
       for (const g of (this.extraCFGroups || [])) {
         if (!g.name || inProfileGroup.has(g.name)) continue;
         const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
@@ -825,10 +843,17 @@ export default {
           if (seenAddCF.has(cf.trashId)) continue;
           if (!!sel[cf.trashId]) {
             seenAddCF.add(cf.trashId);
-            // Additional CFs come from extraCFGroups (raw catalog) with
-            // trashScores map but no resolved cf.score — fall back to
-            // resolveCFDefaultScore which picks via profile's scoreCtx.
-            let score = overrides[cf.trashId];
+            // Score priority:
+            //   1. extras[trashId]    — user's saved score for this
+            //      Additional CF (loaded from rule.scoreOverrides)
+            //   2. overrides[trashId] — defensive (live edits inside
+            //      Sync Preview Customize mode may write here)
+            //   3. cf.score           — extraCFGroups catalog usually
+            //      has trashScores map but no resolved cf.score
+            //   4. resolveCFDefaultScore — TRaSH default via profile
+            //      scoreCtx (the eventual fallback)
+            let score = extras[cf.trashId];
+            if (score === undefined) score = overrides[cf.trashId];
             if (score === undefined) {
               score = cf.score;
               if (score === undefined || score === null) {
