@@ -201,11 +201,15 @@
         </template>
         <template x-if="pdOverridesEnabled">
           <select class="sp-basics-input"
+                  aria-label="Language"
                   x-effect="populateSelectField($el, (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}]).map(l => ({value: l.name, name: l.name})), pdOverrides.language.value)"
                   @change="pdOverrides.language.value = $el.value"></select>
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.language.value = _def" x-tt="'Reset to ' + _def">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.language.value = _def"
+                  :aria-label="'Reset Language to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
         </template>
       </div>
       <div class="sp-basics-divider" x-show="activeAppType === 'radarr'"></div>
@@ -222,10 +226,14 @@
         <template x-if="pdOverridesEnabled">
           <input type="number" class="sp-basics-input sp-basics-input-num"
                  :value="_val"
+                 aria-label="Min score"
                  @change="pdOverrides.minFormatScore.value = Number($el.value)">
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.minFormatScore.value = _def" x-tt="'Reset to ' + _def">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.minFormatScore.value = _def"
+                  :aria-label="'Reset Min score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
         </template>
       </div>
 
@@ -241,10 +249,14 @@
         <template x-if="pdOverridesEnabled">
           <input type="number" class="sp-basics-input sp-basics-input-num"
                  :value="_val"
+                 aria-label="Min upgrade score"
                  @change="pdOverrides.minUpgradeFormatScore.value = Number($el.value)">
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.minUpgradeFormatScore.value = _def" x-tt="'Reset to ' + _def">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.minUpgradeFormatScore.value = _def"
+                  :aria-label="'Reset Min upgrade score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
         </template>
       </div>
 
@@ -260,10 +272,14 @@
         <template x-if="pdOverridesEnabled">
           <input type="number" class="sp-basics-input sp-basics-input-num"
                  :value="_val"
+                 aria-label="Cutoff score"
                  @change="pdOverrides.cutoffFormatScore.value = Number($el.value)">
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.cutoffFormatScore.value = _def" x-tt="'Reset to ' + _def">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.cutoffFormatScore.value = _def"
+                  :aria-label="'Reset Cutoff score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
         </template>
       </div>
 
@@ -278,12 +294,15 @@
         </template>
         <template x-if="pdOverridesEnabled">
           <label class="toggle toggle-sm sp-basics-toggle" @click.stop>
-            <input type="checkbox" :checked="_val" @change="pdOverrides.upgradeAllowed.value = $el.checked">
+            <input type="checkbox" :checked="_val" aria-label="Upgrades allowed" @change="pdOverrides.upgradeAllowed.value = $el.checked">
             <span class="slider"></span>
           </label>
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.upgradeAllowed.value = _def" x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.upgradeAllowed.value = _def"
+                  :aria-label="'Reset Upgrades to ' + (_def ? 'On' : 'Off')"
+                  x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
         </template>
       </div>
       <div class="sp-basics-divider"></div>
@@ -299,14 +318,17 @@
           <span class="sp-basics-val" x-text="_val || '—'"></span>
         </template>
         <template x-if="pdOverridesEnabled">
-          <select class="sp-basics-input" @change="pdOverrides.cutoffQuality = $el.value">
+          <select class="sp-basics-input" aria-label="Cutoff quality" @change="pdOverrides.cutoffQuality = $el.value">
             <template x-for="opt in _opts" :key="opt">
               <option :value="opt" :selected="opt === _val" x-text="opt"></option>
             </template>
           </select>
         </template>
         <template x-if="_mod">
-          <button class="sp-basics-reset" @click="pdOverrides.cutoffQuality = _def" x-tt="'Reset to ' + _def">&#8634;</button>
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.cutoffQuality = _def"
+                  :aria-label="'Reset Cutoff quality to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
         </template>
       </div>
 
@@ -476,9 +498,15 @@
                   <template x-if="pdOverridesEnabled">
                     <div class="sp-cf-score-edit">
                       <template x-if="_mod">
-                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(fi.trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(fi.trashId)"
+                                :aria-label="'Reset ' + fi.name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                                x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="_eff" @change="spApplyCFScore(fi.trashId, $el.value, _def)">
+                      <input type="number" class="sp-cf-score-input"
+                             :value="_eff"
+                             :aria-label="'Score for ' + fi.name"
+                             @change="spApplyCFScore(fi.trashId, $el.value, _def)">
                     </div>
                   </template>
                 </div>
@@ -575,9 +603,15 @@
                   <span class="sp-cf-score-edit"
                         x-data="{ get _def() { const s = g.cfs[0].score ?? resolveCFDefaultScore(g.cfs[0].trashId); return s === '?' ? null : s; }, get _eff() { const o = cfScoreOverrides[g.cfs[0].trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[g.cfs[0].trashId] !== undefined && cfScoreOverrides[g.cfs[0].trashId] !== this._def; } }">
                     <template x-if="_mod">
-                      <button class="sp-basics-reset sp-cf-score-reset" @click.stop="pdResetCFScore(g.cfs[0].trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                      <button class="sp-basics-reset sp-cf-score-reset"
+                              @click.stop="pdResetCFScore(g.cfs[0].trashId)"
+                              :aria-label="'Reset ' + g.cfs[0].name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                              x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                     </template>
-                    <input type="number" class="sp-cf-score-input" :value="_eff" @change="spApplyCFScore(g.cfs[0].trashId, $el.value, _def)" @click.stop>
+                    <input type="number" class="sp-cf-score-input"
+                           :value="_eff"
+                           :aria-label="'Score for ' + g.cfs[0].name"
+                           @change="spApplyCFScore(g.cfs[0].trashId, $el.value, _def)" @click.stop>
                   </span>
                 </template>
               </label>
@@ -706,9 +740,15 @@
                     <div class="sp-cf-score-edit"
                          x-data="{ get _def() { return cf.score; }, get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; } }">
                       <template x-if="_mod">
-                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                                x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="_eff" @change="spApplyCFScore(cf.trashId, $el.value, _def)">
+                      <input type="number" class="sp-cf-score-input"
+                             :value="_eff"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, _def)">
                     </div>
                   </template>
                 </div>
@@ -796,7 +836,7 @@
                  x-data="{ get _d() { return spOverviewDiffs(); } }">
           <h3 class="sp-ov-card-title">
             Diffs from profile default
-            <span class="sp-ov-card-count" x-text="'(' + spOverviewDiffCount() + ')'"></span>
+            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) + ')'"></span>
           </h3>
 
           <!-- Modified general — same naming as the "General" sub-nav
@@ -811,7 +851,10 @@
                   <span class="sp-ov-diff-old" x-text="b.original"></span>
                   <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
                   <span class="sp-ov-diff-new" x-text="b.current"></span>
-                  <button class="sp-basics-reset sp-ov-diff-reset" @click="pdResetBasic(b.field)" x-tt="'Reset to ' + b.original">&#8634;</button>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="pdResetBasic(b.field)"
+                          :aria-label="'Reset ' + b.label + ' to ' + b.original"
+                          x-tt="'Reset to ' + b.original">&#8634;</button>
                 </div>
               </template>
             </div>
@@ -831,7 +874,10 @@
                   <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
                   <span class="sp-ov-diff-new" :class="(o.current > 0 ? 'positive' : o.current < 0 ? 'negative' : 'zero')"
                         x-text="(o.current > 0 ? '+' : '') + o.current"></span>
-                  <button class="sp-basics-reset sp-ov-diff-reset" @click="pdResetCFScore(o.trashId)" x-tt="'Reset score to ' + ((o.original > 0 ? '+' : '') + o.original)">&#8634;</button>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="pdResetCFScore(o.trashId)"
+                          :aria-label="'Reset ' + o.name + ' score to ' + ((o.original > 0 ? '+' : '') + o.original)"
+                          x-tt="'Reset score to ' + ((o.original > 0 ? '+' : '') + o.original)">&#8634;</button>
                 </div>
               </template>
             </div>
@@ -843,7 +889,10 @@
             <div class="sp-ov-cf-list">
               <template x-for="a in _d.additionalCFs" :key="'diff-add-'+a.name+a.fromGroup">
                 <div class="sp-ov-cf-row sp-ov-diff-row">
-                  <button class="sp-basics-reset sp-ov-diff-reset" @click="spRemoveAdditionalCF(a.trashId)" x-tt="'Remove this Additional CF from the profile'">&#8634;</button>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spRemoveAdditionalCF(a.trashId)"
+                          :aria-label="'Remove Additional CF ' + a.name"
+                          x-tt="'Remove this Additional CF from the profile'">&#8634;</button>
                   <span class="sp-ov-cf-name">
                     <span class="sp-ov-cf-name-text" x-text="a.name"></span>
                     <span class="sp-ov-cf-source" x-text="'· ' + a.fromGroup"></span>
@@ -867,7 +916,10 @@
             <div class="sp-ov-cf-list">
               <template x-for="e in _d.excludedCFs" :key="'diff-ex-'+e.name+e.fromGroup">
                 <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
-                  <button class="sp-basics-reset sp-ov-diff-reset" @click="spReincludeExcludedCF(e.trashId)" x-tt="'Re-include this CF in the profile'">&#8634;</button>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spReincludeExcludedCF(e.trashId)"
+                          :aria-label="'Re-include ' + e.name + ' in the profile'"
+                          x-tt="'Re-include this CF in the profile'">&#8634;</button>
                   <span class="sp-ov-cf-name">
                     <span class="sp-ov-cf-name-text" x-text="e.name"></span>
                     <span class="sp-ov-cf-source" x-text="'· ' + e.fromGroup"></span>
@@ -887,7 +939,10 @@
             <div class="sp-ov-cf-list">
               <template x-for="r in _d.excludedRequiredCFs" :key="'diff-exreq-'+r.name+r.fromGroup">
                 <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
-                  <button class="sp-basics-reset sp-ov-diff-reset" @click="spToggleRequiredCF(r.trashId)" x-tt="'Re-include this required CF'">&#8634;</button>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spToggleRequiredCF(r.trashId)"
+                          :aria-label="'Re-include required CF ' + r.name"
+                          x-tt="'Re-include this required CF'">&#8634;</button>
                   <span class="sp-ov-cf-name">
                     <span class="sp-ov-cf-name-text" x-text="r.name"></span>
                     <span class="sp-ov-cf-source" x-text="'· ' + r.fromGroup"></span>
@@ -973,17 +1028,7 @@
               Show CF Groups
             </label>
           </h3>
-          <!-- Column header row — clickable to sort. Same markup pattern
-               for both flat and grouped views since the header lives
-               above the list regardless. -->
-          <div class="sp-ov-cf-row sp-ov-cf-header">
-            <button class="sp-ov-cf-header-cell" :class="(spOverviewSort === 'name-asc' || spOverviewSort === 'name-desc') ? 'active' : ''" @click="spToggleOverviewSort('name')">
-              Custom Format <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'name-asc' ? '▲' : spOverviewSort === 'name-desc' ? '▼' : ''"></span>
-            </button>
-            <button class="sp-ov-cf-header-cell sp-ov-cf-header-score" :class="(spOverviewSort === 'score-desc' || spOverviewSort === 'score-asc') ? 'active' : ''" @click="spToggleOverviewSort('score')">
-              Score <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'score-desc' ? '▼' : spOverviewSort === 'score-asc' ? '▲' : ''"></span>
-            </button>
-          </div>
+          {{template "_sp-overview-cf-header" .}}
           <template x-if="!spOverviewGroupCFs">
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs(null)" :key="'flat-all-'+cf.trashId">
@@ -998,9 +1043,15 @@
                   <template x-if="pdOverridesEnabled">
                     <div class="sp-cf-score-edit">
                       <template x-if="cf._score.isOverridden">
-                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                     </div>
                   </template>
                 </div>
@@ -1025,9 +1076,15 @@
                         <template x-if="pdOverridesEnabled">
                           <div class="sp-cf-score-edit">
                             <template x-if="cf._score.isOverridden">
-                              <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                             </template>
-                            <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                           </div>
                         </template>
                       </div>
@@ -1051,14 +1108,7 @@
             </label>
           </h3>
           <p class="sp-ov-section-hint">Non-required CFs you've activated within in-profile groups. Required CFs sync as a unit with their group — see "All active CF" for the full picture.</p>
-          <div class="sp-ov-cf-row sp-ov-cf-header">
-            <button class="sp-ov-cf-header-cell" :class="(spOverviewSort === 'name-asc' || spOverviewSort === 'name-desc') ? 'active' : ''" @click="spToggleOverviewSort('name')">
-              Custom Format <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'name-asc' ? '▲' : spOverviewSort === 'name-desc' ? '▼' : ''"></span>
-            </button>
-            <button class="sp-ov-cf-header-cell sp-ov-cf-header-score" :class="(spOverviewSort === 'score-desc' || spOverviewSort === 'score-asc') ? 'active' : ''" @click="spToggleOverviewSort('score')">
-              Score <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'score-desc' ? '▼' : spOverviewSort === 'score-asc' ? '▲' : ''"></span>
-            </button>
-          </div>
+          {{template "_sp-overview-cf-header" .}}
           <template x-if="!spOverviewGroupCFs">
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs('optional-in-profile')" :key="'flat-opt-'+cf.trashId">
@@ -1070,9 +1120,15 @@
                   <template x-if="pdOverridesEnabled">
                     <div class="sp-cf-score-edit">
                       <template x-if="cf._score.isOverridden">
-                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                     </div>
                   </template>
                 </div>
@@ -1094,9 +1150,15 @@
                         <template x-if="pdOverridesEnabled">
                           <div class="sp-cf-score-edit">
                             <template x-if="cf._score.isOverridden">
-                              <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                             </template>
-                            <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                           </div>
                         </template>
                       </div>
@@ -1120,14 +1182,7 @@
             </label>
           </h3>
           <p class="sp-ov-section-hint">Groups you've opted into that aren't part of this profile's defaults. Available via the "Additional CF" tab when Customize is on.</p>
-          <div class="sp-ov-cf-row sp-ov-cf-header">
-            <button class="sp-ov-cf-header-cell" :class="(spOverviewSort === 'name-asc' || spOverviewSort === 'name-desc') ? 'active' : ''" @click="spToggleOverviewSort('name')">
-              Custom Format <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'name-asc' ? '▲' : spOverviewSort === 'name-desc' ? '▼' : ''"></span>
-            </button>
-            <button class="sp-ov-cf-header-cell sp-ov-cf-header-score" :class="(spOverviewSort === 'score-desc' || spOverviewSort === 'score-asc') ? 'active' : ''" @click="spToggleOverviewSort('score')">
-              Score <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'score-desc' ? '▼' : spOverviewSort === 'score-asc' ? '▲' : ''"></span>
-            </button>
-          </div>
+          {{template "_sp-overview-cf-header" .}}
           <template x-if="!spOverviewGroupCFs">
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs('additional')" :key="'flat-add-'+cf.trashId">
@@ -1139,9 +1194,15 @@
                   <template x-if="pdOverridesEnabled">
                     <div class="sp-cf-score-edit">
                       <template x-if="cf._score.isOverridden">
-                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                     </div>
                   </template>
                 </div>
@@ -1163,9 +1224,15 @@
                         <template x-if="pdOverridesEnabled">
                           <div class="sp-cf-score-edit">
                             <template x-if="cf._score.isOverridden">
-                              <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
                             </template>
-                            <input type="number" class="sp-cf-score-input" :value="cf._score.effective" @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
                           </div>
                         </template>
                       </div>
@@ -1269,5 +1336,30 @@
       </main>
     </div>
 
+  </div>
+{{end}}
+
+{{/*
+  Shared sortable column-header for the Overview CF lists.
+  Used by All active CF / Optional CF / Additional CF — all three
+  show the same two columns (Custom Format + Score) and bind to the
+  same spOverviewSort state, so the markup is identical. Reading
+  the active-class / arrow expressions from spOverviewSort keeps
+  the partial self-contained.
+*/}}
+{{define "_sp-overview-cf-header"}}
+  <div class="sp-ov-cf-row sp-ov-cf-header" role="row">
+    <button class="sp-ov-cf-header-cell"
+            :class="(spOverviewSort === 'name-asc' || spOverviewSort === 'name-desc') ? 'active' : ''"
+            :aria-sort="spOverviewSort === 'name-asc' ? 'ascending' : spOverviewSort === 'name-desc' ? 'descending' : 'none'"
+            @click="spToggleOverviewSort('name')">
+      Custom Format <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'name-asc' ? '▲' : spOverviewSort === 'name-desc' ? '▼' : ''"></span>
+    </button>
+    <button class="sp-ov-cf-header-cell sp-ov-cf-header-score"
+            :class="(spOverviewSort === 'score-desc' || spOverviewSort === 'score-asc') ? 'active' : ''"
+            :aria-sort="spOverviewSort === 'score-asc' ? 'ascending' : spOverviewSort === 'score-desc' ? 'descending' : 'none'"
+            @click="spToggleOverviewSort('score')">
+      Score <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'score-desc' ? '▼' : spOverviewSort === 'score-asc' ? '▲' : ''"></span>
+    </button>
   </div>
 {{end}}
