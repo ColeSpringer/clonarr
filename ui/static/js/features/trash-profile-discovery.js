@@ -409,6 +409,24 @@ export default {
       return cfs.filter(cf => cf.required || cfOn(cf)).length;
     },
 
+    // Active-count for the Additional CF tab sub-nav. Counts only
+    // CFs that are user-opted-in among the group's UNIQUE CFs (the
+    // ones spAdditionalGroupCFs surfaces — already filtered to
+    // exclude those active via the profile-default path).
+    //
+    // Why this is separate from spGroupActiveCount: shared CFs
+    // between an Additional group (e.g. "Unwanted French") and a
+    // profile-default group (e.g. "Unwanted Formats") will have
+    // sel[id] = true via the profile group. The generic active
+    // count would treat the Additional group as "active" even
+    // though the user hasn't actually opted into anything UNIQUE
+    // to it — giving the false impression that the sub-nav item is
+    // engaged when none of its visible CFs are checked.
+    spAdditionalGroupActiveCount(g) {
+      const sel = this.selectedOptionalCFs || {};
+      return this.spAdditionalGroupCFs(g).filter(cf => !!sel[cf.trashId]).length;
+    },
+
     // === Sync Preview "Profile overview" tab helpers ===
     // Read-only summary of what's currently configured on the profile —
     // built so the user can see the whole spec at a glance without

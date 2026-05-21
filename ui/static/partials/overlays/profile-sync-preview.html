@@ -1296,8 +1296,12 @@
           <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
             <div class="sp-sub-nav-section" x-text="section.section"></div>
             <template x-for="g in section.items" :key="g.name">
+              <!-- Additional CF tab uses spAdditionalGroupActiveCount
+                   so the "inactive" dim only lifts when the user has
+                   opted into one of THIS group's UNIQUE CFs (not CFs
+                   already active via a profile-default group). -->
               <button class="sp-sub-nav-item"
-                      :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
+                      :class="{ active: spActiveGroup === g.name, inactive: spAdditionalGroupActiveCount(g) === 0 }"
                       @click="spActiveGroup = g.name">
                 <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
                 <span class="sp-sub-nav-count" x-text="spAdditionalGroupCFs(g).length"></span>
