@@ -14,10 +14,26 @@
               <div style="font-size:32px;margin-bottom:8px">&#10003;</div>
               <div style="color:var(--accent-green);font-size:15px;font-weight:600;margin-bottom:12px">Cleanup Complete</div>
               <div style="font-size:13px;color:var(--text-muted)">
-                <template x-for="[k,v] in Object.entries(cleanupResult.applyResult)" :key="k">
+                <!-- Counters: deleted / scoresReset / etc. — skip the
+                     skipped array here so it doesn't render as
+                     "skipped: [object Object]". Special-cased below. -->
+                <template x-for="[k,v] in Object.entries(cleanupResult.applyResult).filter(([k]) => k !== 'skipped')" :key="k">
                   <div x-text="k + ': ' + v" style="margin:2px 0"></div>
                 </template>
               </div>
+              <!-- Protected by keep list — list every CF that was
+                   skipped because its name is on the user's keep list.
+                   Shows up when the scan returned candidates that the
+                   apply-side defense-in-depth filtered out. -->
+              <template x-if="Array.isArray(cleanupResult.applyResult.skipped) && cleanupResult.applyResult.skipped.length > 0">
+                <div style="margin-top:14px;padding:10px;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px;text-align:left">
+                  <div style="font-size:12px;color:var(--accent-orange);font-weight:600;margin-bottom:4px">
+                    Protected by keep list (<span x-text="cleanupResult.applyResult.skipped.length"></span>)
+                  </div>
+                  <div style="font-size:12px;color:var(--text-muted);line-height:1.5"
+                       x-text="cleanupResult.applyResult.skipped.join(', ')"></div>
+                </div>
+              </template>
             </div>
           </template>
           <!-- Apply error -->

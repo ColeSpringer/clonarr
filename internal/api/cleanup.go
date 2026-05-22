@@ -105,7 +105,7 @@ func (s *Server) handleCleanupScan(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Action {
 	case "duplicates":
-		result, err := scanDuplicateCFs(client, inst)
+		result, err := scanDuplicateCFs(client, inst, req.Keep)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -129,7 +129,7 @@ func (s *Server) handleCleanupScan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, result)
 
 	case "reset-unsynced-scores":
-		result, err := scanUnsyncedScores(s.Core, client, inst)
+		result, err := scanUnsyncedScores(s.Core, client, inst, req.Keep)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -195,6 +195,44 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 
 	client := arr.NewArrClient(inst.URL, inst.APIKey, s.Core.HTTPClient)
 
+	// Defense-in-depth: for actions that affect CFs, re-validate the
+	// caller-supplied IDs against the persisted keep list. If a scan was
+	// buggy or the frontend dropped its filter, this still protects the
+	// user's pinned CFs. orphaned-scores and unused-profiles skip the
+	// filter — the first targets CFs that no longer exist (keep can't
+	// protect what isn't there) and the second operates on quality
+	// profiles, not CFs.
+	var skipped []string
+	if req.Action != "orphaned-scores" && req.Action != "unused-profiles" {
+		cfg := s.Core.Config.Get()
+		keepList := cfg.CleanupKeep[instanceID]
+		if len(keepList) > 0 {
+			keepSet := make(map[string]bool, len(keepList))
+			for _, name := range keepList {
+				keepSet[strings.TrimSpace(name)] = true
+			}
+			cfs, lerr := client.ListCustomFormats()
+			if lerr != nil {
+				writeError(w, http.StatusInternalServerError, "failed to list CFs for keep-list validation: "+lerr.Error())
+				return
+			}
+			idToName := make(map[int]string, len(cfs))
+			for _, cf := range cfs {
+				idToName[cf.ID] = cf.Name
+			}
+			filtered := req.IDs[:0]
+			for _, id := range req.IDs {
+				if name, ok := idToName[id]; ok && keepSet[name] {
+					skipped = append(skipped, name)
+					log.Printf("CLEANUP: skipping %s/%d — protected by keep list (action=%s)", name, id, req.Action)
+					continue
+				}
+				filtered = append(filtered, id)
+			}
+			req.IDs = filtered
+		}
+	}
+
 	switch req.Action {
 	case "duplicates":
 		count, err := applyDeleteCFs(client, req.IDs)
@@ -202,7 +240,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": count})
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
 
 	case "delete-cfs-keep-scores":
 		count, err := applyDeleteCFs(client, req.IDs)
@@ -210,7 +248,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": count})
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
 
 	case "delete-cfs-and-scores":
 		// Delete CFs first, then reset scores only for the deleted CFs.
@@ -222,12 +260,12 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 		}
 		count, err := applyDeleteCFs(client, req.IDs)
 		if err != nil {
-			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "error": "CF deletion failed: " + err.Error()})
+			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "skipped": skipped, "error": "CF deletion failed: " + err.Error()})
 			return
 		}
 		profiles, err := client.ListProfiles()
 		if err != nil {
-			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "error": "CFs deleted but failed to list profiles for score reset: " + err.Error()})
+			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "skipped": skipped, "error": "CFs deleted but failed to list profiles for score reset: " + err.Error()})
 			return
 		}
 		resetCount := 0
@@ -246,7 +284,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		writeJSON(w, map[string]any{"deleted": count, "scoresReset": resetCount})
+		writeJSON(w, map[string]any{"deleted": count, "scoresReset": resetCount, "skipped": skipped})
 
 	case "reset-unsynced-scores":
 		count, err := applyResetScores(client, req.IDs)
@@ -254,7 +292,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"scoresReset": count})
+		writeJSON(w, map[string]any{"scoresReset": count, "skipped": skipped})
 
 	case "orphaned-scores":
 		count, err := applyResetScores(client, req.IDs)
@@ -270,7 +308,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": count})
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
 
 	case "unused-profiles":
 		count, err := applyDeleteProfiles(client, inst, req.IDs)
@@ -331,10 +369,20 @@ func (s *Server) handleSaveCleanupKeep(w http.ResponseWriter, r *http.Request) {
 
 // --- Scan helpers ---
 
-func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanResult, error) {
+func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
+	}
+
+	// Build case-sensitive keep set (matches scanAllCFs convention).
+	// Duplicate groups share the same name across all entries, so a single
+	// keep-list hit protects the whole group — skip the group entirely
+	// rather than deleting "all but the first" when the user has marked
+	// that name as protected.
+	keepSet := make(map[string]bool, len(keep))
+	for _, name := range keep {
+		keepSet[strings.TrimSpace(name)] = true
 	}
 
 	// Group by normalized spec fingerprint
@@ -357,6 +405,19 @@ func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanRe
 	var items []CleanupItem
 	for _, group := range groups {
 		if len(group) < 2 {
+			continue
+		}
+		// Skip the whole group when any member's name is on the keep list.
+		// All duplicates share the same name (or close variants), so a
+		// keep entry for that name protects every instance.
+		protected := false
+		for _, entry := range group {
+			if keepSet[entry.name] {
+				protected = true
+				break
+			}
+		}
+		if protected {
 			continue
 		}
 		// Keep the first, flag the rest as duplicates
@@ -447,7 +508,7 @@ func scanAllCFs(client *arr.ArrClient, inst core.Instance, action string, keep [
 	}, nil
 }
 
-func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance) (*CleanupScanResult, error) {
+func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
@@ -455,6 +516,15 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 	profiles, err := client.ListProfiles()
 	if err != nil {
 		return nil, err
+	}
+
+	// Build case-sensitive keep set so user-pinned CFs (typically Arr-only
+	// release-group CFs like FLUX / SiC that aren't in any synced TRaSH
+	// profile) don't surface as score-reset candidates. Matches scanAllCFs
+	// convention.
+	keepSet := make(map[string]bool, len(keep))
+	for _, name := range keep {
+		keepSet[strings.TrimSpace(name)] = true
 	}
 
 	// Build set of CF names that are in any synced profile
@@ -520,7 +590,7 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 						break
 					}
 				}
-				if cfName == "" || syncedCFNames[cfName] {
+				if cfName == "" || syncedCFNames[cfName] || keepSet[cfName] {
 					continue
 				}
 				cfScores[fi.Format] = &cfScoreInfo{
