@@ -202,15 +202,11 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 	// filter — the first targets CFs that no longer exist (keep can't
 	// protect what isn't there) and the second operates on quality
 	// profiles, not CFs.
-	var skipped []string
+	skipped := []string{}
 	if req.Action != "orphaned-scores" && req.Action != "unused-profiles" {
 		cfg := s.Core.Config.Get()
-		keepList := cfg.CleanupKeep[instanceID]
-		if len(keepList) > 0 {
-			keepSet := make(map[string]bool, len(keepList))
-			for _, name := range keepList {
-				keepSet[strings.TrimSpace(name)] = true
-			}
+		keepSet := keepSetFromNames(cfg.CleanupKeep[instanceID])
+		if len(keepSet) > 0 {
 			cfs, lerr := client.ListCustomFormats()
 			if lerr != nil {
 				writeError(w, http.StatusInternalServerError, "failed to list CFs for keep-list validation: "+lerr.Error())
@@ -220,6 +216,10 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			for _, cf := range cfs {
 				idToName[cf.ID] = cf.Name
 			}
+			// In-place filter — write index always trails the read
+			// index, so reusing req.IDs's backing array is safe. The
+			// final reassignment shortens the slice header without
+			// allocating.
 			filtered := req.IDs[:0]
 			for _, id := range req.IDs {
 				if name, ok := idToName[id]; ok && keepSet[name] {
@@ -375,15 +375,11 @@ func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance, keep []string) 
 		return nil, err
 	}
 
-	// Build case-sensitive keep set (matches scanAllCFs convention).
-	// Duplicate groups share the same name across all entries, so a single
-	// keep-list hit protects the whole group — skip the group entirely
-	// rather than deleting "all but the first" when the user has marked
-	// that name as protected.
-	keepSet := make(map[string]bool, len(keep))
-	for _, name := range keep {
-		keepSet[strings.TrimSpace(name)] = true
-	}
+	// Build keep set. Duplicate groups share the same name across all
+	// entries, so a single keep-list hit protects the whole group —
+	// skip the group entirely rather than deleting "all but the first"
+	// when the user has marked that name as protected.
+	keepSet := keepSetFromNames(keep)
 
 	// Group by normalized spec fingerprint
 	type cfEntry struct {
@@ -473,19 +469,36 @@ func fingerprintFields(fields any) string {
 	return "{" + b.String() + "}"
 }
 
+// keepSetFromNames turns a CSV-of-trimmed-strings keep list into a
+// case-sensitive lookup set. Whitespace around each name is trimmed,
+// blank entries become a "" key (harmless — no CF name is empty in
+// Arr). Case-sensitive on purpose: CF names are case-sensitive in the
+// sync engine (see sync.go existingByName lookup), so a Keep List
+// entry "PCOK" must only protect the CF named exactly "PCOK", not
+// "pcok". Shared by every cleanup-scan + handleCleanupApply so the
+// keep semantics stay identical across actions.
+func keepSetFromNames(keep []string) map[string]bool {
+	if len(keep) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(keep))
+	for _, name := range keep {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out[name] = true
+	}
+	return out
+}
+
 func scanAllCFs(client *arr.ArrClient, inst core.Instance, action string, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
 	}
 
-	// Build case-sensitive keep set. CF names match case-sensitively across
-	// the sync engine (see sync.go existingByName lookup), so a Keep List
-	// entry "PCOK" only protects the CF named exactly "PCOK", not "pcok".
-	keepSet := make(map[string]bool, len(keep))
-	for _, name := range keep {
-		keepSet[strings.TrimSpace(name)] = true
-	}
+	keepSet := keepSetFromNames(keep)
 
 	items := make([]CleanupItem, 0, len(cfs))
 	for _, cf := range cfs {
@@ -518,14 +531,10 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 		return nil, err
 	}
 
-	// Build case-sensitive keep set so user-pinned CFs (typically Arr-only
-	// release-group CFs like FLUX / SiC that aren't in any synced TRaSH
-	// profile) don't surface as score-reset candidates. Matches scanAllCFs
-	// convention.
-	keepSet := make(map[string]bool, len(keep))
-	for _, name := range keep {
-		keepSet[strings.TrimSpace(name)] = true
-	}
+	// Keep set protects user-pinned CFs (typically Arr-only release-group
+	// CFs like FLUX / SiC that aren't in any synced TRaSH profile) from
+	// surfacing as score-reset candidates.
+	keepSet := keepSetFromNames(keep)
 
 	// Build set of CF names that are in any synced profile
 	syncedCFNames := make(map[string]bool)
@@ -949,14 +958,7 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 		return nil, err
 	}
 
-	// Keep list — case-insensitive name protection
-	keepSet := make(map[string]bool, len(keep))
-	for _, k := range keep {
-		k = strings.TrimSpace(k)
-		if k != "" {
-			keepSet[k] = true
-		}
-	}
+	keepSet := keepSetFromNames(keep)
 
 	// Build the managed-name set from clonarr's sync rules + imported profiles.
 	managedNames := make(map[string]bool)

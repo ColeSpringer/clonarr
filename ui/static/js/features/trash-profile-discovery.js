@@ -936,6 +936,16 @@ export default {
           });
         }
       }
+      // Required CFs from off groups are intentionally NOT surfaced
+      // here. Design rationale: when the user turns a group OFF, the
+      // entire group's CFs stop syncing regardless of individual
+      // exclusion state — so a "you excluded this" entry in Diffs
+      // would be misleading (the CF wasn't going to sync anyway).
+      // Backend's getExcludedCFIds + ComputeRuleCustomizations bucket 4
+      // follow the same convention (only count entries whose trashId
+      // resolves through ComputeTrashDefaults, which gates on
+      // group.defaultEnabled). End-to-end consistent: off-group
+      // exclusions are dead state by design.
       for (const g of (this.profileDetail.detail?.trashGroups || [])) {
         const grpKey = '__grp_' + g.name;
         const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;

@@ -5,6 +5,69 @@ import (
 	"testing"
 )
 
+// TestKeepSetFromNames covers the shared helper every cleanup scan +
+// handleCleanupApply uses to build their keep-list lookup. Case-
+// sensitivity + whitespace handling are part of the contract — the
+// sync engine matches CF names case-sensitively (see sync.go
+// existingByName), so the keep set must too.
+func TestKeepSetFromNames(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want map[string]bool
+	}{
+		{
+			name: "nil input returns nil",
+			in:   nil,
+			want: nil,
+		},
+		{
+			name: "empty input returns nil",
+			in:   []string{},
+			want: nil,
+		},
+		{
+			name: "single entry",
+			in:   []string{"FLUX"},
+			want: map[string]bool{"FLUX": true},
+		},
+		{
+			name: "trims whitespace per entry",
+			in:   []string{"  FLUX  ", "\tSiC\n"},
+			want: map[string]bool{"FLUX": true, "SiC": true},
+		},
+		{
+			name: "blank + whitespace-only entries are skipped",
+			in:   []string{"FLUX", "", "   ", "\t"},
+			want: map[string]bool{"FLUX": true},
+		},
+		{
+			name: "case-sensitive — pcok and PCOK are different keys",
+			in:   []string{"PCOK", "pcok"},
+			want: map[string]bool{"PCOK": true, "pcok": true},
+		},
+		{
+			name: "duplicates collapse to single entry",
+			in:   []string{"FLUX", "FLUX", "FLUX"},
+			want: map[string]bool{"FLUX": true},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := keepSetFromNames(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d (got=%v want=%v)", len(got), len(tc.want), got, tc.want)
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Errorf("key %q: got %v, want %v", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
 // TestNamingFormatUsesCustomFormats covers the helper used by
 // scanUnusedByClonarr to decide whether the scan result should expose
 // the "rename-flag is functional" info box on the frontend.
