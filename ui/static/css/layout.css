@@ -127,7 +127,11 @@
     background: var(--accent-green); flex-shrink: 0;
   }
   .topnav-trash-dot.stale { background: var(--accent-orange); }
-  .topnav-trash-dot.none { background: var(--text-secondary); }
+  /* "No data" indicator dot uses --text-muted instead of
+     --text-secondary so the dot stays visible against light bg after
+     the light-mode secondary darkening (--text-secondary went to a
+     less-prominent #57606a). --text-muted is solid grey in both themes. */
+  .topnav-trash-dot.none { background: var(--text-muted); }
   .topnav-trash-btn {
     display: inline-flex; align-items: center; gap: 4px;
     background: transparent; border: 0; padding: 0;

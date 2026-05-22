@@ -1,4 +1,16 @@
 {{define "overlays/profile-detail"}}
+  <!-- ==================== PROFILE DETAIL (CLASSIC — DEAD CODE) ====================
+       NOT included from index.html as of commit 10a8c1a (Sync Preview
+       became the sole editor). Kept on disk for emergency rollback
+       only — DO NOT restore the index.html include without also:
+         1. Re-adding usePreviewEditor: false to state.js
+         2. Reverting the icon/button swap in sections/profiles.html
+            (sync rules card single ✎ icon must become ✎ Classic + ◊
+            Sync Preview pair)
+         3. Reverting the TPD card primary button (Use this profile
+            must become Use → + Sync Preview secondary)
+       Without those reversals the x-show below evaluates !undefined
+       === true and renders alongside Sync Preview (double overlay). -->
   <!-- ==================== PROFILE DETAIL (CLASSIC) ====================
        Active when usePreviewEditor is false. The Sync Preview rewrite at
        overlays/profile-sync-preview.html is the new editor — both read the

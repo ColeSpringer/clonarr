@@ -177,11 +177,11 @@ func containsIPNet(list []*net.IPNet, ip net.IP) bool {
 	return false
 }
 
-// containsIP is the literal-IP-equality variant kept for the SafeHTTP
+// containsLiteralIP is the literal-IP-equality variant kept for the SafeHTTP
 // allowlist path, which deliberately uses a flat []net.IP set instead
 // of CIDR ranges (the allowlist matches the post-resolution IP of a
 // destination host, not a subnet).
-func containsIP(list []net.IP, ip net.IP) bool {
+func containsLiteralIP(list []net.IP, ip net.IP) bool {
 	for _, p := range list {
 		if p.Equal(ip) {
 			return true
@@ -486,7 +486,7 @@ func NewSafeHTTPClient(timeout time.Duration, allowlist []net.IP) *http.Client {
 			}
 			// Literal IP: skip DNS, validate directly.
 			if ip := net.ParseIP(host); ip != nil {
-				if containsIP(allowlist, ip) {
+				if containsLiteralIP(allowlist, ip) {
 					return dialer.DialContext(ctx, network, addr)
 				}
 				if IsBlockedIP(ip) {
@@ -502,7 +502,7 @@ func NewSafeHTTPClient(timeout time.Duration, allowlist []net.IP) *http.Client {
 				return nil, err
 			}
 			for _, ip := range ips {
-				if containsIP(allowlist, ip.IP) {
+				if containsLiteralIP(allowlist, ip.IP) {
 					return dialer.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
 				}
 				if !IsBlockedIP(ip.IP) {
@@ -546,7 +546,7 @@ func ValidateURL(rawURL string, allowlist []net.IP) error {
 		return errors.New("missing hostname")
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if containsIP(allowlist, ip) {
+		if containsLiteralIP(allowlist, ip) {
 			return nil
 		}
 		if IsBlockedIP(ip) {
@@ -562,7 +562,7 @@ func ValidateURL(rawURL string, allowlist []net.IP) error {
 	}
 	// Fast path: any resolved IP in allowlist → user explicitly trusts this host.
 	for _, ip := range ips {
-		if containsIP(allowlist, ip.IP) {
+		if containsLiteralIP(allowlist, ip.IP) {
 			return nil
 		}
 	}

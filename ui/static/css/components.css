@@ -24,7 +24,10 @@
 
   /* Buttons */
   .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-muted); color: var(--text-primary); font-size: 12px; cursor: pointer; font-weight: 500; transition: all 0.15s; }
-  .btn:hover { background: var(--border-subtle); border-color: var(--text-secondary); }
+  /* Hover-border uses --text-muted (not --text-secondary) so the
+     darkened light-mode --text-secondary value doesn't weaken the
+     hover affordance. --text-muted stays solid in both themes. */
+  .btn:hover { background: var(--border-subtle); border-color: var(--text-muted); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary { background: var(--accent-green-strong); border-color: var(--accent-green-strong); color: var(--text-on-accent); }
   .btn-primary:hover { background: var(--accent-green-hover); border-color: var(--accent-green-hover); }

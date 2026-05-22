@@ -402,11 +402,16 @@ export default {
       const grpKey = '__grp_' + g.name;
       const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
       const cfOn = (cf) => sel[cf.trashId] === undefined ? !!cf.default : !!sel[cf.trashId];
+      // Phase 2c: a required CF can be individually excluded via lock-icon
+      // click (sel[id] === false). Don't count it as active in that case
+      // — the group's sub-nav inactive-dim should lift only when at least
+      // one CF actually syncs.
+      const reqOn = (cf) => cf.required && sel[cf.trashId] !== false;
       if (!hasToggle) {
         return cfs.filter(cf => cfOn(cf)).length;
       }
       if (!grpOn) return 0;
-      return cfs.filter(cf => cf.required || cfOn(cf)).length;
+      return cfs.filter(cf => reqOn(cf) || cfOn(cf)).length;
     },
 
     // Active-count for the Additional CF tab sub-nav. Counts only

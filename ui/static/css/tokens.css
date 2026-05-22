@@ -160,10 +160,18 @@
   --border-muted: #d0d7de;
   --border-faint: #dde2e7;
 
-  /* Text — bumped contrast for legibility on muted bg */
+  /* Text — bumped contrast for legibility on muted bg.
+     --text-secondary was #32383f (luminance ~20%, almost indistinguishable
+     from --text-primary at ~13%). Raised to #57606a (~38%, GitHub-light
+     `--fgColor-muted`) so the secondary text reads visually subordinate
+     to primary and matches dark-mode's relative hierarchy (where
+     secondary b8 is less prominent than muted c0). Affects ~118 usages
+     across the codebase — descriptions, helper text, tab inactive
+     states, app-banner meta, settings nav, etc. — restoring proper
+     hierarchy in light mode where it was collapsed. */
   --text-primary: #1f2328;
   --text-body: #24292f;
-  --text-secondary: #32383f;
+  --text-secondary: #57606a;
   --text-muted: #42474e;
   --text-muted-secondary: #525964;
   --text-soft: #525964;
@@ -235,9 +243,14 @@
   --banner-warn-border: #ffcecb;
   --banner-warn-text: #82071e;
 
-  /* v3 app brand colors (light-mode override — same hex, softer glow) */
-  --radarr-color: #ffc230;
-  --radarr-glow: rgba(255, 194, 48, 0.10);
+  /* v3 app brand colors (light-mode override). Radarr's #ffc230 has
+     poor contrast against white/near-white backgrounds — text + borders
+     in that hex disappear in light theme. Darkened to a deeper amber
+     for light mode only; dark mode keeps the original brand hex. Glow
+     follows the new base hue so the soft fade behind app banners
+     reads as the same colour family. */
+  --radarr-color: #c47800;
+  --radarr-glow: rgba(196, 120, 0, 0.12);
   --sonarr-color: #35c5f4;
   --sonarr-glow: rgba(53, 197, 244, 0.12);
   --clonarr-color: #1e8540;

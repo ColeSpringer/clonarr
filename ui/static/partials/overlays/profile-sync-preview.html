@@ -689,7 +689,9 @@
                         x-text="(() => {
                           const total = g.cfs.length;
                           const on = g.cfs.filter(cf => {
-                            if (cf.required) return _groupOn;
+                            // Phase 2c: required CF excluded via lock icon
+                            // doesn't sync — don't count it as included.
+                            if (cf.required) return _groupOn && selectedOptionalCFs[cf.trashId] !== false;
                             return _groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]);
                           }).length;
                           return on + ' of ' + total + ' included';
@@ -1311,10 +1313,14 @@
          x-effect="if (spActiveTab === 'additional' && pdOverridesEnabled && (extraCFGroups || []).length === 0 && profileDetail?.instance?.type) loadExtraCFList()">
       <nav class="sp-sub-nav">
         <!-- Pre-filter the sub-nav to groups with at least one unique CF
-             (a CF whose trashId isn't already in the active sync set).
-             Hides Golden Rule HD when UHD is active (identical CFs).
-             Filtering happens against spAdditionalGroupCFs() which uses
-             the spActiveCFIdSet getter for reactivity. -->
+             (a CF whose trashId isn't already in any profile-default
+             group). Hides Golden Rule HD when UHD is active (identical
+             CFs). Filter logic in spAdditionalGroupCFs walks
+             profileDetail.detail.trashGroups + formatItemNames once
+             per render — structural overlap is the only criterion,
+             active/inactive state of the profile-default group is
+             irrelevant to whether an Additional group's CFs are
+             "already in the profile". -->
         <template x-for="section in spGroupBySection(spAdditionalCFGroups().filter(g => spAdditionalGroupCFs(g).length > 0))" :key="'add-'+section.section">
           <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
             <div class="sp-sub-nav-section" x-text="section.section"></div>

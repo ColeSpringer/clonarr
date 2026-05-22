@@ -711,27 +711,39 @@ func ipToIPNet(ip net.IP) *net.IPNet {
 }
 
 // ipNetSlicesEqual returns true when both slices describe the same
-// networks (order-sensitive). Used by RefreshTrustedProxies to
-// suppress noisy "no change" log lines on every tick.
+// networks as a multiset (order-insensitive). Used by
+// RefreshTrustedProxies to suppress noisy "no change" log lines on
+// every tick. The original ipSlicesEqual was multiset-based; this
+// preserves that property so DNS resolvers returning A/AAAA records
+// in different orders across calls don't produce phantom "changed"
+// signals.
 func ipNetSlicesEqual(a, b []*net.IPNet) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if (a[i] == nil) != (b[i] == nil) {
-			return false
-		}
-		if a[i] == nil {
-			continue
-		}
-		if !a[i].IP.Equal(b[i].IP) {
-			return false
-		}
-		if a[i].Mask.String() != b[i].Mask.String() {
+	seen := map[string]int{}
+	for _, n := range a {
+		seen[ipNetKey(n)]++
+	}
+	for _, n := range b {
+		seen[ipNetKey(n)]--
+	}
+	for _, c := range seen {
+		if c != 0 {
 			return false
 		}
 	}
 	return true
+}
+
+// ipNetKey produces a comparable string for IPNet multiset membership.
+// nil networks share a sentinel so the equal-set logic treats them
+// consistently with the prior nil-handling.
+func ipNetKey(n *net.IPNet) string {
+	if n == nil {
+		return ""
+	}
+	return n.IP.String() + "/" + n.Mask.String()
 }
 
 // stringSlicesEqual is the order-sensitive multiset for hostname

@@ -18,6 +18,16 @@ export default {
         const groups = await groupsRes.json();
         const customCFs = customRes.ok ? await customRes.json() : [];
         this.cfBrowseData = { ...this.cfBrowseData, [appType]: { cfs, groups, customCFs } };
+        // Invalidate the /all-cfs catalog cache so Sync Preview's
+        // Additional CF picker + Diffs view pick up freshly created /
+        // edited / deleted custom CFs immediately. loadCFBrowse is the
+        // central re-fetch point hit by save / delete / import flows.
+        // Without this, the cache marker stays set and the picker
+        // serves stale catalog until container restart.
+        if (this._extraCFGroupsCachedType === appType) {
+          this._extraCFGroupsCachedType = null;
+          this.extraCFGroups = [];
+        }
       } catch (e) { /* not yet cloned */ }
     },
 

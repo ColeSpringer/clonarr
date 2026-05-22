@@ -193,8 +193,10 @@ export default {
       // network round-trip. extraCFGroups is the heavy /all-cfs payload
       // (every TRaSH CF organised into picker groups); without this
       // gate every profile-detail open refetches the same data.
-      // Invalidated by TRaSH Pull (clearTrashDerivedCaches resets the
-      // cache type marker too) so structural updates flow through.
+      // Invalidated by loadCFBrowse (hit by save/delete/import of any
+      // custom CF + by pullTrash), and by clearTrashDerivedCaches
+      // (hit by resetTrashData). Together those cover every path that
+      // could change the underlying catalog.
       if (this._extraCFGroupsCachedType === t && Array.isArray(this.extraCFGroups) && this.extraCFGroups.length > 0) {
         return;
       }
@@ -2632,10 +2634,21 @@ export default {
       // customized (Sync Rules pill correctly shows N excluded). Mirror
       // backend ComputeRuleCustomizations bucket 4 / frontend
       // pdExcludedCFCount: count entries that resolve to default CFs.
+      //
+      // Defensive: if profileDetail.detail hasn't loaded yet (async race
+      // — shouldn't happen since resyncProfile awaits openProfileDetail,
+      // but cheap to guard), conservatively flip anyOverride=true so the
+      // rule's saved-customization state isn't lost. The downstream
+      // diff/badge counters will reconcile correctly once detail loads.
       if (Array.isArray(ruleData.excludedCFs) && ruleData.excludedCFs.length > 0) {
-        const defaults = this.computeTrashDefaults();
-        for (const tid of ruleData.excludedCFs) {
-          if (defaults.has(tid)) { anyOverride = true; break; }
+        const detail = this.profileDetail?.detail;
+        if (!detail) {
+          anyOverride = true;
+        } else {
+          const defaults = this.computeTrashDefaults();
+          for (const tid of ruleData.excludedCFs) {
+            if (defaults.has(tid)) { anyOverride = true; break; }
+          }
         }
       }
       // Restore behavior — prefer rule's behavior (current intent) over sync
@@ -4315,6 +4328,12 @@ export default {
       if (enabled) {
         if (!group.exclusive) {
           for (const cf of (group.cfs || [])) {
+            // Preserve Phase 2c required-CF exclusions. Without this
+            // guard, toggling a group off then back on within the same
+            // edit session silently wipes any explicit user opt-out
+            // (sel[id] === false) for required CFs in the group —
+            // exclusion entries are lost on save.
+            if (updated[cf.trashId] === false) continue;
             if (cf.required) {
               updated[cf.trashId] = true;
             } else if (cf.default) {
