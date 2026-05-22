@@ -175,7 +175,7 @@
            clears, so closing Sync Preview can't leak selectedOptionalCFs
            / groupExpanded / pdOverrides into the next overlay open. -->
       <div class="sp-action-buttons">
-        <button class="btn btn-sm" @click="profileDetail = null; syncPlan = null; syncResult = null; showProfileInfo = false; selectedOptionalCFs = {}; groupExpanded = {}; detailSections = { core: true }; pdResetDetailState(); pdInitOverrides(null)">Cancel</button>
+        <button class="btn btn-sm" @click="closeProfileEditor()">Cancel</button>
         <template x-if="profileDetail?.detail?.imported">
           <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>

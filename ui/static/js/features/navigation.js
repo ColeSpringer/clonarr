@@ -24,6 +24,19 @@ export default {
     },
 
     switchSection(section) {
+      // Issue #52 — guard against silently losing unsaved profile-editor
+      // changes when the user clicks a different sidebar section.
+      // closeProfileEditor handles the dirty-check + Stay/Discard modal;
+      // we run the actual section switch from the done callback so a
+      // Stay choice cancels navigation entirely (no section change).
+      if (this.profileDetail && typeof this.profileDetailIsDirty === 'function' && this.profileDetailIsDirty()) {
+        this.closeProfileEditor(() => this._doSwitchSection(section));
+        return;
+      }
+      this._doSwitchSection(section);
+    },
+
+    _doSwitchSection(section) {
       this.debugLog('UI', `Section: ${section}`);
       this.currentSection = section;
       localStorage.setItem('clonarr_section', section);
@@ -34,13 +47,23 @@ export default {
     },
 
     switchAppType(appType) {
+      if (appType === this.activeAppType) {
+        this._doSwitchAppType(appType);
+        return;
+      }
+      // Issue #52 — profile editor unsaved-changes guard. Reuses the
+      // same Stay/Discard pattern as closeProfileEditor so the user
+      // gets consistent treatment whether they Cancel or app-switch.
+      if (this.profileDetail && typeof this.profileDetailIsDirty === 'function' && this.profileDetailIsDirty()) {
+        this.closeProfileEditor(() => this._doSwitchAppType(appType));
+        return;
+      }
       // Guard unsaved CF Group Builder work: the builder is app-type-scoped,
       // so switching triggers cfgbLoad → cfgbReset which would discard an
       // in-flight edit. Warn via the styled confirm modal (browser's native
       // confirm() was jarring and didn't match the rest of the app).
       const shouldPrompt = this.currentSection === 'advanced'
         && this.advancedTab === 'group-builder'
-        && appType !== this.activeAppType
         && typeof this.cfgbIsDirty === 'function' && this.cfgbIsDirty();
       if (shouldPrompt) {
         const label = this.cfgbEditingId

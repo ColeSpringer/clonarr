@@ -501,6 +501,44 @@ export function clonarr() {
       // is safe to fire alongside watchers that call pushNav.
       window.addEventListener('hashchange', () => this.restoreFromHash(location.hash));
 
+      // Issue #52 — guard sidebar anchor navigation when the profile
+      // editor has unsaved changes. Sidebar links are pure <a href="#x">
+      // anchors so hashchange fires AFTER the location update — too late
+      // to revert without flicker. Intercept the click in the capture
+      // phase, prevent default, show Stay/Discard via closeProfileEditor,
+      // then manually navigate on Discard.
+      document.addEventListener('click', (event) => {
+        if (event.defaultPrevented) return;
+        if (event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const anchor = event.target.closest('a[href^="#"]');
+        if (!anchor) return;
+        // Only guard nav-style anchors (sidebar + topnav). Filter
+        // tooltip-anchors, in-page #section links, etc. by requiring
+        // the href to look like our hash routes (radarr/sonarr/settings/
+        // about) — anything else is a real in-page anchor we shouldn't
+        // hijack.
+        const href = anchor.getAttribute('href') || '';
+        if (!/^#(radarr|sonarr|settings|about)(\/|$)/.test(href)) return;
+        if (!this.profileDetail) return;
+        if (typeof this.profileDetailIsDirty !== 'function' || !this.profileDetailIsDirty()) return;
+        event.preventDefault();
+        this.closeProfileEditor(() => {
+          location.hash = href;
+        });
+      }, true);
+
+      // Issue #52 — browser-level guard for reload / tab close / cross-
+      // site navigation. Modern browsers ignore the returnValue text and
+      // show their own generic "Leave site?" prompt, but setting
+      // returnValue (or calling preventDefault) is enough to trigger it.
+      window.addEventListener('beforeunload', (event) => {
+        if (typeof this.profileDetailIsDirty !== 'function') return;
+        if (!this.profileDetailIsDirty()) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+
       // Section change clears stale per-section state (was inline in the old
       // switchSection). Fires for both anchor clicks and hash restoration.
       this.$watch('currentSection', () => {

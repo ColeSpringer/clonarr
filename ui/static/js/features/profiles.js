@@ -741,6 +741,11 @@ export default {
             this.applyRuleStateToEditor(matchingRules[0], detail);
           }
         }
+        // Issue #52 — initial baseline. resyncProfile re-captures this
+        // after its own restore pass; for the create-new path (TPD Use
+        // this profile, no resyncProfile follow-up) this is the only
+        // capture point.
+        this._captureProfileBaseline();
       } catch (e) { console.error('loadProfileDetail:', e); }
     },
 
@@ -1888,6 +1893,9 @@ export default {
         this.syncResult = result;
         this.syncResultDetailsOpen = false;
         this.syncPlan = null;
+        // Issue #52 — Save & Sync success: re-snapshot baseline so the
+        // editor doesn't show as dirty after a clean save.
+        this._captureProfileBaseline();
         // Reload Arr profiles first (new profile may have been created), then sync history + rules
         const inst = this.instances.find(i => i.id === this.syncForm.instanceId);
         if (inst) await this.loadInstanceProfiles(inst);
@@ -2029,6 +2037,11 @@ export default {
           return;
         }
         await this.loadAutoSyncRules();
+        // Issue #52 — Save success: re-snapshot the baseline so the
+        // freshly-saved state becomes the new "clean" reference.
+        // Future edits diverge from this; navigation guards stop
+        // tripping on the just-saved-and-clean state.
+        this._captureProfileBaseline();
         this.showToast('Settings saved. Will sync on next Sync All / Sync Now / Auto-Sync.', 'success', 6000);
       } catch (e) {
         console.error('saveRuleOnly:', e);
@@ -2660,6 +2673,10 @@ export default {
       // restored, so the UI reflects the saved state of the rule (no "All
       // values follow profile defaults" lie when there are real overrides).
       if (anyOverride) this.pdOverridesEnabled = true;
+      // Issue #52 — snapshot the just-restored state as the dirty-check
+      // baseline. Anything the user changes after this point is an
+      // unsaved edit that warrants a Stay/Discard prompt on navigation.
+      this._captureProfileBaseline();
     },
 
     async removeSyncHistory(instanceId, arrProfileId) {
@@ -3638,6 +3655,82 @@ export default {
         minUpgradeFormatScore: { enabled: true, value: p.minUpgradeFormatScore ?? 1 },
         cutoffFormatScore: { enabled: true, value: p.cutoffFormatScore || p.cutoffScore || 10000 },
         cutoffQuality: p.cutoff || '',
+      };
+    },
+
+    // --- Profile-editor unsaved-changes tracking (Issue #52) ---
+
+    // Snapshot the profile-editor state as a JSON string. Cheap diff
+    // primitive: compare the snapshot vs a re-snapshot to detect any
+    // change. Called after openProfileDetail + resyncProfile finish
+    // restoring state, so the baseline reflects "what the rule looks
+    // like right now on disk". Future edits diverge from this.
+    _snapshotProfileEditor() {
+      return JSON.stringify({
+        sel: this.selectedOptionalCFs,
+        cfScore: this.cfScoreOverrides,
+        extras: this.extraCFs,
+        pdOv: this.pdOverrides,
+        qStruct: this.qualityStructure,
+        qOver: this.qualityOverrides,
+      });
+    },
+
+    // Capture the current state as the dirty-tracking baseline.
+    // Invoked by openProfileDetail at the end of state restoration.
+    _captureProfileBaseline() {
+      this._profileBaseline = this._snapshotProfileEditor();
+    },
+
+    // Clear the baseline so subsequent dirty-checks return false until
+    // a new editor session opens. Called on save-success + Discard.
+    _clearProfileBaseline() {
+      this._profileBaseline = null;
+    },
+
+    // True when the editor has unsaved changes vs the baseline taken
+    // at load time. Returns false when no editor is open (no
+    // profileDetail) or no baseline was captured yet (race window
+    // during initial load — better to say "not dirty" than to gate
+    // navigation on a snapshot that doesn't exist).
+    profileDetailIsDirty() {
+      if (!this.profileDetail || !this._profileBaseline) return false;
+      return this._snapshotProfileEditor() !== this._profileBaseline;
+    },
+
+    // Centralised editor-close handler. Called by the Cancel button +
+    // sidebar navigation guards. When dirty, shows a Stay / Discard
+    // modal. The done callback fires after Discard (or immediately if
+    // not dirty) — caller passes a function that performs whatever
+    // destination action they wanted (route change, app switch,
+    // open-other-rule, etc.).
+    closeProfileEditor(done) {
+      const finish = () => {
+        this._clearProfileBaseline();
+        this.profileDetail = null;
+        this.syncPlan = null;
+        this.syncResult = null;
+        this.showProfileInfo = false;
+        this.selectedOptionalCFs = {};
+        this.groupExpanded = {};
+        this.detailSections = { core: true };
+        this.pdResetDetailState();
+        this.pdInitOverrides(null);
+        if (typeof done === 'function') done();
+      };
+      if (!this.profileDetailIsDirty()) {
+        finish();
+        return;
+      }
+      this.confirmModal = {
+        show: true,
+        title: 'Unsaved changes',
+        message: 'You have unsaved changes in the profile editor. Stay to keep editing, or discard the changes to leave.',
+        cancelLabel: 'Stay on this page',
+        confirmLabel: 'Discard changes',
+        confirmStyle: 'border-color:var(--accent-red);color:var(--accent-red)',
+        onConfirm: finish,
+        onCancel: () => {},
       };
     },
 

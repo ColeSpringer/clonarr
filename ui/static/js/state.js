@@ -126,6 +126,12 @@ export default function baseState() {
     // Auto-enabled by restoreFromSyncHistory when any saved override is detected, so the
     // toggle always reflects the actual persisted state of the rule (no silent "default" lie).
     pdOverridesEnabled: false,
+    // Snapshot of profile-editor state at open time. Used by
+    // profileDetailIsDirty to detect unsaved changes — set in
+    // openProfileDetail after restoration completes, cleared on
+    // save-success + on explicit Discard. JSON string for cheap
+    // structural compare.
+    _profileBaseline: null,
     spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
     spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
