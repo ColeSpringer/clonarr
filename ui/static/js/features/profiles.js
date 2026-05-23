@@ -204,30 +204,39 @@ export default {
         const r = await fetch(`/api/trash/${t}/all-cfs`);
         if (!r.ok) return;
         const d = await r.json();
-        // Build grouped + ungrouped lists. Backend marks user-created CFs
-        // with cf.isCustom=true regardless of which category the user
-        // assigned. Pull them all into a dedicated "Custom" group so the
-        // picker matches Custom Formats tab behaviour (one Custom bucket,
-        // not scattered across the user's chosen categories).
+        // Build grouped + ungrouped lists. Three buckets:
+        //   1. TRaSH cf-groups (have groupTrashId) → push verbatim
+        //   2. TRaSH CFs not in any group → roll into a single "Other"
+        //      group (pushed before Custom so OTHER section sorts above
+        //      CUSTOM in Sync Preview's sub-nav)
+        //   3. Custom-category groups (g.isCustom + parent category
+        //      "Custom") → push each user-cat as its own group, named
+        //      "[Custom] <user-cat>" so spGroupBySection clusters them
+        //      under a CUSTOM section in Sync Preview's sub-nav. This
+        //      matches the Custom Formats browse view's sidebar nesting.
         const groups = []; // { name, category, cfs[] }
         const ungrouped = [];
-        const customCFs = [];
+        const customGroups = [];
         for (const c of (d.categories || [])) for (const g of c.groups) {
           if (g.groupTrashId) {
-            // category passed through so getCategoryClass() can paint the
-            // left-border color the same way the main Groups section does.
-            // trashDescription forwarded so the picker shows the same
-            // group-blurb the main Groups section does on expand.
             groups.push({ name: g.name, category: c.category, trashDescription: g.trashDescription, cfs: g.cfs });
-          } else {
-            for (const cf of g.cfs) {
-              if (cf.isCustom) customCFs.push(cf);
-              else ungrouped.push(cf);
+          } else if (g.isCustom && c.category === 'Custom') {
+            if ((g.cfs || []).length > 0) {
+              customGroups.push({
+                name: `[Custom] ${g.name}`,
+                category: 'Custom',
+                cfs: g.cfs,
+              });
             }
+          } else {
+            for (const cf of g.cfs) ungrouped.push(cf);
           }
         }
+        // Order matters — spGroupBySection preserves input order and
+        // the sub-nav renders sections top-to-bottom in that order.
+        // Other above Custom by request.
         if (ungrouped.length > 0) groups.push({ name: 'Other', category: 'Other', cfs: ungrouped });
-        if (customCFs.length > 0) groups.push({ name: 'Custom', category: 'Other', cfs: customCFs });
+        groups.push(...customGroups);
         this.extraCFGroups = groups;
         // Ensure all groups start collapsed. Alpine's reactive proxy treats
         // missing keys as truthy in some cases AND direct keyed mutation
@@ -647,7 +656,6 @@ export default {
       this._sandboxCFCache = {};
       this._trashScoreContextCache = {};
       this.profileDetail = null;
-      this.showProfileInfo = false;
       this.profileBuilder = false;
       this.sandboxCFBrowser = {
         open: false,
@@ -686,7 +694,6 @@ export default {
       this.syncResult = null;
       this.selectedOptionalCFs = {};
 
-      this.showProfileInfo = false;
       this.profileDetail = { instance: inst, profile: profile, detail: null };
       // Pre-load languages and quality presets for this instance (for override dropdowns)
       this.getLanguagesForInstance(inst.id);
@@ -842,6 +849,14 @@ export default {
       if (rule.behavior) {
         this.syncForm.behavior = { ...(this.syncForm.behavior || {}), ...rule.behavior };
       }
+      // Restore the user's free-form notes for this rule. Empty by
+      // default — the Notes editor renders an "Add notes" CTA when
+      // pdDescription is blank. Auto-expand the Notes card on
+      // reopen when notes exist so the user instantly sees they're
+      // still there (collapsed default + small snippet otherwise
+      // reads as "my notes are gone" — first reported bug).
+      this.pdDescription = rule.description || '';
+      this.pdNotesExpanded = !!(rule.description || '').trim();
       if (anyOverride || (rule.selectedCFs && rule.selectedCFs.length > 0)) {
         this.pdOverridesEnabled = true;
       }
@@ -985,25 +1000,33 @@ export default {
       // Walk up parents until we find the first ancestor containing >1
       // .cf-info — that's the group container.
       let anchorRight = rect.right;
-      let parent = event.target.parentElement;
-      while (parent) {
-        const siblings = parent.querySelectorAll('.cf-info');
-        if (siblings.length > 1) {
-          const hoverLeft = rect.left;
-          let maxRight = 0;
-          for (const s of siblings) {
-            const r = s.getBoundingClientRect();
-            // Same-column filter: ⓘ rects vary in left because name length
-            // varies, but column boundaries are ~hundreds of pixels apart
-            // in grid layouts. 80px band is loose enough to cover varied
-            // names within a column, tight enough to exclude other columns.
-            if (Math.abs(r.left - hoverLeft) > 80) continue;
-            if (r.right > maxRight) maxRight = r.right;
+      // Only walk ancestors when the trigger itself IS a .cf-info icon
+      // (Sync Preview / classic editor / etc.). The new CF browse hover
+      // moved off .cf-info onto .cf-name-text, where the X-anchor logic
+      // does nothing useful — short-circuit to avoid an unnecessary
+      // tree walk on every hover.
+      if (event.target.classList && event.target.classList.contains('cf-info')) {
+        let parent = event.target.parentElement;
+        while (parent) {
+          const siblings = parent.querySelectorAll('.cf-info');
+          if (siblings.length > 1) {
+            const hoverLeft = rect.left;
+            let maxRight = 0;
+            for (const s of siblings) {
+              const r = s.getBoundingClientRect();
+              // Same-column filter: ⓘ rects vary in left because name
+              // length varies, but column boundaries are ~hundreds of
+              // pixels apart in grid layouts. 80px band is loose
+              // enough to cover varied names within a column, tight
+              // enough to exclude other columns.
+              if (Math.abs(r.left - hoverLeft) > 80) continue;
+              if (r.right > maxRight) maxRight = r.right;
+            }
+            if (maxRight > 0) anchorRight = maxRight;
+            break;
           }
-          if (maxRight > 0) anchorRight = maxRight;
-          break;
+          parent = parent.parentElement;
         }
-        parent = parent.parentElement;
       }
       const rTop = rect.top / zoom;
       const rLeft = rect.left / zoom;
@@ -1671,6 +1694,10 @@ export default {
       }
       // Sync behavior rules
       if (this.syncForm.behavior) body.behavior = this.syncForm.behavior;
+      // Free-form user notes about this rule — persists as
+      // AutoSyncRule.Description. Trim to avoid whitespace-only saves.
+      const desc = (this.pdDescription || '').trim();
+      if (desc) body.description = desc;
       return body;
     },
 
@@ -1940,6 +1967,13 @@ export default {
             // edit keepArrCFIDs, the user's change won't be silently
             // dropped here.
             keepArrCFIDs: (Array.isArray(syncBody.keepArrCFIDs) ? syncBody.keepArrCFIDs : existingRule.keepArrCFIDs) || null,
+            // Description: echo whatever the sync body just sent.
+            // buildSyncBody only includes the field when trimmed
+            // pdDescription is non-empty, so explicit empty-string
+            // fallback persists "user cleared their notes" correctly
+            // — without this the spread of ...existingRule would
+            // resurrect the old description.
+            description: syncBody.description !== undefined ? syncBody.description : '',
           };
           try {
             await fetch(`/api/auto-sync/rules/${existingRule.id}`, {
@@ -2020,6 +2054,7 @@ export default {
         qualityOverrides: syncBody.qualityOverrides || null,
         qualityStructure: syncBody.qualityStructure || null,
         keepArrCFIDs: (Array.isArray(syncBody.keepArrCFIDs) ? syncBody.keepArrCFIDs : existingRule.keepArrCFIDs) || null,
+        description: syncBody.description !== undefined ? syncBody.description : '',
       };
       this.debugLog('UI', `Save (rule-only): "${profile.name}" → ${inst.name}`);
       this.savingRule = true;
@@ -2669,6 +2704,13 @@ export default {
       if (ruleData.behavior) {
         this.syncForm.behavior = { ...this.syncForm.behavior, ...ruleData.behavior };
       }
+      // Restore the rule's free-form notes. ruleForRestore is preferred
+      // (current rule state) over sh (last-synced history snapshot) so
+      // Save-only notes edits are visible on reopen. Auto-expand the
+      // Notes card when notes exist (same UX rationale as
+      // applyRuleStateToEditor).
+      this.pdDescription = (ruleForRestore?.description || ruleData.description || '');
+      this.pdNotesExpanded = !!(this.pdDescription || '').trim();
       // Auto-enable the Profile Detail overrides toggle if ANY override was
       // restored, so the UI reflects the saved state of the rule (no "All
       // values follow profile defaults" lie when there are real overrides).
@@ -3559,6 +3601,9 @@ export default {
     // Used by: loadProfileDetail (fresh load), Back-link (leaving the view), pdResetAllOverrides.
     pdResetDetailState() {
       this.pdOverridesEnabled = false;
+      this.pdDescription = '';
+      this.pdDescriptionPreview = false;
+      this.pdNotesExpanded = false;
       this.pdGeneralCollapsed = false;
       this.pdQualityCollapsed = false;
       this.pdCFScoresCollapsed = true;
@@ -3666,13 +3711,24 @@ export default {
     // restoring state, so the baseline reflects "what the rule looks
     // like right now on disk". Future edits diverge from this.
     _snapshotProfileEditor() {
+      // Quality structure: when it equals the profile's defaults the
+      // user hasn't actually changed anything, even if qsInitFromProfile
+      // happened to seed it (the Qualities edit button does this just
+      // to populate the modal). Normalise that case to `null` so
+      // opening the editor doesn't flip the dirty flag and trigger
+      // beforeunload prompts.
+      const qStruct = (this.qualityStructure && this.qualityStructure.length > 0
+                       && !this.qualityStructureMatchesDefaults())
+        ? this.qualityStructure
+        : null;
       return JSON.stringify({
         sel: this.selectedOptionalCFs,
         cfScore: this.cfScoreOverrides,
         extras: this.extraCFs,
         pdOv: this.pdOverrides,
-        qStruct: this.qualityStructure,
+        qStruct,
         qOver: this.qualityOverrides,
+        desc: (this.pdDescription || '').trim(),
       });
     },
 
@@ -3710,7 +3766,6 @@ export default {
         this.profileDetail = null;
         this.syncPlan = null;
         this.syncResult = null;
-        this.showProfileInfo = false;
         this.selectedOptionalCFs = {};
         this.groupExpanded = {};
         this.detailSections = { core: true };

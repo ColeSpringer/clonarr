@@ -93,4 +93,23 @@
       </template>
     </span>
   </header>
+
+  <!-- First-run hint: when the active app has no instance configured
+       AND we're not already on Settings, surface a discrete banner
+       UNDER the app banner pointing users to add one. Sits below so
+       it inherits the brand-strip context above and reads as a
+       call-out for that specific app. Auto-hidden the moment at
+       least one instance of the active type exists; never shown on
+       global (Settings/About) sections. -->
+  <div class="app-noinstance-banner"
+       x-show="navStyle === 'sidebar' && !isGlobalSection() && instances && !instances.some(i => i.type === activeAppType)"
+       x-cloak>
+    <span class="app-noinstance-banner-text">
+      No <strong x-text="activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr'"></strong> instance configured yet. Add one to start using Clonarr.
+    </span>
+    <button type="button" class="app-noinstance-banner-action"
+            @click="currentSection = 'settings'; settingsSection = 'instances'; inlineEditingId = (activeAppType === 'sonarr' ? 'new-sonarr' : 'new-radarr')">
+      Add <span x-text="activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr'"></span> instance →
+    </button>
+  </div>
 {{end}}

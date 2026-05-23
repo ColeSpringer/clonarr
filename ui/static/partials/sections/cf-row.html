@@ -1,0 +1,37 @@
+{{define "sections/cf-row"}}
+  <!-- Single CF row — extracted partial reused by all three callsites
+       in custom-formats.html (single-group categories, single-CF in
+       multi-group categories, and multi-CF groups). Behaviour
+       differences (custom badge, edit/delete cluster) gate on
+       cf.isCustom, so one template covers every case. -->
+  <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom }]">
+    <div class="cf-cell-name">
+      <span class="cf-name-text" x-text="cf.name" :title="cf.name"
+            @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
+            @mouseleave="hideCFTooltip()"></span>
+      <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
+    </div>
+    <div class="cf-cell-pills">
+      <template x-for="(p, pidx) in cfConditionPills(cf, 99)" :key="pidx + '_' + p.full">
+        <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
+              x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
+          <span class="cf-pill-label" x-text="p.label"></span>
+          <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
+        </span>
+      </template>
+    </div>
+    <div class="cf-cell-actions">
+      <button type="button" class="cf-action-btn cf-action-clone"
+              @click.stop="cloneCFRow(cf, activeAppType)"
+              x-tt="'Clone as new Custom Format'" aria-label="Clone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </button>
+      <template x-if="cf.isCustom">
+        <span class="cf-action-edit-group">
+          <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
+          <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
+        </span>
+      </template>
+    </div>
+  </div>
+{{end}}

@@ -120,6 +120,9 @@ export default {
         const upper = label.toUpperCase();
         if (upper.startsWith('SQP')) return 'cat-sqp';
         if (upper.startsWith('REQUIRED')) return 'cat-required';
+        // User-defined buckets — separate token so Custom rows /
+        // sub-nav sections don't blend in with TRaSH's "Other".
+        if (upper === 'CUSTOM') return 'cat-custom';
       }
       return 'cat-other';
     },

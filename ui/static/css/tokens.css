@@ -89,6 +89,7 @@
   --cat-german: #f0883e;
   --cat-miscellaneous: #6b8aa8;
   --cat-other: #8b949e;
+  --cat-custom: #ff8c42;   /* user-managed bucket — orange-tan, distinct from Other's grey */
   --cat-required-core: #5eccac;
   --cat-required: #5eccac;
   --cat-sqp: #7c83eb;

@@ -85,12 +85,23 @@
 }
 
 /* Column grid — shared by header + rows.
-   TRaSH | → | ID | Arr | Last sync | Status | Auto-sync | Customizations | Actions */
+   TRaSH | → | ID | Notes | Arr | Last sync | Status | Auto-sync | Customizations | Actions
+   Notes is a fixed 18px slot for the info-icon so the Arr profile name
+   stays at the same x-position whether or not the rule has notes. */
 .v3-rule-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) 18px 60px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
+  grid-template-columns: minmax(160px, 1.4fr) 18px 60px 18px minmax(160px, 1.4fr) 90px 100px 100px 110px 100px;
   align-items: center; gap: 10px;
 }
+.v3-notes-cell { display: flex; align-items: center; justify-content: center; }
+.v3-notes-icon {
+  color: var(--accent-blue);
+  cursor: help;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 4px;
+}
+.v3-notes-icon:hover { background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
 .v3-col-header {
   padding: 5px 14px;
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px;
@@ -120,6 +131,8 @@
 }
 .v3-prof-trash-name { overflow: hidden; text-overflow: ellipsis; }
 .v3-prof-trash-info { color: var(--text-muted); cursor: help; font-size: 12px; flex-shrink: 0; }
+.v3-prof-arr-info { color: var(--accent-blue); cursor: help; font-size: 13px; flex-shrink: 0; margin-right: 6px; }
+.v3-prof-arr-info:hover { filter: brightness(1.2); }
 
 .v3-arrow { color: var(--text-muted); text-align: center; font-size: 13px; }
 

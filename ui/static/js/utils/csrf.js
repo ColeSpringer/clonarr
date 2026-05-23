@@ -52,7 +52,7 @@ export function sanitizeHTML(html) {
   if (!html) return '';
   const div = document.createElement('div');
   div.innerHTML = html;
-  const allowed = new Set(['A', 'B', 'BR', 'EM', 'I', 'P', 'SPAN', 'STRONG', 'U', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD']);
+  const allowed = new Set(['A', 'B', 'BR', 'EM', 'I', 'P', 'SPAN', 'STRONG', 'U', 'CODE', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD']);
   const allowedAttrs = { A: ['href', 'target', 'rel'], TABLE: ['class'], TH: ['class'], TD: ['class'] };
   function clean(node) {
     for (const child of [...node.childNodes]) {

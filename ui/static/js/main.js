@@ -533,8 +533,16 @@ export function clonarr() {
       // show their own generic "Leave site?" prompt, but setting
       // returnValue (or calling preventDefault) is enough to trigger it.
       window.addEventListener('beforeunload', (event) => {
-        if (typeof this.profileDetailIsDirty !== 'function') return;
-        if (!this.profileDetailIsDirty()) return;
+        // Profile editor (Sync Preview) dirty-check from Issue #52.
+        const profileDirty = typeof this.profileDetailIsDirty === 'function'
+          && this.profileDetailIsDirty();
+        // CF editor dirty-check — same pattern, applied to the CF
+        // Editor modal (Create / Edit Custom Format). Without this a
+        // browser reload while editing a CF silently drops the form.
+        const cfDirty = this.showCFEditor
+          && typeof this.cfEditorIsDirty === 'function'
+          && this.cfEditorIsDirty();
+        if (!profileDirty && !cfDirty) return;
         event.preventDefault();
         event.returnValue = '';
       });

@@ -1,5 +1,139 @@
 # Changelog
 
+## Unreleased — v3 UI preview (`:dev` + `:preview` channels)
+
+A ground-up redesign that's been on `:preview` since 2026-05-14 lands
+on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
+only get this build if you've opted into one of the test channels.
+
+### What's new at a glance
+
+- **Brand new look.** A persistent sidebar replaces the top tabs. The
+  banner above the main pane always tells you which app (Radarr or
+  Sonarr) and which page you're on, and themes the rest of the page to
+  match. Light + dark modes both supported.
+- **Custom Formats — completely rebuilt.** Browse by category in a
+  hierarchical sidebar. Every CF row shows its conditions inline as
+  green (must match) / red (must not match) pills so you can scan a
+  category without expanding anything. Hover the CF name to see the
+  description + TRaSH guide / JSON links. A new Clone button next to
+  each row creates a copy ready to tweak.
+- **CF editor — wide modal with a sidebar.** General, Conditions, and
+  (for power users) TRaSH dev fields are separate tabs. Each condition
+  renders as a card with labelled IDENTITY / VALUE / FLAGS / ACTIONS
+  sections, and the Required / Negate toggles use the same coloured
+  pill language as the table. Description supports basic markdown with
+  a toolbar + live preview.
+- **Set a default score on custom CFs.** New field on the General tab —
+  no more zero-score new CFs that need profile-by-profile fixing.
+- **Group your custom CFs.** The Category field now actually does what
+  it says — pick "Custom" (default), one of the preset buckets, or
+  type a new one. Custom categories all nest under a single "Custom"
+  parent in the sidebar so they never get mixed up with TRaSH groups.
+- **Notes per sync rule.** A new collapsible Notes section in Sync
+  Preview's Profile overview lets you write down what a profile is for
+  and why you made any customisations. Visible as a hover-tooltip
+  beside the Arr profile name in the Sync Rules table. Markdown
+  supported.
+- **Sync rule editor — modernized.** Customize mode now exposes
+  inline editors directly in the Profile overview (no more "scroll to
+  the top to edit"), a Diffs view shows everything you've changed vs
+  the TRaSH default, and a customisations summary strip at the top
+  tells you how many of each kind of change you have. Qualities row
+  switched from misleading counts ("5 of 12") to a clear "Profile
+  default" / "N changes" with a reset button.
+
+### Tabs reorganised
+
+- **Profiles** now has four sub-tabs: TRaSH Profiles (the browse), Sync
+  Rules (your saved rules), History (per-sync log), and Compare.
+  Previously these were stacked in one long page.
+- **Media Management** consolidates Quality Definitions, Naming, and
+  Maintenance under one app-themed header with a shared instance
+  picker.
+- **Settings** moved to a sidebar instead of in-page sub-nav. The
+  Instances section now groups Radarr + Sonarr + (optional) Prowlarr
+  in a 3-section layout.
+
+### TRaSH Profile Discovery
+
+- The TRaSH Profiles tab generates short auto-descriptions for every
+  profile — resolution + source + size hints + which audio fallback
+  applies — pulled live from TRaSH JSON. SQP profiles get TRaSH's
+  verbatim disclaimer + a link to the Discord guide.
+- Compact filter chips for category (Standard / SQP / Anime / etc.)
+  and features (HDR / DV / multi-audio).
+- "In use" badge with a hover-tooltip listing which Arr instances have
+  the profile.
+- Expand-all toggle for the category sections.
+
+### Improvements
+
+- **Per-instance auto-sync pause.** Pause auto-sync for one Radarr
+  instance (e.g. your 4K library) without affecting another.
+- **Cleanup gets a "Find unused Quality Profiles" scan.** Detects
+  profiles that aren't referenced anywhere (no movies / series / import
+  lists / collections) so you can clean them out safely.
+- **Customize CF picker — single Custom bucket.** All your user-managed
+  CFs surface in one "Custom" section in the Additional CF picker
+  regardless of which category you chose — never mixed with
+  TRaSH-managed groups. Each user-category becomes a sub-group.
+- **Import CFs from an Arr instance — cleaner picker.** Single-column
+  scrollable list, search by name, "Hide guide CFs" toggle so you can
+  focus on user-managed Arr CFs that don't already have a TRaSH copy.
+- **No-instance banner.** First-run users see a discrete themed banner
+  under the page header pointing them straight to Settings → Instances
+  when no Radarr / Sonarr instance is configured. Auto-disappears the
+  moment you add one.
+- **Unsaved-changes guard (Issue #52).** Switching pages, apps, or
+  reloading the browser with unsaved profile-editor edits now prompts
+  before discarding your work.
+- **CIDR ranges in `TRUSTED_PROXIES`.** You can now set
+  `TRUSTED_PROXIES=172.18.0.0/24` instead of listing each container IP
+  individually. Hostnames + literal IPs still work as before.
+
+### Contributor credits
+
+- **PR #53 by @xopez** — added structured GitHub issue templates for
+  bug reports / feature requests, plus a contact link to Discord for
+  community help.
+- **Issue #52 by @xopez** — surfaced the missing unsaved-changes
+  warning that drove the new prompt.
+
+### Fixed
+
+- **Stale-cache no longer hides newly imported CFs.** The Additional
+  CF picker now invalidates its catalog cache when you create / edit
+  / delete a custom format, so the picker always reflects your latest
+  state without a container restart.
+- **Required-CF exclusions survive rule reload.** Lock-icon click to
+  exclude a required CF now persists through Save & reload without
+  the exclusion silently flipping back on.
+- **Profile-editor dirty-tracking ignores no-op quality opens.** Just
+  opening the Quality Items editor (which seeds quality structure
+  from profile defaults) no longer marks the rule as dirty, so the
+  "Discard changes?" prompt only fires on actual edits.
+- **Markdown editor preview renders lists + code spans.** Internal
+  sanitiser allowlist extended for the markdown subset; bullet / numbered
+  lists + inline code now show in the preview pane as expected.
+- **Custom CF clone carries over "Include in Rename".** Cloning a
+  TRaSH CF that's marked include-in-rename now inherits the flag
+  instead of silently defaulting to off.
+
+### Behind the scenes
+
+- Backend hardening: TOCTOU fixes around scan/apply, defensive
+  fail-safes when Arr API calls fail, deterministic sort on
+  orphaned-score scans.
+- New integration test runs profile descriptions against real TRaSH
+  data on disk to catch regressions early.
+- CI tightened: `:latest` tag-trigger restricted to clean semver
+  (`vX.Y.Z`); release-candidate tags (`vX.Y.Z-rc1`) won't accidentally
+  ship as stable.
+- Classic profile editor (legacy markup) removed from the binary —
+  saves ~1200 lines + ends the dual-editor cognitive tax. Sync Preview
+  is now the single editor for sync rules.
+
 ## v2.5.9
 
 ### Fixed

@@ -126,6 +126,16 @@ export default function baseState() {
     // Auto-enabled by restoreFromSyncHistory when any saved override is detected, so the
     // toggle always reflects the actual persisted state of the rule (no silent "default" lie).
     pdOverridesEnabled: false,
+    // Free-form notes attached to the current sync rule. Edited via the
+    // Notes panel in Sync Preview; persisted to AutoSyncRule.Description.
+    // pdDescriptionPreview toggles between the markdown textarea and
+    // its rendered preview.
+    pdDescription: '',
+    pdDescriptionPreview: false,
+    // Profile overview's Notes card defaults to collapsed — keeps the
+    // overview compact since notes are optional. Header always shows;
+    // body (editor + preview) renders only when expanded.
+    pdNotesExpanded: false,
     // Snapshot of profile-editor state at open time. Used by
     // profileDetailIsDirty to detect unsaved changes — set in
     // openProfileDetail after restoration completes, cleared on
@@ -216,7 +226,6 @@ export default function baseState() {
     instCompareTrashId: {},     // instanceId → trashProfileId (selected)
     instCompareResult: {},      // instanceId → ProfileComparison
     instCompareLoading: {},     // instanceId → bool
-    showProfileInfo: false,
 
     // Sync history
     syncHistory: {},
@@ -230,8 +239,11 @@ export default function baseState() {
     importCFAppType: '',
     importCFSource: 'instance',
     importCFInstanceId: '',
-    importCFList: [],           // [{name, selected, exists}]
+    importCFList: [],           // [{name, selected, exists, trashMatch}]
     importCFLoading: false,
+    importCFFilter: '',         // free-text name filter for the picker
+    importCFHideGuide: false,   // hide CFs that also live in TRaSH guides
+    importCFHideExisting: true, // hide already-imported (un-selectable) entries
     importCFCategory: 'Custom',
     importCFNewCategory: '',
     importCFJsonText: '',
@@ -261,8 +273,13 @@ export default function baseState() {
     cfEditorSchema: {},          // cached per app type: [{implementation, fields:[{name,label,type,selectOptions}]}]
     cfEditorSchemaLoading: false,
     cfEditorSchemaError: '',     // populated when schema fetch fails (Arr unreachable, no instance, etc.)
-    cfEditorShowPreview: false,
-    cfEditorSpecCounter: 0,     // unique ID counter for x-for keys
+    cfEditorSpecCounter: 0,     // unique ID counter for x-for keys (specifications)
+    cfEditorScoreCounter: 0,    // unique ID counter for x-for keys (trashScores)
+    cfEditorActiveTab: 'general', // selected tab inside the editor modal (General / Conditions / TRaSH)
+    cfEditorDescriptionPreview: false, // toggle for the Description field's edit-vs-preview view
+    // Inline link-popover state for the markdown editor — replaces the
+    // native window.prompt that used to back the Link toolbar button.
+    cfMdLinkPopover: { open: false, target: null, url: '', selStart: 0, selEnd: 0 },
 
     // Quality sizes (cached per app type)
     qualitySizesPerApp: {},

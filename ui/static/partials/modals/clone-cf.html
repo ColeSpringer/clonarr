@@ -1,0 +1,41 @@
+{{define "modals/clone-cf"}}
+  <!-- Clone CF Modal — opened from the ⧉ action on each CF row. User
+       picks a name then Save (POST + close) or Cancel (no API call). -->
+  <template x-if="cloneModal && cloneModal.open">
+  <div class="modal-overlay" @keydown.escape.window="cancelCloneCF()">
+    <div class="modal" style="max-width:480px" role="dialog" aria-modal="true" aria-labelledby="modal-title-clone-cf" x-trap.noscroll.inert="cloneModal.open">
+      <h2 id="modal-title-clone-cf" class="modal-title">Clone Custom Format</h2>
+
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
+        Create a copy of
+        <strong x-text="cloneModal.sourceCF?.name"></strong>
+        as a new Custom Format. The conditions are duplicated; you can pick a different name below.
+      </p>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="clone-cf-name-input">New name</label>
+        <input id="clone-cf-name-input" class="input" type="text"
+               x-model="cloneModal.name"
+               @keydown.enter.prevent="commitCloneCF()"
+               placeholder="My Cloned Format">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+          Names are case-sensitive and must be unique among your custom formats.
+        </div>
+      </div>
+
+      <div x-show="cloneModal.error" x-cloak
+           style="margin-top:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent-red) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);border-radius:4px;color:var(--accent-red);font-size:12px"
+           x-text="cloneModal.error"></div>
+
+      <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" @click="cancelCloneCF()" :disabled="cloneModal.saving">Cancel</button>
+        <button type="button" class="btn btn-sm"
+                style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
+                @click="commitCloneCF()"
+                :disabled="cloneModal.saving || !cloneModal.name.trim()"
+                x-text="cloneModal.saving ? 'Saving…' : 'Save'"></button>
+      </div>
+    </div>
+  </div>
+  </template>
+{{end}}

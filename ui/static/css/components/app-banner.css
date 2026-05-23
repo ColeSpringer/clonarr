@@ -1,3 +1,42 @@
+/* First-run hint banner — sits UNDER the app-banner when no instance
+   of the active app type has been configured. Subtle theme-coloured
+   strip with a call-to-action link to Settings → Instances. Inherits
+   --app-color from the same cascade so it auto-themes to Radarr /
+   Sonarr without per-class colour overrides. Sticks below the app
+   banner (48px min-height + 1px border) so both stay visible on scroll. */
+.app-noinstance-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  background: linear-gradient(90deg, var(--app-glow) 0%, transparent 75%), color-mix(in srgb, var(--app-color) 8%, var(--bg-elevated));
+  border-bottom: 1px solid color-mix(in srgb, var(--app-color) 30%, var(--border-subtle));
+  position: sticky;
+  top: 49px; /* sits flush under the .app-banner (min-height 48px + 1px border) */
+  z-index: 51; /* under the .app-banner's 52 so it scrolls naturally beneath */
+}
+.app-noinstance-banner-text { flex: 1; min-width: 0; }
+.app-noinstance-banner-text strong { color: var(--app-color); font-weight: 600; }
+.app-noinstance-banner-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--app-color);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.app-noinstance-banner-action:hover { filter: brightness(1.1); }
+
 /* v3 app banner — persistent app-context strip at the top of the main
    pane. Always shows where you are. Sticky so it survives long-page
    scrolling. Color cascades from --app-color set on the x-data wrapper

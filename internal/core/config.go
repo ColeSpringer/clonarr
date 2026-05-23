@@ -143,6 +143,12 @@ type AutoSyncRule struct {
 	QualityStructure []QualityItem   `json:"qualityStructure,omitempty"` // full structure override (replaces TRaSH items). Trumps QualityOverrides when set.
 	Behavior         *SyncBehavior   `json:"behavior,omitempty"`         // sync behavior rules (nil = defaults)
 	Overrides        *SyncOverrides  `json:"overrides,omitempty"`        // user overrides (min score, language, cutoff, etc.)
+	// Description: free-form user notes about this sync rule — what the
+	// profile is for, why specific customizations were made, etc.
+	// Markdown supported (rendered via the same minimal subset as CF
+	// descriptions). Surfaced as a hover-info icon next to the Arr
+	// profile name in the Sync Rules table.
+	Description string `json:"description,omitempty"`
 	LastSyncCommit string `json:"lastSyncCommit,omitempty"`
 	// LastSyncTime is the timestamp of the last SUCCESSFUL sync — bumped by
 	// the auto-sync engine (UpdateAutoSyncRuleCommit), manual /api/sync/apply,

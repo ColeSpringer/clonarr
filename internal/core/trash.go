@@ -1653,10 +1653,22 @@ func AllCFsCategorized(ad *AppData, customCFs []CustomCF) *CFPickerData {
 		})
 	}
 
-	// Inject custom CFs into a "Custom" group in their assigned category
+	// Inject custom CFs into a single top-level "Custom" category, with
+	// user-chosen `ccf.Category` values surfaced as groups inside it.
+	// Matches the Custom Formats browse-view's sidebar nesting (Custom
+	// parent → user-cat children), so a custom CF the user named
+	// "Audio" doesn't end up mixed into TRaSH's Audio-Channels group.
+	// All user-managed CFs stay clearly separated from TRaSH-managed
+	// ones regardless of the chosen category label.
+	//
+	// Sentinel-keyed (`__custom__`) so a hypothetical TRaSH category
+	// literally named "Custom" can't collide with our user-customs
+	// bucket. The display Category swaps back to the friendly "Custom"
+	// label below after the per-cat resort decision is made.
+	const customsKey = "__custom__"
 	customByCat := make(map[string][]CategorizedCF)
 	for _, ccf := range customCFs {
-		cat := ccf.Category
+		cat := strings.TrimSpace(ccf.Category)
 		if cat == "" {
 			cat = "Custom"
 		}
@@ -1666,14 +1678,34 @@ func AllCFsCategorized(ad *AppData, customCFs []CustomCF) *CFPickerData {
 			IsCustom: true,
 		})
 	}
-	for cat, cfs := range customByCat {
+	// Stable per-group ordering: "Custom" group first (the implicit
+	// default bucket new users see), then alphabetical for the rest.
+	customCatNames := make([]string, 0, len(customByCat))
+	for cat := range customByCat {
+		customCatNames = append(customCatNames, cat)
+	}
+	sort.Slice(customCatNames, func(i, j int) bool {
+		if customCatNames[i] == "Custom" {
+			return true
+		}
+		if customCatNames[j] == "Custom" {
+			return false
+		}
+		return customCatNames[i] < customCatNames[j]
+	})
+	var customGroups []CFPickerGroup
+	for _, cat := range customCatNames {
+		cfs := customByCat[cat]
 		sort.Slice(cfs, func(i, j int) bool { return cfs[i].Name < cfs[j].Name })
-		catGroupMap[cat] = append(catGroupMap[cat], CFPickerGroup{
-			Name:      "Custom",
-			ShortName: "Custom",
+		customGroups = append(customGroups, CFPickerGroup{
+			Name:      cat,
+			ShortName: cat,
 			IsCustom:  true,
 			CFs:       cfs,
 		})
+	}
+	if len(customGroups) > 0 {
+		catGroupMap[customsKey] = customGroups
 	}
 
 	// Build sorted categories
@@ -1683,14 +1715,20 @@ func AllCFsCategorized(ad *AppData, customCFs []CustomCF) *CFPickerData {
 	catMinGroup := make(map[string]*int)
 	catIsCustom := make(map[string]bool)
 	for cat, groups := range catGroupMap {
-		// Sort groups: defaultEnabled first, then by Group/IsCustom (TRaSH-style sort)
-		sort.Slice(groups, func(i, j int) bool {
-			if groups[i].DefaultEnabled != groups[j].DefaultEnabled {
-				return groups[i].DefaultEnabled
-			}
-			return CompareCFGroups(groups[i].ShortName, groups[i].Group, groups[i].IsCustom,
-				groups[j].ShortName, groups[j].Group, groups[j].IsCustom) < 0
-		})
+		// Sort groups: defaultEnabled first, then by Group/IsCustom (TRaSH-style sort).
+		// Skip the resort for our customs bucket — its groups were pre-
+		// sorted above with "Custom" pinned first, then user-cats alpha.
+		// The generic CompareCFGroups would re-sort alphabetically and
+		// lose that pinning since every group here shares IsCustom=true.
+		if cat != customsKey {
+			sort.Slice(groups, func(i, j int) bool {
+				if groups[i].DefaultEnabled != groups[j].DefaultEnabled {
+					return groups[i].DefaultEnabled
+				}
+				return CompareCFGroups(groups[i].ShortName, groups[i].Group, groups[i].IsCustom,
+					groups[j].ShortName, groups[j].Group, groups[j].IsCustom) < 0
+			})
+		}
 		// Aggregate min Group + custom for the parent category sort
 		for i := range groups {
 			if groups[i].IsCustom {
@@ -1703,8 +1741,22 @@ func AllCFsCategorized(ad *AppData, customCFs []CustomCF) *CFPickerData {
 				}
 			}
 		}
+		// Display label: swap the sentinel key back to the friendly
+		// "Custom" label users see in the picker. The sentinel kept
+		// our customs bucket from colliding with a TRaSH-published
+		// category literally named "Custom". Mirror the swap into
+		// catIsCustom / catMinGroup so the final per-category sort
+		// still pins customs last via CompareCFGroups' IsCustom check.
+		displayCat := cat
+		if cat == customsKey {
+			displayCat = "Custom"
+			catIsCustom[displayCat] = catIsCustom[cat]
+			if mg, ok := catMinGroup[cat]; ok {
+				catMinGroup[displayCat] = mg
+			}
+		}
 		categories = append(categories, CFPickerCategory{
-			Category: cat,
+			Category: displayCat,
 			Groups:   groups,
 		})
 	}

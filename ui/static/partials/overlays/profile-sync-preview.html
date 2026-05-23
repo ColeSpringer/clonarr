@@ -355,32 +355,39 @@
         </template>
       </div>
 
-      <!-- Qualities allowed — read-only count when Customize is off,
-           click-to-open modal launcher when on. Reuses Profile Builder's
-           existing Quality Items editor (same modal Classic uses) so the
-           drag-and-drop UI lives in one place. -->
-      <div class="sp-basics-item">
-        <span class="sp-basics-lbl">Qualities allowed</span>
+      <!-- Qualities — matches Radarr's terminology. Read-only shows
+           "Profile default" so the user instantly knows nothing has
+           been touched; customize mode shows "Profile default" + an
+           edit icon when untouched, or "N changes" (clickable, opens
+           editor) when modified. Reuses Profile Builder's existing
+           Quality Items editor (the same modal Classic uses).
+           -->
+      <div class="sp-basics-item"
+           x-data="{ get _changes() { return pdOverrideSummary().quality; } }">
+        <span class="sp-basics-lbl">Qualities</span>
         <template x-if="!pdOverridesEnabled">
-          <span class="sp-basics-val" x-text="(() => {
-            const items = qualityStructure.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []);
-            return items.filter(i => i.allowed).length + ' of ' + items.length;
-          })()"></span>
+          <span class="sp-basics-val">Profile default</span>
         </template>
-        <template x-if="pdOverridesEnabled">
-          <!-- qsInitFromProfile seeds qualityStructure from profile.items
-               AND wipes legacy qualityOverrides as a one-time migration
-               (single source of truth — see profiles.js:3727). The
-               qualityStructure.length guard makes subsequent opens no-ops.
-               Anyone refactoring this launcher should preserve the guard
-               so we don't re-wipe overrides on every modal open. -->
+        <template x-if="pdOverridesEnabled && _changes === 0">
+          <span class="sp-basics-val sp-basics-val-clean">
+            <span>Profile default</span>
+            <button class="sp-basics-edit-icon"
+                    @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
+                    x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                    aria-label="Edit qualities">&#9998;</button>
+          </span>
+        </template>
+        <template x-if="pdOverridesEnabled && _changes > 0">
           <button class="sp-basics-val sp-basics-quality-launcher"
                   @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
                   x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
-                  x-text="(() => {
-                    const items = qualityStructure.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []);
-                    return items.filter(i => i.allowed).length + ' of ' + items.length + ' — edit';
-                  })()"></button>
+                  x-text="_changes + ' change' + (_changes === 1 ? '' : 's')"></button>
+        </template>
+        <template x-if="pdOverridesEnabled && _changes > 0">
+          <button class="sp-basics-reset"
+                  @click="qualityStructure = []; qualityOverrides = {};"
+                  aria-label="Reset Qualities to profile default"
+                  x-tt="'Reset every quality change back to the profile default.'">&#8634;</button>
         </template>
       </div>
     </div>
@@ -841,6 +848,13 @@
           <span class="sp-sub-nav-label">Overview</span>
         </button>
         <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'notes', inactive: !(pdDescription || '').trim() }"
+                @click="spOverviewSection = 'notes'; pdNotesExpanded = true"
+                x-tt="'Your free-form notes about this sync rule — what it\'s used for, why specific customizations were made. Persisted with the rule.'">
+          <span class="sp-sub-nav-label">Notes</span>
+          <span class="sp-sub-nav-count" x-show="(pdDescription || '').trim()">●</span>
+        </button>
+        <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'diffs', inactive: spOverviewDiffCount() === 0 }"
                 @click="spOverviewSection = 'diffs'"
                 x-tt="'Items that deviate from the TRaSH default for this profile — modified basics, score overrides, added Additional CFs, and excluded default-on CFs.'">
@@ -881,6 +895,68 @@
       </nav>
 
       <main class="sp-content sp-overview-content">
+        <!-- ===== Notes — collapsible compact card =====
+             Defaults to collapsed so the overview stays scannable.
+             Header always shows: chevron + label + char-count when set,
+             or "+ Add notes" CTA when empty. Body (editor + preview)
+             renders only when expanded.
+             Persisted to AutoSyncRule.Description; surfaced as hover-
+             info icon next to the Arr profile name in Sync Rules table. -->
+        <section class="sp-ov-card sp-ov-notes-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'notes'">
+          <button type="button" class="sp-ov-notes-header"
+                  @click="pdNotesExpanded = !pdNotesExpanded"
+                  :aria-expanded="pdNotesExpanded">
+            <span class="detail-section-chevron" :class="{ open: pdNotesExpanded }">&#9654;</span>
+            <span class="sp-ov-notes-label">Notes</span>
+            <template x-if="(pdDescription || '').trim().length > 0">
+              <span class="sp-ov-notes-snippet" x-text="(pdDescription || '').trim().replace(/\s+/g, ' ').slice(0, 100) + ((pdDescription || '').trim().length > 100 ? '…' : '')"></span>
+            </template>
+            <template x-if="!(pdDescription || '').trim()">
+              <span class="sp-ov-notes-empty">+ Add notes about this rule</span>
+            </template>
+            <span class="sp-ov-notes-count" x-show="(pdDescription || '').trim().length > 0"
+                  x-text="(pdDescription || '').trim().length + ' chars'"></span>
+          </button>
+
+          <div x-show="pdNotesExpanded" x-cloak class="sp-ov-notes-body">
+            <div class="sp-ov-notes-toolbar-row">
+              <p class="sp-ov-notes-help">
+                Free-form notes about this sync rule — what it's for, why you customised anything. Visible as a hover tooltip on the Sync Rules table. Markdown supported.
+              </p>
+              <button class="cf-md-preview-toggle"
+                      @click="pdDescriptionPreview = !pdDescriptionPreview"
+                      x-tt="'Toggle between the editor and a rendered markdown preview. Doesn\'t save — use the Save / Save &amp; Sync button at the bottom of the overlay to persist your notes.'"
+                      x-text="pdDescriptionPreview ? 'Show editor' : 'Show preview'"></button>
+            </div>
+
+            <div class="cf-md-toolbar" x-show="!pdDescriptionPreview">
+              <button type="button" class="cf-md-btn" x-tt="'Bold (**text**)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '**', '**')"><strong>B</strong></button>
+              <button type="button" class="cf-md-btn" x-tt="'Italic (*text*)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '*', '*')"><em>I</em></button>
+              <button type="button" class="cf-md-btn" x-tt="'Inline code (`text`)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '`', '`')" style="font-family:monospace">&lt;/&gt;</button>
+              <button type="button" class="cf-md-btn" x-tt="'Bullet list (- item)'"
+                      @click="mdPrependLines('#sp-notes-textarea', '- ')">• List</button>
+              <button type="button" class="cf-md-btn" x-tt="'Numbered list (1. item)'"
+                      @click="mdPrependLines('#sp-notes-textarea', '1. ')">1. List</button>
+              <button type="button" class="cf-md-btn" x-tt="'Link [text](url)'"
+                      @click="mdInsertLink('#sp-notes-textarea')">🔗 Link</button>
+            </div>
+
+            <textarea id="sp-notes-textarea"
+                      x-show="!pdDescriptionPreview"
+                      class="input cf-md-textarea"
+                      x-model="pdDescription"
+                      rows="6"
+                      placeholder="e.g. Used for 4K HDR Plex library. Bumped DV score because I prefer profile-grade DV over HDR10+ fallback."></textarea>
+
+            <div x-show="pdDescriptionPreview"
+                 class="cf-md-preview"
+                 x-html="renderMarkdownPreview(pdDescription)"></div>
+          </div>
+        </section>
+
         <!-- ===== Diffs view — only deviations from TRaSH default =====
              Surfaces things the user changed: modified basics, score
              overrides, Additional CFs they added (groups outside the
@@ -1019,30 +1095,125 @@
         <!-- ===== General (basics) — modifications shown inline ===== -->
         <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'general'">
           <h3 class="sp-ov-card-title">General</h3>
-          <div class="sp-ov-basics-grid">
-            <template x-for="b in spOverviewBasics()" :key="b.label">
-              <div class="sp-ov-basics-row" :class="b.modified ? 'sp-ov-modified' : ''">
-                <span class="sp-ov-basics-lbl" x-text="b.label"></span>
-                <!-- Read-only display when Customize is off; editor link
-                     when on. Rather than duplicating the basics-strip
-                     editor markup per field, point at the strip at the
-                     top of the page — single source of truth for the
-                     actual editing UI. -->
-                <template x-if="!pdOverridesEnabled">
+          <!-- Read-only mode: simple label/value grid. -->
+          <template x-if="!pdOverridesEnabled">
+            <div class="sp-ov-basics-grid">
+              <template x-for="b in spOverviewBasics()" :key="b.label">
+                <div class="sp-ov-basics-row" :class="b.modified ? 'sp-ov-modified' : ''">
+                  <span class="sp-ov-basics-lbl" x-text="b.label"></span>
                   <span class="sp-ov-basics-val"
                         x-text="b.value"
                         x-tt="b.modified ? ('Profile default: ' + b.defaultValue) : ''"></span>
-                </template>
-                <template x-if="pdOverridesEnabled">
-                  <button class="sp-ov-basics-val sp-ov-basics-editlink"
-                          :class="b.modified ? 'sp-ov-basics-val-modified' : ''"
-                          @click="document.querySelector('.sp-basics')?.scrollIntoView({ behavior: 'smooth', block: 'start' })"
-                          x-tt="b.modified ? ('Profile default: ' + b.defaultValue + ' — click to scroll to the editor at the top.') : 'Click to scroll to the editor at the top.'"
-                          x-text="b.value"></button>
-                </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <!-- Customize mode: inline editors per field, matches the
+               basics-strip controls at the top so the user can edit
+               here without scrolling. Mirrors basics-strip x-data
+               getters (_def/_val/_mod) but rendered as a card grid. -->
+          <template x-if="pdOverridesEnabled">
+            <div class="sp-ov-basics-grid">
+              <!-- Language (Radarr only) -->
+              <div class="sp-ov-basics-row" x-show="activeAppType === 'radarr'"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.language?.name || profileDetail?.detail?.profile?.language || 'Original'; },
+                             get _val() { return pdOverrides?.language?.value || this._def; },
+                             get _mod() { return this._val !== this._def; } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Language</span>
+                <select class="sp-basics-input"
+                        aria-label="Language"
+                        x-effect="populateSelectField($el, (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}]).map(l => ({value: l.name, name: l.name})), pdOverrides.language.value)"
+                        @change="pdOverrides.language.value = $el.value"></select>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.language.value = _def"
+                        :aria-label="'Reset Language to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
               </div>
-            </template>
-          </div>
+              <!-- Min score -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.minFormatScore ?? 0; },
+                             get _val() { return pdOverrides?.minFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Min score</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Min score"
+                       @change="pdOverrides.minFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.minFormatScore.value = _def"
+                        :aria-label="'Reset Min score to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Min upgrade -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1; },
+                             get _val() { return pdOverrides?.minUpgradeFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Min upgrade</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Min upgrade score"
+                       @change="pdOverrides.minUpgradeFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.minUpgradeFormatScore.value = _def"
+                        :aria-label="'Reset Min upgrade to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Cutoff score -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000; },
+                             get _val() { return pdOverrides?.cutoffFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Cutoff score</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Cutoff score"
+                       @change="pdOverrides.cutoffFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.cutoffFormatScore.value = _def"
+                        :aria-label="'Reset Cutoff score to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Upgrades -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return !!(profileDetail?.detail?.profile?.upgradeAllowed); },
+                             get _val() { return pdOverrides?.upgradeAllowed?.value ?? this._def; },
+                             get _mod() { return !!this._val !== !!this._def; } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Upgrades</span>
+                <label class="toggle toggle-sm sp-basics-toggle" @click.stop>
+                  <input type="checkbox" :checked="_val" aria-label="Upgrades allowed" @change="pdOverrides.upgradeAllowed.value = $el.checked">
+                  <span class="slider"></span>
+                </label>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.upgradeAllowed.value = _def"
+                        :aria-label="'Reset Upgrades to ' + (_def ? 'On' : 'Off')"
+                        x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
+              </div>
+              <!-- Cutoff quality -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoff || ''; },
+                             get _val() { return pdOverrides?.cutoffQuality || this._def; },
+                             get _mod() { return this._val !== this._def && this._val !== ''; },
+                             get _opts() { const items = qualityStructure?.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []); return items.filter(i => i.allowed).map(i => i.name || i.quality?.name || '').filter(n => n); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Cutoff quality</span>
+                <select class="sp-basics-input" aria-label="Cutoff quality" @change="pdOverrides.cutoffQuality = $el.value">
+                  <template x-for="opt in _opts" :key="opt">
+                    <option :value="opt" :selected="opt === _val" x-text="opt"></option>
+                  </template>
+                </select>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.cutoffQuality = _def"
+                        :aria-label="'Reset Cutoff quality to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+            </div>
+          </template>
         </section>
 
         <!-- ===== Quality items =====
@@ -1052,12 +1223,35 @@
              grouped together (e.g. WEB-2160p containing WEBDL-2160p +
              WEBRip-2160p) without having to open the Quality items
              editor. -->
-        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'quality'">
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'quality'"
+                 x-data="{ get _qChanges() { return pdOverrideSummary().quality; } }">
           <h3 class="sp-ov-card-title">
             Quality items
             <span class="sp-ov-card-count" x-text="'(' + spOverviewQualities().length + ')'"></span>
+            <template x-if="pdOverridesEnabled">
+              <button class="sp-basics-edit-icon" style="margin-left:8px"
+                      @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
+                      x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                      aria-label="Edit quality items">&#9998; Edit</button>
+            </template>
+            <template x-if="pdOverridesEnabled && _qChanges > 0">
+              <button class="sp-basics-reset" style="margin-left:6px"
+                      @click="qualityStructure = []; qualityOverrides = {};"
+                      :aria-label="'Reset ' + _qChanges + ' quality change' + (_qChanges === 1 ? '' : 's') + ' to profile default'"
+                      x-tt="'Reset every quality change (' + _qChanges + ') back to the profile default.'">&#8634;</button>
+            </template>
+            <template x-if="pdOverridesEnabled && _qChanges > 0">
+              <span class="sp-ov-card-count" style="color:var(--accent-orange);margin-left:6px"
+                    x-text="_qChanges + ' change' + (_qChanges === 1 ? '' : 's')"></span>
+            </template>
           </h3>
-          <div class="sp-ov-quality-list">
+          <!-- Chip list — click anywhere on the area opens the editor
+               when Customize is on, so users can change qualities
+               without finding the small pencil button. -->
+          <div class="sp-ov-quality-list"
+               :class="pdOverridesEnabled ? 'sp-ov-quality-list-editable' : ''"
+               @click="pdOverridesEnabled ? (qualityEditorTarget = 'edit', !qualityStructure.length && qsInitFromProfile(), pbEnsureQualityIds(), pb.qualityEditorOpen = true) : null"
+               x-tt="pdOverridesEnabled ? 'Click to open the Quality Items editor.' : ''">
             <template x-for="q in spOverviewQualities()" :key="q.name">
               <span class="sp-ov-quality-chip"
                     :class="q.isGroup ? 'is-group' : ''"
@@ -1362,6 +1556,39 @@
             </h2>
             <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
             <p class="sp-content-sub" x-show="!g.trashDescription">Optional CFs you can add to this profile. Toggle individual entries below.</p>
+
+            <!-- Mass-toggle for the whole group — mirrors the Profile
+                 default tab's "All optional CFs" action row. Renders
+                 only when the group has 2+ CFs so it doesn't add noise
+                 for single-CF groups (those have their own row toggle). -->
+            <template x-if="spAdditionalGroupCFs(g).length >= 2">
+              <div class="sp-action-rows">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'Toggle every CF in this group on or off at once.'"
+                        @click.stop>
+                    <input type="checkbox"
+                           :checked="spAdditionalGroupCFs(g).every(cf => !!selectedOptionalCFs[cf.trashId])"
+                           @change="(() => {
+                             const enabling = $event.target.checked;
+                             for (const cf of spAdditionalGroupCFs(g)) {
+                               const on = !!selectedOptionalCFs[cf.trashId];
+                               if (enabling !== on) toggleOptionalCF(cf.trashId);
+                             }
+                           })()">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">All CFs in this group</span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const cfs = spAdditionalGroupCFs(g);
+                          const on = cfs.filter(cf => !!selectedOptionalCFs[cf.trashId]).length;
+                          return on + ' of ' + cfs.length + ' enabled';
+                        })()"></span>
+                </label>
+              </div>
+            </template>
+
             <div class="sp-cf-list">
               <!-- Use spAdditionalGroupCFs(g) so CFs that are already
                    active via another group don't appear here (Unwanted

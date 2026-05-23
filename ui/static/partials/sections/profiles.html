@@ -47,6 +47,10 @@
                   </div>
                   <div></div>
                   <div style="text-align:right;padding-right:4px">ID</div>
+                  <!-- Notes column slot — no header label; just reserves
+                       width so the Arr profile column stays aligned
+                       across rows with and without notes. -->
+                  <div></div>
                   <div>
                     <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('arr')"
                             :aria-sort="syncRulesSort.col === 'arr' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
@@ -74,17 +78,28 @@
                        :class="{ orphaned: sh.orphanedAt }"
                        x-data="{ editing: false, newName: '' }">
                     <!-- TRaSH profile name (neutral, no link-blue) -->
-                    <div class="v3-prof-trash"
-                         x-data="{ get _trashProf() { return (trashProfiles[activeAppType] || []).find(p => p.name === sh.profileName); } }">
+                    <div class="v3-prof-trash">
                       <span class="v3-prof-trash-name" x-text="sh.profileName"></span>
-                      <span class="v3-prof-trash-info" x-show="_trashProf?.trashDescription"
-                            @mouseenter="_trashProf?.trashDescription && showCFTooltip($event, _trashProf.trashDescription)"
-                            @mouseleave="hideCFTooltip()">&#9432;</span>
                     </div>
                     <div class="v3-arrow">&rarr;</div>
                     <!-- ID column — fixed position so the column lines up
                          vertically regardless of Arr profile name length. -->
                     <div class="v3-id-cell" x-text="sh.arrProfileId"></div>
+                    <!-- Notes-info column — fixed slot between ID and Arr
+                         profile name so the name doesn't shift when a
+                         rule has notes. The Lucide "info" icon hovers to
+                         show the user's markdown-rendered notes via the
+                         shared tooltip portal. Always reserves space;
+                         only renders the icon when notes exist. -->
+                    <div class="v3-notes-cell"
+                         x-data="{ get _ruleDesc() { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return (r?.description || '').trim(); } }">
+                      <span class="v3-notes-icon" x-show="_ruleDesc"
+                            @mouseenter="_ruleDesc && showCFTooltip($event, renderMarkdownPreview(_ruleDesc))"
+                            @mouseleave="hideCFTooltip()"
+                            aria-label="View notes for this sync rule">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                      </span>
+                    </div>
                     <!-- Arr profile (with rename) -->
                     <div class="v3-prof-arr">
                       <template x-if="sh.orphanedAt">

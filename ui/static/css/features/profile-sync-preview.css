@@ -137,6 +137,20 @@
 }
 .sp-basics-quality-launcher:hover { text-decoration: underline; }
 
+/* Clean state — "Profile default" + small edit pencil. The pencil is
+   the only interactive element; the text itself is read-only. */
+.sp-basics-val-clean {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-secondary);
+}
+.sp-basics-edit-icon {
+  background: transparent; border: 0; padding: 2px 4px;
+  color: var(--text-muted); font-size: 12px; line-height: 1;
+  cursor: pointer; border-radius: 3px;
+  font-family: inherit;
+}
+.sp-basics-edit-icon:hover { color: var(--accent-blue); background: var(--bg-elevated); }
+
 /* CF score inline editor — replaces .sp-cf-score in editor mode.
    Compact number input + adjacent reset-icon (only when overridden).
    Sits in the same right-aligned column as the read-only score so
@@ -382,6 +396,7 @@ button.sp-summary-active:focus-visible {
 .sp-sub-nav-group.cat-required           { --cat: var(--cat-required); }
 .sp-sub-nav-group.cat-sqp                { --cat: var(--cat-sqp); }
 .sp-sub-nav-group.cat-other              { --cat: var(--cat-other); }
+.sp-sub-nav-group.cat-custom             { --cat: var(--cat-custom); }
 
 /* ===== Main content ===== */
 .sp-content {
@@ -673,6 +688,61 @@ button.sp-summary-active:focus-visible {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 400;
+}
+
+/* Notes card — collapsible compact variant. Header acts as the toggle
+   and shows a snippet of the notes (or "+ Add notes" CTA) when
+   collapsed so the user gets at-a-glance context without expanding. */
+.sp-ov-notes-card { padding: 0; }
+.sp-ov-notes-header {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent; border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-body);
+  border-radius: 7px;
+}
+.sp-ov-notes-header:hover { background: var(--bg-elevated-hover); }
+.sp-ov-notes-label {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-body);
+  flex-shrink: 0;
+}
+.sp-ov-notes-snippet {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-ov-notes-empty {
+  font-size: 12px;
+  color: var(--accent-blue);
+  font-weight: 500;
+  flex: 1; min-width: 0;
+}
+.sp-ov-notes-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.sp-ov-notes-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: -1px; /* avoid double border with header */
+}
+.sp-ov-notes-toolbar-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding-top: 10px; margin-bottom: 8px;
+}
+.sp-ov-notes-help {
+  flex: 1; min-width: 0;
+  margin: 0;
+  font-size: 12px; line-height: 1.45;
+  color: var(--text-secondary);
 }
 /* "Show CF Groups" toggle — pinned right in the card title. Shared
    spOverviewGroupCFs state across all three CF section cards, persisted
@@ -988,6 +1058,21 @@ button.sp-summary-active:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* When Customize is on, the whole chip area acts as a click target
+   that opens the Quality Items editor. Subtle hover affordance so
+   the cursor + faint outline tell the user the area is interactive. */
+.sp-ov-quality-list-editable {
+  cursor: pointer;
+  padding: 6px;
+  margin: -6px;
+  border-radius: 4px;
+  transition: background 0.12s, outline-color 0.12s;
+  outline: 1px dashed transparent;
+}
+.sp-ov-quality-list-editable:hover {
+  background: var(--bg-elevated-hover);
+  outline-color: var(--border-subtle);
 }
 .sp-ov-quality-chip {
   font-size: 12px;
