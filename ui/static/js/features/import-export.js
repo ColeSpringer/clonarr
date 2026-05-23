@@ -172,7 +172,6 @@ export default {
     async openImportedProfileDetail(appType, profile) {
       this.syncPlan = null;
       this.syncResult = null;
-      this.showProfileInfo = false;
       this.selectedOptionalCFs = {};
 
       // If this imported profile has a trashProfileId, use TRaSH detail endpoint

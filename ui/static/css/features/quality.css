@@ -1,3 +1,59 @@
+  /* Quality Definitions — Type picker pills (Movies / Series / Anime / …) */
+  .qs-type-btn {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 3px 12px;
+    border-radius: 14px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .qs-type-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+  .qs-type-btn.active {
+    color: var(--app-color);
+    border-color: var(--app-color);
+    background: var(--app-glow);
+  }
+
+  /* Quality Definitions — per-row Sync Mode toggle (Auto / Custom).
+     Subtle toggle styling instead of primary/danger button colors —
+     Auto is the neutral default, Custom flips to an orange-tinted
+     hint that user values diverge from TRaSH. */
+  .qs-mode-btn {
+    background: transparent;
+    border: 1px solid var(--border-muted);
+    color: var(--text-muted);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+    line-height: 1.4;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .qs-mode-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+  .qs-mode-btn.is-custom {
+    color: var(--cat-hq-release-groups);
+    border-color: var(--accent-orange);
+    background: var(--accent-orange-bg);
+  }
+
+  /* Quality Definitions — per-row Sync action. Compact text-link
+     style, blue (same external-action convention as the guide/json
+     links on Custom Formats). Only renders when the row's values
+     actually differ from TRaSH. */
+  .qs-sync-btn {
+    background: transparent;
+    border: 0;
+    color: var(--accent-blue);
+    padding: 1px 4px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .qs-sync-btn:hover { filter: brightness(1.2); }
+
   /* Quality sizes */
   .qs-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--bg-muted); gap: 12px; }
   .qs-row:last-child { border-bottom: none; }

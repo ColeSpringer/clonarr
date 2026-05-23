@@ -143,6 +143,12 @@ type AutoSyncRule struct {
 	QualityStructure []QualityItem   `json:"qualityStructure,omitempty"` // full structure override (replaces TRaSH items). Trumps QualityOverrides when set.
 	Behavior         *SyncBehavior   `json:"behavior,omitempty"`         // sync behavior rules (nil = defaults)
 	Overrides        *SyncOverrides  `json:"overrides,omitempty"`        // user overrides (min score, language, cutoff, etc.)
+	// Description: free-form user notes about this sync rule — what the
+	// profile is for, why specific customizations were made, etc.
+	// Markdown supported (rendered via the same minimal subset as CF
+	// descriptions). Surfaced as a hover-info icon next to the Arr
+	// profile name in the Sync Rules table.
+	Description string `json:"description,omitempty"`
 	LastSyncCommit string `json:"lastSyncCommit,omitempty"`
 	// LastSyncTime is the timestamp of the last SUCCESSFUL sync — bumped by
 	// the auto-sync engine (UpdateAutoSyncRuleCommit), manual /api/sync/apply,
@@ -314,6 +320,13 @@ type Instance struct {
 	Type   string `json:"type"` // "radarr" or "sonarr"
 	URL    string `json:"url"`
 	APIKey string `json:"apiKey"`
+	// AutoSyncPaused, when true, skips non-user-initiated sync for this
+	// instance only. AutoSyncAfterPull, ForceSyncAllRules, and the
+	// sync-schedule timer all silently drop rules belonging to a paused
+	// instance. Manual actions ("Sync now", "Sync all", "Save & Sync"
+	// from the profile editor) are unaffected. Default false. Replaces
+	// the prior global AutoSync.Paused flag — see migrateGlobalPauseToInstances.
+	AutoSyncPaused bool `json:"autoSyncPaused,omitempty"`
 }
 
 // TrashRepo holds TRaSH Guides repository settings.

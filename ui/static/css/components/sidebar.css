@@ -1,0 +1,550 @@
+/* v3 sidebar shell — empty placeholders today, filled in over subsequent
+   commits. App switcher (Radarr/Sonarr) is functional from day 1.
+   All colors come from tokens.css for light/dark theme support. */
+
+:root {
+  --sidebar-w: 244px;
+  --sidebar-w-collapsed: 60px;
+}
+
+/* --app-color / --app-glow cascade now lives in tokens.css at :root scope,
+   flipped by [data-app="sonarr"] on the x-data wrapper. Both sidebar and
+   the main-pane banner pick it up via inheritance. */
+
+/* Make the root layout a sidebar+main grid — only when navStyle is
+   "sidebar". The topnav mode (data-nav-style="topnav") falls back to the
+   default block stack so the topnav + main flow as a normal vertical
+   column. Modals + overlays (other direct children) use position:fixed
+   so they're not affected by grid placement. */
+[x-data="clonarr"][data-nav-style="sidebar"] {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  transition: grid-template-columns 0.22s ease;
+}
+[x-data="clonarr"][data-nav-style="sidebar"]:has(.sidebar.collapsed) {
+  grid-template-columns: var(--sidebar-w-collapsed) 1fr;
+}
+[x-data="clonarr"][data-nav-style="sidebar"] > .noauth-banner {
+  grid-row: 1;
+  grid-column: 1 / -1;
+}
+[x-data="clonarr"][data-nav-style="sidebar"] > .sidebar {
+  grid-row: 2;
+  grid-column: 1;
+}
+[x-data="clonarr"][data-nav-style="sidebar"] > main {
+  grid-row: 2;
+  grid-column: 2;
+}
+/* Topnav mode — the .topnav element is always in the DOM, but x-show
+   collapses it to display:none in sidebar mode. Same for the sidebar in
+   topnav mode. */
+[x-data="clonarr"][data-nav-style="topnav"] {
+  display: block;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/* Every non-scrollable row gets flex-shrink: 0 so the nav (which has
+   flex: 1 + overflow-y: auto) is the only thing that yields when the
+   viewport is short. Without this, on small screens the footer would
+   shrink out of view. */
+.sidebar > * { flex-shrink: 0; }
+
+/* Top accent stripe */
+.sidebar-strip {
+  height: 4px;
+  background: linear-gradient(90deg, var(--app-color), transparent 100%);
+}
+
+/* Brand row — first thing in the sidebar, no top border so it sits
+   flush with the viewport. Border-bottom moves to the tagline below. */
+.sidebar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 6px;
+}
+.sidebar.collapsed .sidebar-brand { justify-content: center; }
+.sidebar-logo {
+  width: 28px; height: 28px; border-radius: 6px;
+  flex-shrink: 0; object-fit: cover;
+}
+.sidebar-name { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.sidebar-version {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+
+/* Collapse toggle — own row below brand */
+.sidebar-collapse-toggle {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border: none;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: color 0.1s, background 0.1s;
+}
+.sidebar-collapse-toggle:hover { color: var(--app-color); background: var(--bg-elevated-hover); }
+.sidebar-collapse-chev {
+  display: inline-block;
+  transition: transform 0.22s ease;
+  font-size: 14px; line-height: 1;
+}
+.sidebar-collapse-chev.flip { transform: rotate(180deg); }
+
+/* App switcher */
+.sidebar-app-switcher {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border-muted);
+  background: linear-gradient(180deg, var(--app-glow) 0%, transparent 100%);
+}
+.sidebar.collapsed .sidebar-app-switcher { padding: 8px 6px; }
+.sidebar-app-label {
+  font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text-muted);
+  padding: 0 4px 6px;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sidebar-app-now { color: var(--app-color); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.sidebar-app-pill {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--bg-page);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+}
+.sidebar.collapsed .sidebar-app-pill { grid-template-columns: 1fr; gap: 5px; padding: 3px; }
+.sidebar-app-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.sidebar.collapsed .sidebar-app-btn { padding: 6px 0; gap: 0; font-size: 11px; }
+.sidebar-app-btn:hover { background: var(--bg-elevated); color: var(--text-body); }
+.sidebar-app-logo {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.sidebar.collapsed .sidebar-app-logo { width: 20px; height: 20px; }
+.sidebar-app-full { font-weight: 600; }
+.sidebar-app-num { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.sidebar-app-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text-body);
+  box-shadow: 0 0 0 1.5px var(--app-color), 0 0 12px var(--app-glow);
+}
+.sidebar-app-btn.active .sidebar-app-num { color: var(--text-body); }
+
+/* Main nav — the only flex child that grows AND shrinks. min-height: 0
+   lets it shrink past its content height (required for inner scrollbar to
+   appear instead of the whole flex column overflowing). */
+.sidebar-nav {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* padding-bottom leaves room for the fixed-position .sidebar-foot so
+     the last nav items aren't hidden behind it when scrolled to. */
+  padding: 8px 0 130px;
+}
+.sidebar-section-label {
+  font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding: 14px 18px 6px;
+  font-weight: 600;
+}
+.sidebar.collapsed .sidebar-section-label { display: none; }
+
+.sidebar-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 8px 18px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13.5px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.sidebar-nav-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text-body);
+}
+.sidebar-nav-item.active {
+  background: var(--bg-elevated);
+  color: var(--text-body);
+  border-left-color: var(--app-color);
+  font-weight: 600;
+}
+.sidebar-nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.sidebar-nav-item.active .sidebar-nav-icon { color: var(--app-color); }
+.sidebar-nav-label { flex: 1; }
+
+.sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 9px 0;
+}
+
+/* Sub-nav (indented) */
+.sidebar-subnav {
+  display: flex; flex-direction: column;
+  padding: 2px 0 4px;
+}
+.sidebar-subnav-item {
+  display: block;
+  padding: 5px 18px 5px 48px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  position: relative;
+  transition: background 0.1s, color 0.1s;
+}
+.sidebar-subnav-item:hover { background: var(--bg-elevated); color: var(--text-body); }
+.sidebar-subnav-item.active {
+  color: var(--app-color);
+  font-weight: 500;
+}
+.sidebar-subnav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 35px; top: 50%;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--app-color);
+  transform: translateY(-50%);
+}
+
+/* User row was relocated to the app banner top-right in Sprint 2.
+   See css/components/app-banner.css for the .app-banner-user* rules. */
+
+/* ------------------------------------------------------------------
+   TRaSH sync footer
+   ------------------------------------------------------------------ */
+/* Pinned to the bottom of the viewport via position:fixed so it's always
+   visible regardless of whether the sidebar's sticky layout is working.
+   Width tracks the sidebar (244px expanded / 60px collapsed) with the
+   same transition, so the foot stays visually attached to the sidebar
+   even though it's an independent fixed element. */
+.sidebar-foot {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  z-index: 51;
+  border-top: 1px solid var(--border-muted);
+  border-right: 1px solid var(--border-subtle);
+  padding: 10px 14px;
+  background: var(--bg-card);
+  display: flex; flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  transition: width 0.22s ease, padding 0.22s ease;
+}
+.sidebar.collapsed .sidebar-foot {
+  width: var(--sidebar-w-collapsed);
+  padding: 10px 0;
+  align-items: center;
+}
+
+.sidebar-trash-status {
+  display: flex; align-items: flex-start; gap: 8px;
+  min-width: 0;
+}
+.sidebar.collapsed .sidebar-trash-status { gap: 0; }
+
+.sidebar-trash-dot {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.sidebar-trash-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; flex-direction: column;
+  gap: 1px;
+  flex: 1; min-width: 0;
+  transition: color 0.1s;
+}
+.sidebar-trash-button:hover { color: var(--text-body); }
+
+.sidebar-trash-notsynced {
+  display: flex; flex-direction: column;
+  gap: 1px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sidebar-trash-line1 {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  font-weight: 500;
+}
+.sidebar-trash-label { font-weight: 500; }
+.sidebar-trash-time { font-weight: 400; color: var(--text-secondary); }
+.sidebar-trash-chev {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.sidebar-trash-chev.flip { transform: rotate(180deg); }
+
+.sidebar-trash-line2 {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sidebar-trash-commit { font-family: var(--font-mono, ui-monospace, monospace); }
+.sidebar-trash-next { color: var(--text-muted); }
+
+.sidebar-trash-pull {
+  /* Inherit .btn .btn-sm; just constrain to footer width when expanded
+     and shrink to icon size when collapsed. */
+  width: 100%;
+  justify-content: center;
+}
+.sidebar.collapsed .sidebar-trash-pull {
+  width: 36px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------
+   Changelog popover — teleported to <body>, anchored to the right of
+   the sidebar's bottom-left corner.
+   ------------------------------------------------------------------ */
+.sidebar-trash-popover {
+  position: fixed;
+  left: calc(var(--sidebar-w) + 8px);
+  bottom: 16px;
+  width: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  font-size: 12px;
+  color: var(--text-body);
+}
+body:has(.sidebar.collapsed) .sidebar-trash-popover {
+  left: calc(var(--sidebar-w-collapsed) + 8px);
+}
+
+.sidebar-trash-popover-header {
+  padding: 10px 16px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-muted);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-trash-popover-header .dim {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.sidebar-trash-popover-header .commit-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+}
+.sidebar-trash-popover-header .arrow { margin: 0 4px; }
+
+.sidebar-trash-popover-diff {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-body);
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.sidebar-trash-popover-empty {
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sidebar-trash-popover-section {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-muted);
+}
+.sidebar-trash-popover-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex; justify-content: space-between;
+}
+.sidebar-trash-popover-date .dim {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sidebar-trash-popover-entry {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.sidebar-trash-popover-entry .entry-type {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.sidebar-trash-popover-entry .entry-type.is-feat {
+  background: var(--badge-feat-bg, color-mix(in srgb, var(--accent-green) 18%, transparent));
+  color: var(--accent-green);
+}
+.sidebar-trash-popover-entry .entry-type.is-fix {
+  background: var(--accent-orange-bg, color-mix(in srgb, var(--accent-orange) 18%, transparent));
+  color: var(--accent-orange);
+}
+.sidebar-trash-popover-entry .entry-type.is-other {
+  background: var(--bg-panel);
+  color: var(--accent-blue);
+}
+.sidebar-trash-popover-entry .entry-scope { color: var(--text-muted); }
+.sidebar-trash-popover-entry .entry-msg { color: var(--text-body); }
+.sidebar-trash-popover-entry .entry-pr {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: none;
+  margin-left: 4px;
+  transition: color 0.1s;
+}
+.sidebar-trash-popover-entry .entry-pr:hover { color: var(--accent-blue); }
+
+/* ------------------------------------------------------------------
+   No-auth banner (full-width, lives outside the sidebar)
+   ------------------------------------------------------------------ */
+.noauth-banner {
+  background: var(--banner-warn-bg);
+  border-bottom: 2px solid var(--banner-warn-border);
+  color: var(--banner-warn-text);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  grid-column: 1 / -1;
+}
+.noauth-banner-msg { flex: 1; text-align: center; }
+.noauth-banner-dismiss {
+  background: color-mix(in srgb, var(--banner-warn-text) 12%, transparent);
+  color: var(--banner-warn-text);
+  border: 1px solid color-mix(in srgb, var(--banner-warn-text) 30%, transparent);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* Defensive: belt-and-suspenders for the topnav/sidebar swap. x-show
+   on each root should already hide the inactive one, but a user reported
+   seeing the TRaSH-sync indicator from .topnav rendering above the
+   sidebar+app-banner in sidebar mode. Forcing display:none on the
+   inactive nav via the data-nav-style attribute on the x-data root
+   guarantees mutual exclusion even if Alpine x-show ever flickers (init
+   race, scope quirk, anything). Gated on the attribute (NOT on element
+   existence) so the old `body:has(.sidebar)` over-match doesn't recur —
+   when the user switches to topnav, data-nav-style becomes "topnav" and
+   this rule simply stops matching. */
+[x-data="clonarr"][data-nav-style="sidebar"] > .topnav { display: none !important; }
+[x-data="clonarr"][data-nav-style="topnav"] > .sidebar,
+[x-data="clonarr"][data-nav-style="topnav"] > main > .app-banner { display: none !important; }
+
+/* Collapsed-sidebar sub-nav flyout. Rendered as a sibling of <aside>
+   (NOT inside it) so .sidebar's overflow:hidden does not clip the popup.
+   Position is fixed-to-viewport, anchored just past the collapsed
+   sidebar's right edge; top is captured from the clicked icon's
+   getBoundingClientRect on open so the popup aligns with the icon. */
+.sidebar-subnav-popup {
+  position: fixed;
+  left: calc(var(--sidebar-w-collapsed) + 6px);
+  min-width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 6px 0;
+  z-index: 80;
+}
+.sidebar-subnav-popup-header {
+  padding: 4px 12px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-muted);
+  margin-bottom: 4px;
+}
+.sidebar-subnav-popup-item {
+  display: block;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+}
+.sidebar-subnav-popup-item:hover {
+  background: var(--bg-elevated-hover);
+  color: var(--text-body);
+}
+.sidebar-subnav-popup-item.active {
+  background: var(--bg-elevated);
+  color: var(--app-color);
+  border-left-color: var(--app-color);
+}

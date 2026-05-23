@@ -4,368 +4,466 @@
 
 
 
-        <!-- ===== TRaSH Sync tab ===== -->
-        <div class="page" x-show="getProfileTab(activeAppType) === 'trash-sync'">
-          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Quality Profiles</div>
+        <!-- ===== Sync Rules tab ===== -->
+        <div class="page" x-show="getProfileTab(activeAppType) === 'sync-rules'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Sync Rules</div>
           <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            TRaSH Guides quality profiles — click a profile to view its contents, customize groups, and sync to your <span x-text="activeAppLabel"></span> instance. Manage sync rules, auto-sync, and overrides from the Sync Rules section below.
+            Your active TRaSH sync rules for this <span x-text="activeAppLabel"></span> instance. Toggle auto-sync, edit per-rule overrides, or re-sync on demand. Add new rules from the <strong>TRaSH Profiles</strong> tab.
           </div>
-          <!-- Auto-sync paused banner -->
-          <template x-if="autoSyncSettings.paused">
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:var(--accent-orange-bg);border:1px solid var(--accent-orange);border-radius:6px;color:var(--cat-hq-release-groups);font-size:13px">
-              <span style="font-size:16px">⏸</span>
-              <div style="flex:1">
-                <div style="font-weight:600">Auto-sync paused</div>
-                <div style="font-size:12px;color:var(--accent-orange);margin-top:2px">Scheduled and after-pull syncs are skipped. Manual actions ("Sync All", per-rule "Sync now", Save &amp; Sync from a profile) still work.</div>
+
+          <!-- Per-instance cards. Each card carries its own auto-sync
+               pause state (v3 — per-instance, not global). When paused,
+               the Pause action flips to Resume + a chip in the header
+               makes the state obvious without an outer banner. -->
+          <template x-for="inst in instancesOfType(activeAppType)" :key="'sr-'+inst.id">
+            <template x-if="sortedSyncRules(inst.id).length > 0">
+              <div class="v3-inst-card">
+                <div class="v3-inst-header">
+                  <span class="v3-inst-name" x-text="inst.name"></span>
+                  <span class="v3-inst-count" x-text="sortedSyncRules(inst.id).length + ' rule' + (sortedSyncRules(inst.id).length !== 1 ? 's' : '')"></span>
+                  <span class="v3-inst-actions">
+                    <!-- Pause/Resume share one slot. When not paused the
+                         button is a plain Pause action; when paused the
+                         same button reflects current state ("Auto-sync
+                         paused") AND acts as the Resume trigger on click.
+                         Single source of truth — no separate chip needed. -->
+                    <button class="v3-inst-action"
+                            x-show="!inst.autoSyncPaused"
+                            @click.stop="setInstancePaused(inst.id, true)"
+                            x-tt="'Pause auto-sync for this instance. Scheduled + after-pull syncs are skipped. Manual actions still work.'">&#9208; Pause</button>
+                    <button class="v3-inst-action v3-inst-action-resume"
+                            x-show="inst.autoSyncPaused"
+                            @click.stop="setInstancePaused(inst.id, false)"
+                            x-tt="'Auto-sync is paused for this instance — click to resume. Scheduled + after-pull syncs are skipped while paused; manual actions still work.'">&#9208; Auto-sync paused</button>
+                    <button class="v3-inst-action" @click.stop="syncAllForInstance(inst)" x-tt="'Re-sync all profiles with auto-sync enabled on this instance'">Sync all</button>
+                  </span>
+                </div>
+                <div class="v3-rule-grid v3-col-header">
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('trash')"
+                            :aria-sort="syncRulesSort.col === 'trash' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      TRaSH Profile<span class="arr" x-show="syncRulesSort.col==='trash'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div></div>
+                  <div style="text-align:right;padding-right:4px">ID</div>
+                  <!-- Notes column slot — no header label; just reserves
+                       width so the Arr profile column stays aligned
+                       across rows with and without notes. -->
+                  <div></div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('arr')"
+                            :aria-sort="syncRulesSort.col === 'arr' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Arr Profile<span class="arr" x-show="syncRulesSort.col==='arr'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('lastSync')"
+                            :aria-sort="syncRulesSort.col === 'lastSync' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Last sync<span class="arr" x-show="syncRulesSort.col==='lastSync'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleSyncRulesSort('status')"
+                            :aria-sort="syncRulesSort.col === 'status' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Status<span class="arr" x-show="syncRulesSort.col==='status'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>Auto-sync</div>
+                  <div>Customizations</div>
+                  <div></div>
+                </div>
+                <template x-for="sh in sortedSyncRules(inst.id)" :key="sh.arrProfileId">
+                  <div class="v3-rule-grid v3-rule-row"
+                       :class="{ orphaned: sh.orphanedAt }"
+                       x-data="{ editing: false, newName: '' }">
+                    <!-- TRaSH profile name (neutral, no link-blue) -->
+                    <div class="v3-prof-trash">
+                      <span class="v3-prof-trash-name" x-text="sh.profileName"></span>
+                    </div>
+                    <div class="v3-arrow">&rarr;</div>
+                    <!-- ID column — fixed position so the column lines up
+                         vertically regardless of Arr profile name length. -->
+                    <div class="v3-id-cell" x-text="sh.arrProfileId"></div>
+                    <!-- Notes-info column — fixed slot between ID and Arr
+                         profile name so the name doesn't shift when a
+                         rule has notes. The Lucide "info" icon hovers to
+                         show the user's markdown-rendered notes via the
+                         shared tooltip portal. Always reserves space;
+                         only renders the icon when notes exist. -->
+                    <div class="v3-notes-cell"
+                         x-data="{ get _ruleDesc() { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return (r?.description || '').trim(); } }">
+                      <span class="v3-notes-icon" x-show="_ruleDesc"
+                            @mouseenter="_ruleDesc && showCFTooltip($event, renderMarkdownPreview(_ruleDesc))"
+                            @mouseleave="hideCFTooltip()"
+                            aria-label="View notes for this sync rule">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                      </span>
+                    </div>
+                    <!-- Arr profile (with rename) -->
+                    <div class="v3-prof-arr">
+                      <template x-if="sh.orphanedAt">
+                        <span>
+                          <span class="v3-prof-arr-orph" x-text="sh.arrProfileName"></span>
+                          <span class="v3-prof-arr-orph-tag" x-tt="'Profile deleted in Arr — ' + (sh.orphanedAt || '')">orphaned</span>
+                        </span>
+                      </template>
+                      <template x-if="!sh.orphanedAt && !editing">
+                        <button type="button" class="v3-prof-arr-rename"
+                                @click.stop="newName = sh.arrProfileName; editing = true"
+                                x-tt="'Click to rename in Arr'"
+                                x-text="sh.arrProfileName"></button>
+                      </template>
+                      <template x-if="editing">
+                        <input type="text" class="input" style="width:180px;font-size:12.5px;padding:2px 6px"
+                               x-model="newName"
+                               autocomplete="off"
+                               data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                               name="arr-profile-rename"
+                               @keyup.enter="if(newName.trim() && newName.trim() !== sh.arrProfileName) { renameArrProfile(inst, sh, newName.trim()); } editing = false"
+                               @keyup.escape="editing = false"
+                               @click.outside="editing = false"
+                               x-init="$nextTick(() => { $el.focus(); $el.select(); })">
+                      </template>
+                    </div>
+                    <!-- Last sync -->
+                    <div class="v3-last-sync"
+                         :class="{ never: !(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncTime) }"
+                         x-text="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r?.lastSyncTime ? timeAgo(r.lastSyncTime) : 'Never'; })()"></div>
+                    <!-- Status pill -->
+                    <div>
+                      <template x-if="!sh.orphanedAt">
+                        <span class="v3-status"
+                              :class="v3RuleStatus(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
+                              x-tt="v3RuleStatusTip(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
+                              x-text="v3RuleStatusLabel(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"></span>
+                      </template>
+                      <template x-if="sh.orphanedAt">
+                        <span class="v3-status failed" x-tt="'Arr profile was deleted'">Orphaned</span>
+                      </template>
+                    </div>
+                    <!-- Auto-sync toggle -->
+                    <div class="v3-auto-cell">
+                      <label class="toggle toggle-sm" @click.stop x-tt="sh.orphanedAt ? 'Restore the profile to re-enable auto-sync' : 'Toggle auto-sync for this profile'">
+                        <input type="checkbox"
+                               :disabled="!!sh.orphanedAt"
+                               :checked="!sh.orphanedAt && autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled"
+                               @change="(() => { if (sh.orphanedAt) return; const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId); if (rule) toggleAutoSyncRule(rule); })()">
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <!-- Customizations -->
+                    <div>
+                      <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && v3RuleCustomizations(r).total > 0; })()">
+                        <span class="v3-cust-pill"
+                              x-data="{ get _summary() { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return v3RuleCustomizations(r); } }"
+                              x-tt="(() => { const p = []; if (_summary.quality)      p.push('Quality: '       + _summary.quality);      if (_summary.extraCFs)     p.push('Extra CFs: '     + _summary.extraCFs);     if (_summary.customScores) p.push('Custom scores: ' + _summary.customScores); if (_summary.general)      p.push('General: '       + _summary.general);      if (_summary.excludedCFs)  p.push('Excluded CFs: '  + _summary.excludedCFs);  return p.join('\n'); })()"
+                              x-text="_summary.total + ' change' + (_summary.total !== 1 ? 's' : '')"></span>
+                      </template>
+                      <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return !r || v3RuleCustomizations(r).total === 0; })()">
+                        <span class="v3-cust-empty">—</span>
+                      </template>
+                    </div>
+                    <!-- Actions -->
+                    <div class="v3-actions">
+                      <template x-if="sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync rule'">&#9998;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="quickSync(inst, sh)" x-tt="'Re-sync with saved settings'">&#8635;</button>
+                      </template>
+                      <template x-if="!sh.orphanedAt">
+                        <button class="v3-action-icon" @click.stop="cloneProfile(inst, sh)" x-tt="'Clone to new profile'">&#10697;</button>
+                      </template>
+                      <button class="v3-action-icon danger" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" x-tt="sh.orphanedAt ? 'Permanently remove this orphaned sync rule and history' : 'Remove sync rule'">&#10005;</button>
+                    </div>
+                  </div>
+                </template>
               </div>
-              <button class="btn btn-sm" style="border-color:var(--accent-orange);color:var(--cat-hq-release-groups);font-size:12px" @click="setAutoSyncPaused(false)">▶ Resume</button>
+            </template>
+          </template>
+          <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
+            <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No sync rules yet. Sync a profile from the <strong>TRaSH Profiles</strong> tab to get started.</div>
+          </template>
+
+        </div>
+        <!-- end Sync Rules tab -->
+
+        <!-- ===== TRaSH Profiles tab ===== -->
+        <div class="page tpd-page"
+             :class="tpdView === 'list' ? 'tpd-view-list' : 'tpd-view-grid'"
+             x-show="getProfileTab(activeAppType) === 'trash-profiles'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">TRaSH Profiles</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">
+            Browse TRaSH-Guides quality profiles. Each card describes what the profile gives you — pick one, then click "Use →" to set up a sync rule for your <span x-text="activeAppLabel"></span> instance.
+          </div>
+
+          <template x-if="trashProfileDescriptions[activeAppType] && trashProfileDescriptions[activeAppType].length > 0">
+            <div>
+              <!-- Toolbar: search + category pills · feature pills + view
+                   toggle, all on the same flex row. Wraps naturally on
+                   narrow screens. Visual separator (·) between category
+                   and feature pill groups so the two dimensions are
+                   distinguishable without labels. Category-list order
+                   matches the on-page section ordering (Standard, SQP,
+                   Anime, foreign-language). -->
+              <div class="tpd-toolbar">
+                <input class="tpd-search" placeholder="Search profiles…" x-model="tpdSearch">
+                <button class="tpd-chip" :class="{ active: tpdCategoryFilters.length === 0 }" @click="tpdClearCategories()">All</button>
+                <template x-for="cat in tpdCategoryList(activeAppType)" :key="cat">
+                  <button class="tpd-chip" :class="{ active: tpdIsCategoryActive(cat) }" @click="tpdToggleCategory(cat)" x-text="cat"></button>
+                </template>
+                <span class="tpd-toolbar-sep" aria-hidden="true">·</span>
+                <button class="tpd-chip" :class="{ active: tpdFeatureFilters.length === 0 }" @click="tpdClearFeatures()">All</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('hd') }" @click="tpdToggleFeature('hd')">1080p</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('uhd') }" @click="tpdToggleFeature('uhd')">4K / UHD</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('hdr') }" @click="tpdToggleFeature('hdr')">HDR</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('lossless') }" @click="tpdToggleFeature('lossless')">Lossless audio</button>
+                <button class="tpd-chip" :class="{ active: tpdIsFeatureActive('in-use') }" @click="tpdToggleFeature('in-use')">In use</button>
+                <div class="tpd-view-toggle" role="group" aria-label="View mode">
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'grid' }" @click="tpdSetView('grid')">Grid</button>
+                  <button class="tpd-view-btn" :class="{ active: tpdView === 'list' }" @click="tpdSetView('list')">List</button>
+                  <button x-show="tpdView === 'list'" class="tpd-view-btn"
+                          @click="tpdAnyOpen() ? tpdCollapseAll() : tpdExpandAll(activeAppType)"
+                          x-text="tpdAnyOpen() ? 'Collapse all' : 'Expand all'"></button>
+                </div>
+              </div>
+
+              <!-- Category sections -->
+              <template x-for="cat in tpdGrouped(activeAppType)" :key="cat.name">
+                <section class="tpd-cat">
+                  <div class="tpd-cat-head">
+                    <span class="tpd-cat-name" x-text="cat.name"></span>
+                    <span class="tpd-cat-count" x-text="cat.profiles.length + (cat.profiles.length === 1 ? ' profile' : ' profiles')"></span>
+                  </div>
+                  <div class="tpd-grid">
+                    <template x-for="d in cat.profiles" :key="d.trashId">
+                      <article class="tpd-card"
+                               :class="{
+                                 'in-use': tpdProfileInUse(activeAppType, d.trashId),
+                                 'open': tpdIsOpen(d.trashId)
+                               }">
+                        <div class="tpd-card-title-row"
+                             :class="{ 'no-tagline': tpdIsMinimalCard(d) }"
+                             @click="tpdView === 'list' && tpdToggleOpen(d.trashId)">
+                          <span class="tpd-card-chevron">&#9654;</span>
+                          <h3 class="tpd-card-title" x-text="d.name"></h3>
+                          <span x-show="tpdView === 'list' && !tpdIsMinimalCard(d)" class="tpd-card-list-tagline"
+                                x-text="(d.tagline || '') + (d.axes?.avgSize ? ' · ' + d.axes.avgSize : '')"></span>
+                          <span class="tpd-used-mark" x-show="tpdProfileInUse(activeAppType, d.trashId)" x-tt="tpdInUseTooltip(activeAppType, d.trashId)" @click.stop>in use</span>
+                        </div>
+
+                        <div class="tpd-card-body" x-show="tpdView === 'grid' || tpdIsOpen(d.trashId)">
+                          <p class="tpd-card-tagline" x-show="d.tagline && !tpdIsMinimalCard(d)" x-text="d.tagline"></p>
+                          <div class="tpd-disclaimer" x-show="d.disclaimer">
+                            <strong>Notice from TRaSH-Guides</strong>
+                            <span>
+                              <span x-text="d.disclaimer?.before"></span><a x-show="d.disclaimer?.linkUrl" :href="d.disclaimer?.linkUrl" target="_blank" rel="noopener" x-text="d.disclaimer?.linkText"></a><span x-text="d.disclaimer?.after"></span>
+                            </span>
+                          </div>
+                          <div class="tpd-pills">
+                            <span class="tpd-pill" x-text="tpdResolutionLabel(d)"></span>
+                            <span class="tpd-pill" x-text="tpdSourceLabel(d)"></span>
+                            <span class="tpd-pill" :class="d.axes?.audio?.scored ? 'aud' : ''" x-text="tpdAudioPillText(d)"></span>
+                            <span class="tpd-pill vid" x-show="d.axes?.hdr?.scored" x-text="tpdHDRPillText(d)"></span>
+                          </div>
+                          <div class="tpd-section" x-show="d.highlights && d.highlights.length && !tpdIsMinimalCard(d)">
+                            <div class="tpd-section-label">What you get</div>
+                            <ul class="tpd-section-list">
+                              <template x-for="(h, idx) in (d.highlights || [])" :key="idx">
+                                <li x-text="h"></li>
+                              </template>
+                            </ul>
+                          </div>
+                          <div class="tpd-card-footer">
+                            <button class="btn btn-primary" @click="tpdUseProfile(activeAppType, d.trashId)">Use this profile</button>
+                            <a class="tpd-trash-link" x-show="d.trashUrl" :href="d.trashUrl" target="_blank" rel="noopener">
+                              📖 <span x-text="d.name && d.name.startsWith('[SQP]') ? 'TRaSH-Guide Discord' : 'TRaSH guide'"></span>
+                            </a>
+                          </div>
+                        </div>
+                      </article>
+                    </template>
+                  </div>
+                </section>
+              </template>
+
+              <!-- Empty filter result -->
+              <template x-if="tpdFiltered(activeAppType).length === 0">
+                <div class="empty-state">
+                  <div class="desc">No profiles match the current filters. Clear the filter or search to see all profiles.</div>
+                </div>
+              </template>
             </div>
           </template>
 
-          <!-- Collapsible Sync Rules (always visible) -->
-            <div class="card" style="margin-bottom:20px">
-              <div style="display:flex;align-items:center;padding:12px 16px;gap:8px;border-left:3px solid var(--text-primary)">
-                <button type="button" class="collapse-toggle"
-                        style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"
-                        @click="syncRulesExpanded = { ...syncRulesExpanded, [activeAppType]: !syncRulesExpanded[activeAppType] }"
-                        :aria-expanded="syncRulesExpanded[activeAppType]"
-                        aria-controls="sync-rules-body">
-                  <span class="profile-group-chevron" :class="{ open: syncRulesExpanded[activeAppType] }">&#9654;</span>
-                  <span style="font-size:13px;font-weight:500">Sync Rules</span>
-                  <span style="font-size:13px;color:var(--text-muted);margin-left:auto"
-                        x-text="(() => { let count = 0; for (const inst of instancesOfType(activeAppType)) count += sortedSyncRules(inst.id).length; return count > 0 ? count + ' synced profile' + (count !== 1 ? 's' : '') : 'No syncs yet'; })()"></span>
-                </button>
-                <button class="btn btn-sm"
-                        @click.stop="setAutoSyncPaused(!autoSyncSettings.paused)"
-                        x-tt="autoSyncSettings.paused ? 'Resume auto-sync' : 'Pause auto-sync (scheduled + after-pull). Manual syncs unaffected.'"
-                        :style="autoSyncSettings.paused
-                                ? 'font-size:12px;padding:2px 8px;border-color:var(--accent-orange);color:var(--cat-hq-release-groups);margin-left:8px'
-                                : 'font-size:12px;padding:2px 8px;border-color:var(--border-subtle);color:var(--text-secondary);margin-left:8px'"
-                        x-text="autoSyncSettings.paused ? '▶ Resume Auto-Sync' : '⏸ Pause Auto-Sync'"></button>
-              </div>
-              <div id="sync-rules-body" x-show="syncRulesExpanded[activeAppType]" style="border-top:1px solid var(--bg-muted)">
-                <template x-for="inst in instancesOfType(activeAppType)" :key="'sr-'+inst.id">
-                  <template x-if="sortedSyncRules(inst.id).length > 0">
-                    <div>
-                      <div style="padding:8px 16px;font-size:13px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:var(--bg-page);border-bottom:1px solid var(--bg-muted);display:flex;align-items:center">
-                        <span x-text="inst.name"></span>
-                        <button class="btn btn-sm" style="margin-left:auto;font-size:12px;padding:2px 8px;border-color:var(--accent-green-strong);color:var(--accent-green)" @click.stop="syncAllForInstance(inst)" x-tt="'Re-sync all profiles with auto-sync enabled on this instance'">Sync All</button>
-                      </div>
-                      <div style="display:flex;align-items:center;padding:4px 16px;gap:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--bg-card);user-select:none">
-                        <button type="button" class="sort-header" style="width:200px;flex-shrink:0;white-space:nowrap;text-transform:inherit;letter-spacing:inherit"
-                                @click="toggleSyncRulesSort('trash')"
-                                :aria-sort="syncRulesSort.col === 'trash' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
-                          TRaSH Profile <span x-show="syncRulesSort.col==='trash'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span>
-                        </button>
-                        <span style="width:20px;flex-shrink:0"></span>
-                        <button type="button" class="sort-header" style="width:200px;flex-shrink:0;white-space:nowrap;text-transform:inherit;letter-spacing:inherit"
-                                @click="toggleSyncRulesSort('arr')"
-                                :aria-sort="syncRulesSort.col === 'arr' ? (syncRulesSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
-                          Arr Profile <span x-show="syncRulesSort.col==='arr'" x-text="syncRulesSort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span>
-                        </button>
-                        <span style="width:100px;flex-shrink:0">Auto-Sync</span>
-                        <span style="flex:1;text-align:center">Details</span>
-                        <span style="width:180px;flex-shrink:0;text-align:center">Actions</span>
-                      </div>
-                      <template x-for="sh in sortedSyncRules(inst.id)" :key="sh.arrProfileId">
-                        <div :style="'display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--bg-card);gap:8px;font-size:12px;' + (sh.orphanedAt ? 'background:var(--accent-orange-bg)' : '')">
-                          <span :style="'color:' + (sh.orphanedAt ? 'var(--text-muted)' : 'var(--accent-blue)') + ';font-weight:500;width:200px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'" x-text="sh.profileName"></span>
-                          <span style="color:var(--text-muted);flex-shrink:0;font-size:15px;width:20px;text-align:center">&rarr;</span>
-                          <span style="width:200px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                                x-data="{ editing: false, newName: '' }">
-                            <template x-if="sh.orphanedAt">
-                              <span>
-                                <span style="color:var(--text-muted);text-decoration:line-through" x-text="sh.arrProfileName"></span>
-                                <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:500;margin-left:6px" x-tt="'Profile deleted in Arr — ' + (sh.orphanedAt || '')">orphaned</span>
-                              </span>
-                            </template>
-                            <template x-if="!sh.orphanedAt && !editing">
-                              <span>
-                                <button type="button" class="inline-action" style="color:var(--text-primary);border-bottom:1px dashed var(--border-subtle)" @click.stop="newName = sh.arrProfileName; editing = true" x-tt="'Click to rename in Arr'" x-text="sh.arrProfileName"></button>
-                                <span style="color:var(--text-muted);font-size:12px" x-text="'ID ' + sh.arrProfileId"></span>
-                              </span>
-                            </template>
-                            <template x-if="editing">
-                              <input type="text" class="input" style="width:180px;font-size:13px;padding:2px 6px"
-                                     x-model="newName"
-                                     autocomplete="off"
-                                     data-lpignore="true"
-                                     data-1p-ignore="true"
-                                     data-form-type="other"
-                                     name="arr-profile-rename"
-                                     @keyup.enter="if(newName.trim() && newName.trim() !== sh.arrProfileName) { renameArrProfile(inst, sh, newName.trim()); } editing = false"
-                                     @keyup.escape="editing = false"
-                                     @click.outside="editing = false"
-                                     x-init="$nextTick(() => { $el.focus(); $el.select(); })">
-                            </template>
-                          </span>
-                          <div style="display:flex;align-items:center;gap:4px;width:100px;flex-shrink:0">
-                              <label class="toggle toggle-sm" @click.stop x-tt="sh.orphanedAt ? 'Restore the profile to re-enable auto-sync' : 'Toggle auto-sync for this profile'">
-                                <input type="checkbox"
-                                       :disabled="!!sh.orphanedAt"
-                                       :checked="!sh.orphanedAt && autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled"
-                                       @change="(() => { if (sh.orphanedAt) return; const rule = autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId); if (rule) toggleAutoSyncRule(rule); })()">
-                                <span class="slider"></span>
-                              </label>
-                              <span style="font-size:11px"
-                                    :style="sh.orphanedAt ? 'color:var(--text-muted-secondary)' : (autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'color:var(--accent-green)' : 'color:color-mix(in srgb, var(--accent-red) 50%, transparent)')"
-                                    x-text="sh.orphanedAt ? 'orphaned' : (autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.enabled ? 'auto-sync' : 'auto-sync off')"></span>
-                          </div>
-                          <span style="flex:1;display:flex;gap:8px;align-items:center;justify-content:flex-end">
-                            <template x-if="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && r.updatedAt && (!r.lastSyncTime || r.updatedAt > r.lastSyncTime); })()">
-                              <span style="font-size:11px;padding:1px 6px;border-radius:3px;background:transparent;border:1px solid var(--accent-orange);color:var(--accent-orange);flex-shrink:0;display:inline-flex;align-items:center;gap:4px"
-                                    x-tt="'Settings saved but not synced to Arr yet. Will apply on next Sync All / Sync Now / Auto-Sync.'"><span style="font-size:8px;line-height:1">&#9679;</span> unsynced</span>
-                            </template>
-                            <template x-if="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">
-                              <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-red-bg);color:var(--accent-red);flex-shrink:0"
-                                    x-tt="autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncError">error</span>
-                            </template>
-                            <span style="display:flex;gap:4px;align-items:center;flex-shrink:0"
-                                  x-data="{ get _rule() { return autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId) || {}; }, get _so() { return Object.keys(this._rule.scoreOverrides || {}).filter(k => !k.startsWith('custom:')).length; }, get _extra() { return Object.keys(this._rule.scoreOverrides || {}).filter(k => k.startsWith('custom:')).length; }, get _qo() { return Object.keys(this._rule.qualityOverrides || {}).length; }, get _oo() { return this._rule.overrides ? Object.keys(this._rule.overrides).filter(k => this._rule.overrides[k] !== undefined).length : 0; } }">
-                              <template x-if="_extra > 0">
-                                <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--fill-blue-soft);color:var(--accent-blue);flex-shrink:0"
-                                      x-tt="'Custom formats created by you and added to this profile'"
-                                      x-text="_extra + ' custom CF' + (_extra !== 1 ? 's' : '')"></span>
-                              </template>
-                              <template x-if="_so + _qo + _oo > 0">
-                                <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-orange-bg);color:var(--accent-orange);flex-shrink:0"
-                                      x-tt="(() => { const parts = []; if (_so) parts.push(_so + ' score'); if (_qo) parts.push(_qo + ' quality'); if (_oo) parts.push(_oo + ' settings'); return 'Values that differ from profile defaults: ' + parts.join(', '); })()"
-                                      x-text="(_so + _qo + _oo) + ' override' + ((_so + _qo + _oo) !== 1 ? 's' : '')"></span>
-                              </template>
-                            </span>
-                            <span style="color:var(--text-muted);flex-shrink:0" x-text="(sh.syncedCFs?.length || 0) + ' CFs'"></span>
-                            <span style="color:var(--text-muted);flex-shrink:0" x-text="timeAgo(sh.lastSync)"></span>
-                          </span>
-                          <span style="display:flex;gap:6px;flex-shrink:0;align-items:center">
-                            <template x-if="sh.orphanedAt">
-                              <button class="btn" style="padding:3px 10px;font-size:11px;background:var(--fill-blue-soft);border:1px solid var(--accent-green-bg);color:var(--accent-green)" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634; Restore</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync settings'">&#9998;</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" style="color:var(--accent-green)" @click.stop="quickSync(inst, sh)" x-tt="'Re-sync with saved settings'">&#8635;</button>
-                            </template>
-                            <template x-if="!sh.orphanedAt">
-                              <button class="btn-icon" style="color:var(--accent-blue)" @click.stop="cloneProfile(inst, sh)" x-tt="'Clone to new profile'">&#10697;</button>
-                            </template>
-                            <button class="btn-icon" style="color:var(--accent-red)" @click.stop="removeSyncHistory(inst.id, sh.arrProfileId)" x-tt="sh.orphanedAt ? 'Permanently remove this orphaned sync rule and history' : 'Remove sync rule'">&#10005;</button>
-                          </span>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-                </template>
-                <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
-                  <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px">No sync history yet. Sync a profile from the list below to get started.</div>
-                </template>
-              </div>
+          <template x-if="!trashProfileDescriptions[activeAppType] || trashProfileDescriptions[activeAppType].length === 0">
+            <div class="empty-state">
+              <div class="desc">Pull TRaSH data to see available profiles. Click the Pull button in the header bar.</div>
             </div>
-
-          <!-- TRaSH Profiles list -->
-          <template x-if="trashProfiles[activeAppType] && trashProfiles[activeAppType].length > 0">
-          <div>
-            <template x-for="group in groupedProfiles(activeAppType)" :key="group.name">
-              <div class="card" :class="'grp-' + group.name.toLowerCase().replace(/[^a-z]/g, '')">
-                <button type="button" class="profile-group-header" @click="toggleProfileGroup(activeAppType, group.name)"
-                        :aria-expanded="isProfileGroupExpanded(activeAppType, group.name)">
-                  <span class="profile-group-chevron" :class="{ open: isProfileGroupExpanded(activeAppType, group.name) }">&#9654;</span>
-                  <span x-text="group.name"></span>
-                  <span class="profile-group-count" x-text="group.profiles.length + (group.profiles.length === 1 ? ' profile' : ' profiles')"></span>
-                </button>
-                <div x-show="isProfileGroupExpanded(activeAppType, group.name)">
-                  <template x-for="p in group.profiles" :key="p.trashId">
-                    <div class="profile-row">
-                      <div class="profile-name">
-                        <a class="profile-name-link" @click.stop="instancesOfType(activeAppType)[0] && openProfileDetail(instancesOfType(activeAppType)[0], p)" x-text="p.name"></a>
-                        <span class="sqp-badge" x-show="p.trashScoreSet?.startsWith('sqp')">SQP</span>
-                        <span x-show="p.trashDescription" class="cf-info"
-                              @mouseenter="showCFTooltip($event, p.trashDescription)"
-                              @mouseleave="hideCFTooltip()">&#9432;</span>
-                      </div>
-                      <div style="display:flex;align-items:center;gap:8px">
-                        <span style="font-size:12px;background:var(--bg-muted);color:var(--text-muted);padding:2px 8px;border-radius:3px" x-text="p.cfCount + ' CFs'"></span>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </template>
-          </div>
-        </template>
-        <template x-if="!trashProfiles[activeAppType] || trashProfiles[activeAppType].length === 0">
-          <div class="empty-state">
-            <div class="desc">Pull TRaSH data to see available profiles. Click the Pull button in the header bar.</div>
-          </div>
-        </template>
-
+          </template>
         </div>
-        <!-- end TRaSH Sync tab -->
+        <!-- end TRaSH Profiles tab -->
 
-        <!-- ===== History tab ===== -->
+        <!-- ===== History tab (v3 — Sprint 3 slice 3) =====
+             Per-instance card mirrors Sync Rules pattern (v3-inst-* +
+             gradient header). Two-level expand: profile row → event
+             timeline → event-detail. All colors muted — change pills are
+             neutral, detail-text is monochrome. Status concept (in-sync/
+             pending/drift) lives in Sync Rules; History only carries
+             ✓ Success / ⚠ Failed per sync attempt. -->
         <div class="page" x-show="getProfileTab(activeAppType) === 'history'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">Sync History</div>
           <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            Track changes made to your synced profiles. Each sync that modifies scores, CFs, quality items, or settings is recorded here. Roll back to a previous state if needed.
+            Each sync that touched a profile is recorded here. Click a row to see the timeline of change events and roll back to a previous state.
           </div>
 
           <template x-for="inst in instancesOfType(activeAppType)" :key="'hist-'+inst.id">
             <template x-if="sortedSyncRules(inst.id).length > 0">
-              <div class="card" style="margin-bottom:16px">
-                <!-- Instance header — matches Trash Sync -->
-                <div style="padding:8px 16px;font-size:13px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:var(--bg-page);border-bottom:1px solid var(--bg-muted);display:flex;align-items:center">
-                  <span x-text="inst.name"></span>
+              <div class="v3-inst-card">
+                <div class="v3-inst-header">
+                  <span class="v3-inst-name" x-text="inst.name"></span>
+                  <span class="v3-inst-count" x-text="sortedSyncRules(inst.id).length + ' profile' + (sortedSyncRules(inst.id).length !== 1 ? 's' : '')"></span>
                 </div>
-                <!-- Table layout for proper column alignment -->
                 <!-- Column headers -->
-                <div style="display:flex;align-items:center;padding:4px 16px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--bg-card);user-select:none">
-                  <button type="button" class="sort-header" style="flex:none;width:240px;text-transform:inherit;letter-spacing:inherit"
-                          @click="toggleHistorySort('trash')"
-                          :aria-sort="historySort.col === 'trash' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">TRaSH Profile <span x-show="historySort.col==='trash'" x-text="historySort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span></button>
-                  <div style="flex:none;width:20px"></div>
-                  <button type="button" class="sort-header" style="flex:none;width:240px;text-transform:inherit;letter-spacing:inherit"
-                          @click="toggleHistorySort('arr')"
-                          :aria-sort="historySort.col === 'arr' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">Arr Profile <span x-show="historySort.col==='arr'" x-text="historySort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span></button>
-                  <button type="button" class="sort-header" style="flex:none;width:100px;text-transform:inherit;letter-spacing:inherit"
-                          @click="toggleHistorySort('changed')"
-                          :aria-sort="historySort.col === 'changed' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">Last Changed <span x-show="historySort.col==='changed'" x-text="historySort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span></button>
-                  <button type="button" class="sort-header" style="flex:none;width:55px;text-align:center;text-transform:inherit;letter-spacing:inherit"
-                          @click="toggleHistorySort('events')"
-                          :aria-sort="historySort.col === 'events' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">Events <span x-show="historySort.col==='events'" x-text="historySort.dir==='asc'?'▲':'▼'" style="font-size:10px"></span></button>
-                  <div style="flex:1;text-align:right;padding-right:4px">Last Changes</div>
+                <div class="v3-hist-grid v3-col-header">
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleHistorySort('trash')"
+                            :aria-sort="historySort.col === 'trash' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      TRaSH Profile<span class="arr" x-show="historySort.col==='trash'" x-text="historySort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div></div>
+                  <div style="text-align:right;padding-right:4px">ID</div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleHistorySort('arr')"
+                            :aria-sort="historySort.col === 'arr' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Arr Profile<span class="arr" x-show="historySort.col==='arr'" x-text="historySort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div>
+                    <button type="button" class="v3-col-sort" @click="toggleHistorySort('changed')"
+                            :aria-sort="historySort.col === 'changed' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Last changed<span class="arr" x-show="historySort.col==='changed'" x-text="historySort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div style="text-align:center">
+                    <button type="button" class="v3-col-sort" @click="toggleHistorySort('events')"
+                            :aria-sort="historySort.col === 'events' ? (historySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      Syncs<span class="arr" x-show="historySort.col==='events'" x-text="historySort.dir==='asc'?'▲':'▼'"></span>
+                    </button>
+                  </div>
+                  <div style="text-align:right">Last changes</div>
                 </div>
                 <!-- Data rows -->
                 <template x-for="sh in sortedHistoryProfiles(inst.id)" :key="'hp-'+sh.arrProfileId">
                   <div>
-                    <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--bg-card);font-size:12px;cursor:pointer"
-                         @click="historyExpanded === inst.id + ':' + sh.arrProfileId ? historyExpanded = '' : (historyExpanded = inst.id + ':' + sh.arrProfileId, loadProfileHistory(inst.id, sh.arrProfileId))"
-                         @mouseenter="$el.style.background='var(--bg-elevated)'" @mouseleave="if (historyExpanded !== inst.id + ':' + sh.arrProfileId) $el.style.background=''">
-                      <div style="flex:none;width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent-blue);font-weight:500" x-text="sh.profileName"></div>
-                      <div style="flex:none;width:20px;color:var(--text-muted);text-align:center;font-size:15px">&rarr;</div>
-                      <div style="flex:none;width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)" x-text="sh.arrProfileName"></div>
-                      <div style="flex:none;width:100px;white-space:nowrap">
-                        <span :style="sh.changes ? 'color:var(--accent-orange)' : 'color:var(--text-muted)'" x-text="sh.changes ? timeAgo(sh.appliedAt || sh.lastSync) : '—'"></span>
+                    <div class="v3-hist-grid v3-hist-row"
+                         :class="{ expanded: historyExpanded === inst.id + ':' + sh.arrProfileId }"
+                         @click="historyExpanded === inst.id + ':' + sh.arrProfileId ? historyExpanded = '' : (historyExpanded = inst.id + ':' + sh.arrProfileId, loadProfileHistory(inst.id, sh.arrProfileId))">
+                      <div class="v3-prof-trash">
+                        <span class="v3-hist-chev" :class="{ open: historyExpanded === inst.id + ':' + sh.arrProfileId }">&#9654;</span>
+                        <span class="v3-prof-trash-name" x-text="sh.profileName"></span>
                       </div>
-                      <div style="flex:none;width:55px;text-align:center;white-space:nowrap">
-                        <span x-show="historyEventCount(inst.id, sh.arrProfileId) > 0"
-                              style="font-size:11px;padding:1px 6px;border-radius:3px;background:var(--bg-muted);color:var(--text-primary)"
-                              x-text="historyEventCount(inst.id, sh.arrProfileId)"></span>
-                        <span x-show="historyEventCount(inst.id, sh.arrProfileId) === 0" style="color:var(--border-subtle)">—</span>
+                      <div class="v3-arrow">&rarr;</div>
+                      <div class="v3-id-cell" x-text="sh.arrProfileId"></div>
+                      <div class="v3-prof-arr">
+                        <span x-text="sh.arrProfileName"></span>
                       </div>
-                      <div style="flex:1;display:flex;gap:4px;justify-content:flex-end;padding-right:4px">
-                        <template x-if="sh.changes?.cfDetails?.length > 0">
-                          <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--alpha-green);color:var(--accent-green)" x-text="sh.changes.cfDetails.length + ' CF'"></span>
+                      <div class="v3-last-sync" :class="{ never: !sh.changes }"
+                           x-text="sh.changes ? timeAgo(sh.appliedAt || sh.lastSync) : '—'"></div>
+                      <div style="text-align:center">
+                        <span class="v3-hist-events" :class="{ zero: historyEventCount(inst.id, sh.arrProfileId) === 0 }"
+                              x-text="historyEventCount(inst.id, sh.arrProfileId) > 0 ? historyEventCount(inst.id, sh.arrProfileId) : '—'"></span>
+                      </div>
+                      <!-- Last changes — single neutral pill with total count
+                           and breakdown in tooltip. Replaces the old four
+                           rainbow pills (CF/score/quality/setting) per user
+                           feedback "for voldsomt med alle disse fargene". -->
+                      <div style="text-align:right">
+                        <template x-if="sh.changes">
+                          <span class="v3-hist-changes"
+                                x-text="(() => { const c = sh.changes; const total = (c.cfDetails?.length || 0) + (c.scoreDetails?.length || 0) + (c.qualityDetails?.length || 0) + (c.settingsDetails?.length || 0); return total + (total === 1 ? ' change' : ' changes'); })()"
+                                x-tt="(() => { const c = sh.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + ' — click row to expand timeline' : 'No changes'; })()"></span>
                         </template>
-                        <template x-if="sh.changes?.scoreDetails?.length > 0">
-                          <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-orange-bg);color:var(--accent-orange)" x-text="sh.changes.scoreDetails.length + ' score'"></span>
-                        </template>
-                        <template x-if="sh.changes?.qualityDetails?.length > 0">
-                          <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--alpha-purple);color:var(--accent-purple)" x-text="sh.changes.qualityDetails.length + ' quality'"></span>
-                        </template>
-                        <template x-if="sh.changes?.settingsDetails?.length > 0">
-                          <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--fill-blue-soft);color:var(--accent-blue)" x-text="sh.changes.settingsDetails.length + ' setting'"></span>
-                        </template>
-                        <span x-show="!sh.changes" style="color:var(--text-muted)">No changes recorded</span>
+                        <span x-show="!sh.changes" class="v3-hist-empty">No changes</span>
                       </div>
                     </div>
 
                     <!-- Expanded: change history for this profile -->
-                    <div x-show="historyExpanded === inst.id + ':' + sh.arrProfileId" style="background:var(--bg-page);border-bottom:1px solid var(--bg-muted)">
+                    <div x-show="historyExpanded === inst.id + ':' + sh.arrProfileId" class="v3-hist-events-panel">
                       <template x-if="historyLoading">
                         <div style="padding:16px;text-align:center"><span class="spinner"></span></div>
                       </template>
                       <template x-if="!historyLoading && historyEntries.filter(e => e.changes).length === 0">
-                        <!-- Covers both "no entries at all" and "entries exist
-                             but none carry changes" (baseline / no-op syncs
-                             only). Previously the latter fell through every
-                             x-if branch, rendering an empty expanded panel
-                             that looked like a click that did nothing. -->
-                        <div style="font-size:12px;color:var(--text-muted);padding:12px 16px 12px 32px">No changes recorded yet. Changes are tracked from the next sync onwards.</div>
+                        <div style="font-size:12px;color:var(--text-muted);padding:12px 16px">No changes recorded yet. Changes are tracked from the next sync onwards.</div>
                       </template>
                       <template x-if="!historyLoading && historyEntries.filter(e => e.changes).length > 0">
-                        <div style="padding:6px 16px 6px 32px">
-                          <!-- Orphaned banner — shown when any entry in this profile's
-                               history is marked orphaned. All entries for one ArrProfileID
-                               share the same orphaned state, so we just check the first. -->
+                        <div style="padding:8px 14px 10px">
                           <template x-if="historyEntries.some(e => e.orphanedAt)">
-                            <div style="margin:4px 0 8px 0;padding:8px 12px;background:var(--accent-orange-bg);border:1px solid var(--accent-orange);border-radius:6px;font-size:12px;color:var(--cat-hq-release-groups);line-height:1.55">
+                            <div class="v3-hist-orphan">
                               <strong>This profile is orphaned</strong> — its target was deleted in Arr. These entries describe the pre-deletion state and Rollback is disabled. Click Restore on the sync row above to recreate the profile from this saved state. After a successful restore, these entries are cleared automatically.
                             </div>
                           </template>
-                          <!-- Sub-table column headers -->
-                          <div style="display:flex;align-items:center;padding:4px 0;gap:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--bg-muted);margin-bottom:2px">
-                            <span style="width:150px;flex-shrink:0">Date</span>
-                            <span style="width:70px;flex-shrink:0;text-align:center">CFs</span>
-                            <span style="width:70px;flex-shrink:0;text-align:center">Scores</span>
-                            <span style="width:70px;flex-shrink:0;text-align:center">Quality</span>
-                            <span style="width:70px;flex-shrink:0;text-align:center">Settings</span>
-                            <span style="flex:1"></span>
-                          </div>
                           <template x-for="(entry, ei) in historyEntries.filter(e => e.changes)" :key="'he-'+ei">
                             <div>
-                              <!-- Entry row -->
-                              <div style="display:flex;align-items:center;padding:6px 0;gap:8px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bg-card)"
-                                   @click="historyDetailIdx = historyDetailIdx === ei ? -1 : ei"
-                                   @mouseenter="$el.style.background='var(--bg-card)'" @mouseleave="$el.style.background=''">
-                                <span style="color:var(--text-primary);font-weight:500;width:150px;flex-shrink:0;display:flex;align-items:center;gap:6px">
-                                  <span style="color:var(--text-muted);font-size:11px;display:inline-block;width:10px;transition:transform 0.15s"
-                                        :style="historyDetailIdx === ei ? 'transform:rotate(90deg)' : ''">&#9654;</span>
-                                  <span x-text="new Date(entry.appliedAt || entry.lastSync).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})"></span>
+                              <!-- Event row — preview of first 3 change
+                                   strings + "+N more" suffix. Full
+                                   per-category breakdown lives in the
+                                   tooltip; details list opens on click. -->
+                              <div class="v3-hist-event"
+                                   :class="{ expanded: historyDetailIdx === ei }"
+                                   @click="historyDetailIdx = historyDetailIdx === ei ? -1 : ei">
+                                <span class="v3-hist-event-chev" :class="{ open: historyDetailIdx === ei }">&#9654;</span>
+                                <span class="v3-hist-event-status v3-hist-event-status-ok" aria-hidden="true">&#10003;</span>
+                                <span class="v3-hist-event-time"
+                                      x-text="new Date(entry.appliedAt || entry.lastSync).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})"></span>
+                                <span class="v3-hist-event-summary"
+                                      x-tt="(() => { const c = entry.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + ' — click for details' : 'No changes'; })()">
+                                  <span class="v3-hist-event-count"
+                                        x-text="(() => { const c = entry.changes; const total = (c.cfDetails?.length || 0) + (c.scoreDetails?.length || 0) + (c.qualityDetails?.length || 0) + (c.settingsDetails?.length || 0); return total + ' change' + (total !== 1 ? 's' : ''); })()"></span>
+                                  <span class="v3-hist-event-preview"
+                                        x-text="(() => { const c = entry.changes; const items = [...(c.cfDetails || []), ...(c.scoreDetails || []), ...(c.qualityDetails || []), ...(c.settingsDetails || [])]; if (!items.length) return ''; const preview = items.slice(0, 3).join(' · '); const remaining = items.length - 3; return '— ' + (remaining > 0 ? preview + ' · +' + remaining + ' more' : preview); })()"></span>
                                 </span>
-                                <span style="width:70px;flex-shrink:0;text-align:center">
-                                  <span x-show="entry.changes.cfDetails?.length > 0" style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--alpha-green);color:var(--accent-green)" x-text="entry.changes.cfDetails?.length"></span>
-                                  <span x-show="!entry.changes.cfDetails?.length" style="color:var(--border-subtle)">—</span>
-                                </span>
-                                <span style="width:70px;flex-shrink:0;text-align:center">
-                                  <span x-show="entry.changes.scoreDetails?.length > 0" style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--accent-orange-bg);color:var(--accent-orange)" x-text="entry.changes.scoreDetails?.length"></span>
-                                  <span x-show="!entry.changes.scoreDetails?.length" style="color:var(--border-subtle)">—</span>
-                                </span>
-                                <span style="width:70px;flex-shrink:0;text-align:center">
-                                  <span x-show="entry.changes.qualityDetails?.length > 0" style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--alpha-purple);color:var(--accent-purple)" x-text="entry.changes.qualityDetails?.length"></span>
-                                  <span x-show="!entry.changes.qualityDetails?.length" style="color:var(--border-subtle)">—</span>
-                                </span>
-                                <span style="width:70px;flex-shrink:0;text-align:center">
-                                  <span x-show="entry.changes.settingsDetails?.length > 0" style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--fill-blue-soft);color:var(--accent-blue)" x-text="entry.changes.settingsDetails?.length"></span>
-                                  <span x-show="!entry.changes.settingsDetails?.length" style="color:var(--border-subtle)">—</span>
-                                </span>
-                                <span style="flex:1"></span>
-                                <button class="btn" style="font-size:11px;padding:2px 8px;flex-shrink:0"
-                                        :style="entry.orphanedAt ? 'opacity:0.4;cursor:not-allowed;border-color:var(--border-subtle);color:var(--text-muted-secondary)' : 'border-color:var(--accent-orange);color:var(--accent-orange)'"
+                                <button class="v3-hist-rollback"
                                         :disabled="!!entry.orphanedAt"
                                         @click.stop="if (!entry.orphanedAt) rollbackSync(inst, entry, ei)"
                                         x-tt="entry.orphanedAt ? 'Cannot rollback — the target profile is orphaned (deleted in Arr). Use Restore on the sync row first.' : 'Re-sync this profile to the state from this point in time. Auto-sync will be disabled.'">Rollback</button>
                               </div>
-                              <!-- Expanded detail -->
-                              <div x-show="historyDetailIdx === ei" style="margin:4px 0 8px 16px;padding:10px 14px;background:var(--bg-card);border-left:2px solid var(--accent-blue);border-radius:0 6px 6px 0;font-size:12px;line-height:1.7">
+                              <!-- Expanded detail — neutral monochrome text -->
+                              <div x-show="historyDetailIdx === ei" class="v3-hist-event-detail">
                                 <template x-if="entry.changes.cfDetails?.length > 0">
                                   <div>
-                                    <div style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.3px;margin-bottom:2px">Custom Formats</div>
+                                    <div class="v3-hist-detail-label">Custom Formats</div>
                                     <template x-for="d in entry.changes.cfDetails" :key="d">
-                                      <div :style="d.startsWith('Created') || d.startsWith('Added') ? 'color:var(--accent-green)' : d.startsWith('Removed') || d.startsWith('Deleted') ? 'color:var(--accent-red)' : 'color:var(--accent-orange)'" x-text="d"></div>
+                                      <div class="v3-hist-detail-line" x-text="d"></div>
                                     </template>
                                   </div>
                                 </template>
                                 <template x-if="entry.changes.scoreDetails?.length > 0">
                                   <div :style="entry.changes.cfDetails?.length > 0 ? 'margin-top:8px' : ''">
-                                    <div style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.3px;margin-bottom:2px">Scores</div>
+                                    <div class="v3-hist-detail-label">Scores</div>
                                     <template x-for="d in entry.changes.scoreDetails" :key="d">
-                                      <div style="color:var(--accent-orange)" x-text="d"></div>
+                                      <div class="v3-hist-detail-line" x-text="d"></div>
                                     </template>
                                   </div>
                                 </template>
                                 <template x-if="entry.changes.qualityDetails?.length > 0">
                                   <div :style="(entry.changes.cfDetails?.length > 0 || entry.changes.scoreDetails?.length > 0) ? 'margin-top:8px' : ''">
-                                    <div style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.3px;margin-bottom:2px">Quality Items</div>
+                                    <div class="v3-hist-detail-label">Quality Items</div>
                                     <template x-for="d in entry.changes.qualityDetails" :key="d">
-                                      <div style="color:var(--accent-purple)" x-text="d"></div>
+                                      <div class="v3-hist-detail-line" x-text="d"></div>
                                     </template>
                                   </div>
                                 </template>
                                 <template x-if="entry.changes.settingsDetails?.length > 0">
                                   <div :style="(entry.changes.cfDetails?.length > 0 || entry.changes.scoreDetails?.length > 0 || entry.changes.qualityDetails?.length > 0) ? 'margin-top:8px' : ''">
-                                    <div style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.3px;margin-bottom:2px">Settings</div>
+                                    <div class="v3-hist-detail-label">Settings</div>
                                     <template x-for="d in entry.changes.settingsDetails" :key="d">
-                                      <div style="color:var(--accent-blue)" x-text="d"></div>
+                                      <div class="v3-hist-detail-line" x-text="d"></div>
                                     </template>
                                   </div>
                                 </template>
@@ -382,7 +480,7 @@
           </template>
 
           <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
-            <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px">No synced profiles yet. Sync a profile from the TRaSH Sync tab to see history here.</div>
+            <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px">No synced profiles yet. Sync a profile from the TRaSH Profiles tab to see history here.</div>
           </template>
         </div>
         <!-- end History tab -->

@@ -1,250 +1,373 @@
 {{define "modals/cf-editor"}}
-  <!-- CF Editor Modal (Create/Edit) -->
+  <!-- CF Editor Modal — wide layout with internal sidebar. The user
+       navigates between General / Conditions / TRaSH (dev-only) tabs
+       on the left; each tab gets the full right pane so dense forms
+       (Conditions in particular) actually have room to breathe.
+       Mirrors Profilarr's full-page editor pattern, adapted to a
+       modal so the rest of the v3 UX stays intact. -->
   <template x-if="showCFEditor">
-  <div class="modal-overlay" @keydown.escape.window="showCFEditor = false">
-    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto" role="dialog" aria-modal="true" aria-labelledby="modal-title-cf-editor" x-trap.noscroll.inert="showCFEditor">
-      <h2 id="modal-title-cf-editor" class="modal-title" x-text="cfEditorMode === 'edit' ? 'Edit Custom Format' : 'Create Custom Format'"></h2>
-
-      <!-- Header fields -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Name *</label>
-          <div style="position:relative">
-            <input class="input" x-model="cfEditorForm.name" placeholder="My Custom Format" style="padding-right:30px">
-            <span x-show="cfEditorTrashMatch"
-                  x-tt="'Also in TRaSH guide — you can still save.'"
-                  style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--accent-orange-bg);color:var(--cat-hq-release-groups);border:1px solid var(--accent-orange);border-radius:3px;padding:1px 6px;font-size:11px;font-weight:600;cursor:help;user-select:none">
-              ⚠ guide
-            </span>
-          </div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
-            Sonarr/Radarr require unique CF names within an app, so this can't match another custom CF you already have. Names are case-sensitive (Arr's own rule), so <code>PCOK</code> and <code>Pcok</code> are distinct.
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>App Type</label>
-          <div class="input" style="background:var(--bg-card);cursor:default;text-transform:capitalize;display:flex;align-items:center;gap:6px">
-            <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0"
-                  :style="cfEditorForm.appType === 'radarr' ? 'background:var(--accent-orange)' : 'background:var(--accent-blue)'"></span>
-            <span x-text="cfEditorForm.appType"></span>
-          </div>
+  <div class="modal-overlay" @keydown.escape.window="closeCFEditor()">
+    <div class="modal cf-editor-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-cf-editor" x-trap.noscroll.inert="showCFEditor">
+      <!-- Header — fixed at top of modal -->
+      <div class="cf-editor-header">
+        <h2 id="modal-title-cf-editor" class="cf-editor-title">
+          <span x-text="cfEditorMode === 'edit' ? 'Edit Custom Format' : 'Create Custom Format'"></span>
+          <span x-show="cfEditorMode === 'edit' && cfEditorForm.name" class="cf-editor-subtitle"
+                x-text="' — ' + cfEditorForm.name"></span>
+        </h2>
+        <div class="cf-editor-app-tag">
+          <span class="cf-editor-app-dot"
+                :style="cfEditorForm.appType === 'radarr' ? 'background:var(--accent-orange)' : 'background:var(--accent-blue)'"></span>
+          <span x-text="cfEditorForm.appType" style="text-transform:uppercase;font-size:11px;font-weight:600;letter-spacing:0.5px"></span>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:16px">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Category</label>
-          <div style="display:flex;gap:8px">
-            <select class="input" style="flex:1" x-model="cfEditorForm.category">
-              <option value="Custom">Custom</option>
-              <option value="Audio">Audio</option>
-              <option value="HDR Formats">HDR Formats</option>
-              <option value="HQ Release Groups">HQ Release Groups</option>
-              <option value="Resolution">Resolution</option>
-              <option value="Streaming Services">Streaming Services</option>
-              <option value="Miscellaneous">Miscellaneous</option>
-              <option value="Optional">Optional</option>
-              <option value="Unwanted">Unwanted</option>
-              <option value="Movie Versions">Movie Versions</option>
-              <option value="Anime">Anime</option>
-              <option value="Language Profiles">Language Profiles</option>
-              <option value="">-- New category --</option>
-            </select>
-            <input x-show="cfEditorForm.category === ''" class="input" style="flex:1" x-model="cfEditorForm.newCategory" placeholder="New category name">
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>Include in Rename</label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px;color:var(--text-body);font-size:13px">
-            <input type="checkbox" x-model="cfEditorForm.includeInRename"> Yes
-          </label>
-        </div>
-      </div>
+      <!-- Body — sidebar + content pane -->
+      <div class="cf-editor-body">
+        <!-- Sidebar nav (ARIA tablist) -->
+        <nav class="cf-editor-sidebar" role="tablist" aria-label="Editor sections" aria-orientation="vertical">
+          <button type="button" role="tab" class="cf-editor-side-item"
+                  :class="{ active: cfEditorActiveTab === 'general' }"
+                  :aria-selected="cfEditorActiveTab === 'general'"
+                  :tabindex="cfEditorActiveTab === 'general' ? 0 : -1"
+                  @click="cfEditorActiveTab = 'general'">General</button>
+          <button type="button" role="tab" class="cf-editor-side-item"
+                  :class="{ active: cfEditorActiveTab === 'conditions' }"
+                  :aria-selected="cfEditorActiveTab === 'conditions'"
+                  :tabindex="cfEditorActiveTab === 'conditions' ? 0 : -1"
+                  @click="cfEditorActiveTab = 'conditions'">
+            <span>Conditions</span>
+            <span class="cf-editor-side-count" x-text="cfEditorForm.specifications.length"></span>
+          </button>
+          <template x-if="config.devFeatures && config.trashSchemaFields">
+            <button type="button" role="tab" class="cf-editor-side-item"
+                    :class="{ active: cfEditorActiveTab === 'trash' }"
+                    :aria-selected="cfEditorActiveTab === 'trash'"
+                    :tabindex="cfEditorActiveTab === 'trash' ? 0 : -1"
+                    @click="cfEditorActiveTab = 'trash'">TRaSH</button>
+          </template>
+        </nav>
 
-      <!-- Specifications -->
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:12px;color:var(--text-muted);font-weight:600">Specifications</label>
-          <button class="btn btn-sm"
-                  style="background:var(--accent-green-strong);color:var(--text-on-accent)"
-                  @click="addCFSpec()"
-                  :disabled="cfEditorSchemaLoading || !!cfEditorSchemaError"
-                  x-tt="cfEditorSchemaError ? 'Cannot add specs — schema unavailable. Fix the connection above and retry.' : ''">+ Add Spec</button>
-        </div>
+        <!-- Content pane -->
+        <div class="cf-editor-pane">
+          <!-- ===== GENERAL ===== -->
+          <section x-show="cfEditorActiveTab === 'general'" class="cf-editor-section">
+            <h3 class="cf-editor-section-title">General</h3>
+            <p class="cf-editor-section-help">Basic settings for this custom format.</p>
 
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.4">
-          Spec types and field options are loaded live from your <span x-text="cfEditorForm.appType" style="text-transform:capitalize"></span> instance, so it must be reachable while you create or edit a custom format.
-        </div>
-
-        <div x-show="cfEditorSchemaLoading" style="text-align:center;padding:12px">
-          <span class="spinner"></span> Loading schema from <span x-text="cfEditorForm.appType" style="text-transform:capitalize"></span>...
-        </div>
-
-        <template x-if="cfEditorSchemaError && !cfEditorSchemaLoading">
-          <div style="font-size:13px;padding:12px;border:1px solid var(--accent-red);border-radius:6px;background:var(--accent-red-bg);color:var(--accent-red);display:flex;align-items:flex-start;gap:10px">
-            <span style="font-size:16px;line-height:1">⚠</span>
-            <div style="flex:1">
-              <div style="font-weight:600;margin-bottom:4px">Schema unavailable</div>
-              <div x-text="cfEditorSchemaError"></div>
-            </div>
-            <button class="btn btn-sm" style="flex-shrink:0" @click="retryCFEditorSchema()">Retry</button>
-          </div>
-        </template>
-
-        <template x-if="cfEditorForm.specifications.length === 0 && !cfEditorSchemaLoading && !cfEditorSchemaError">
-          <div style="font-size:12px;color:var(--text-muted);padding:16px;text-align:center;border:1px dashed var(--border-subtle);border-radius:6px">
-            No specifications yet. Click "Add Spec" to add a matching rule.
-          </div>
-        </template>
-
-        <template x-for="(spec, specIdx) in cfEditorForm.specifications" :key="spec._key">
-          <div style="border:1px solid var(--border-subtle);border-radius:6px;padding:12px;margin-bottom:8px;background:var(--bg-page)">
-            <!-- Spec header row -->
-            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px">
-              <div>
-                <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:2px">Spec Name</label>
-                <input class="input" x-model="spec.name" placeholder="Rule name" style="font-size:12px;padding:4px 8px">
+            <div class="cf-editor-field">
+              <label class="cf-editor-label">Name <span style="color:var(--accent-red)">*</span></label>
+              <div style="position:relative">
+                <input class="input" x-model="cfEditorForm.name" placeholder="My Custom Format" style="padding-right:60px">
+                <span x-show="cfEditorTrashMatch"
+                      x-tt="'Also in TRaSH guide — you can still save.'"
+                      style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--accent-orange-bg);color:var(--cat-hq-release-groups);border:1px solid var(--accent-orange);border-radius:3px;padding:1px 6px;font-size:11px;font-weight:600;cursor:help;user-select:none">
+                  ⚠ guide
+                </span>
               </div>
-              <div>
-                <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:2px">Type</label>
-                <select class="input"
-                        x-effect="populateImplSelect($el, spec.implementation)"
-                        @change="spec.implementation = $el.value; onSpecTypeChange(specIdx)"
-                        style="font-size:12px;padding:4px 8px">
-                  <option value="">Select type...</option>
-                </select>
-              </div>
-              <div style="display:flex;align-items:flex-end">
-                <button class="btn btn-sm" style="color:var(--accent-red);padding:4px 8px" @click="cfEditorForm.specifications.splice(specIdx, 1)" x-tt="'Remove spec'">&#10005;</button>
+              <div class="cf-editor-field-help">
+                Names are case-sensitive and must be unique among your custom formats. Sharing a name with a TRaSH-published CF is allowed but flagged with a guide-warning.
               </div>
             </div>
 
-            <!-- Toggles row -->
-            <div style="display:flex;gap:16px;margin-bottom:8px">
-              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);cursor:pointer">
-                <input type="checkbox" x-model="spec.required">
-                <span :style="spec.required ? 'color:var(--accent-green);font-weight:600' : ''">Required</span>
-                <span style="font-size:12px;color:var(--text-muted)" x-text="spec.required ? '(AND)' : '(OR)'"></span>
+            <div class="cf-editor-field">
+              <label class="cf-editor-label">Category</label>
+              <div style="display:flex;gap:8px">
+                <!-- populateSelectField via x-effect builds the options
+                     AND sets the current value atomically — avoids the
+                     Alpine x-model-vs-template-xfor ordering issue
+                     where the model value gets set before <template
+                     x-for> renders its options (which made the dropdown
+                     fall back to "-- New category --" on edit). -->
+                <select class="input" style="flex:1"
+                        aria-label="Category"
+                        x-effect="populateSelectField($el, [...cfEditorCategoryOptions().map(c => ({ value: c, name: c })), { value: '', name: '-- New category --' }], cfEditorForm.category || '')"
+                        @change="cfEditorForm.category = $el.value"></select>
+                <input x-show="cfEditorForm.category === ''" class="input" style="flex:1" x-model="cfEditorForm.newCategory" placeholder="New category name">
+              </div>
+              <div class="cf-editor-field-help">
+                Groups this custom format in the browse view sidebar under <strong>Custom</strong>. Pick an existing category or "-- New category --" to define your own (e.g. "My Audio Tweaks", "Codec Heuristics").
+              </div>
+            </div>
+
+            <div class="cf-editor-field">
+              <label class="cf-editor-label">Default Score</label>
+              <input type="number" class="input"
+                     style="max-width:140px;font-family:ui-monospace,monospace"
+                     placeholder="0"
+                     :value="cfEditorDefaultScore"
+                     @input="cfEditorDefaultScore = $event.target.value">
+              <div class="cf-editor-field-help">
+                The score Arr applies when this custom format matches a release. Positive = prefer (e.g. <code>+500</code> for HD audio). Negative = penalise (e.g. <code>-10000</code> for unwanted patterns). 0 = neutral / informational. Power users can set per-context scores on the TRaSH tab.
+              </div>
+            </div>
+
+            <div class="cf-editor-field">
+              <label class="cf-editor-label">Include in Rename</label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-body);font-size:13px">
+                <input type="checkbox" x-model="cfEditorForm.includeInRename">
+                <span>Yes — include this CF's name when Arr renames matching files</span>
               </label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);cursor:pointer">
-                <input type="checkbox" x-model="spec.negate">
-                <span :style="spec.negate ? 'color:var(--accent-orange);font-weight:600' : ''">Negate</span>
-              </label>
+              <div class="cf-editor-field-help">
+                When enabled, the CF name appears in the renamed filename's format token (e.g. <code>{Custom Formats}</code> in Sonarr's naming pattern).
+              </div>
             </div>
 
-            <!-- Dynamic fields based on implementation type -->
-            <template x-if="spec.implementation">
+            <div class="cf-editor-field">
+              <label class="cf-editor-label">
+                <span>Description</span>
+                <button type="button" class="cf-md-preview-toggle"
+                        @click="cfEditorDescriptionPreview = !cfEditorDescriptionPreview"
+                        x-tt="'Toggle between the editor and a rendered markdown preview. Doesn\'t save — use the Save / Update button at the bottom of the editor.'"
+                        x-text="cfEditorDescriptionPreview ? 'Show editor' : 'Show preview'"></button>
+              </label>
+
+              <!-- Inline link popover — replaces window.prompt, anchored
+                   right above the textarea so it doesn't shift layout.
+                   Opens via mdInsertLink, commits on Enter or Insert
+                   button click, cancels on ESC or Cancel button. -->
+              <div class="cf-md-link-popover" x-show="cfMdLinkPopover.open" x-cloak
+                   @keydown.escape.stop="mdLinkCancel()">
+                <label for="cf-md-link-url" class="cf-md-link-label">Link URL</label>
+                <input id="cf-md-link-url" type="url" class="input"
+                       x-model="cfMdLinkPopover.url"
+                       @keydown.enter.prevent="mdLinkConfirm()"
+                       placeholder="https://...">
+                <div class="cf-md-link-actions">
+                  <button type="button" class="btn btn-sm" @click="mdLinkCancel()">Cancel</button>
+                  <button type="button" class="btn btn-sm"
+                          style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
+                          @click="mdLinkConfirm()"
+                          :disabled="!cfMdLinkPopover.url.trim()">Insert</button>
+                </div>
+              </div>
+
+              <!-- Markdown toolbar — hidden in preview mode -->
+              <div class="cf-md-toolbar" x-show="!cfEditorDescriptionPreview">
+                <button type="button" class="cf-md-btn" x-tt="'Bold (**text**)'"
+                        @click="mdWrapSelection('#cf-editor-description', '**', '**')"><strong>B</strong></button>
+                <button type="button" class="cf-md-btn" x-tt="'Italic (*text*)'"
+                        @click="mdWrapSelection('#cf-editor-description', '*', '*')"><em>I</em></button>
+                <button type="button" class="cf-md-btn" x-tt="'Inline code (`text`)'"
+                        @click="mdWrapSelection('#cf-editor-description', '`', '`')" style="font-family:monospace">&lt;/&gt;</button>
+                <button type="button" class="cf-md-btn" x-tt="'Bullet list (- item)'"
+                        @click="mdPrependLines('#cf-editor-description', '- ')">• List</button>
+                <button type="button" class="cf-md-btn" x-tt="'Numbered list (1. item)'"
+                        @click="mdPrependLines('#cf-editor-description', '1. ')">1. List</button>
+                <button type="button" class="cf-md-btn" x-tt="'Link [text](url)'"
+                        @click="mdInsertLink('#cf-editor-description')">🔗 Link</button>
+              </div>
+
+              <textarea id="cf-editor-description"
+                        x-show="!cfEditorDescriptionPreview"
+                        class="input cf-md-textarea"
+                        x-model="cfEditorForm.description"
+                        rows="6"
+                        placeholder="What does this CF match and why? Markdown supported."></textarea>
+
+              <div x-show="cfEditorDescriptionPreview"
+                   class="cf-md-preview"
+                   x-html="renderMarkdownPreview(cfEditorForm.description)"></div>
+
+              <div class="cf-editor-field-help">
+                Markdown: <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, <code>[text](url)</code>, and bullet/numbered lists.
+              </div>
+            </div>
+          </section>
+
+          <!-- ===== CONDITIONS ===== -->
+          <section x-show="cfEditorActiveTab === 'conditions'" class="cf-editor-section">
+            <div class="cf-editor-section-head">
               <div>
-                <template x-for="(field, fieldIdx) in spec.fields" :key="field.name">
-                  <div style="margin-bottom:6px">
-                    <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:2px" x-text="field.label || field.name"></label>
-                    <!-- Text input (regex, release group, etc.) -->
-                    <template x-if="field.type === 'textbox'">
-                      <input class="input" x-model="field.value" :placeholder="field.placeholder || ''" style="font-size:12px;padding:4px 8px;font-family:monospace">
-                    </template>
-                    <!-- Number input -->
-                    <template x-if="field.type === 'number'">
-                      <input class="input" type="number" x-model.number="field.value" style="font-size:12px;padding:4px 8px;width:120px">
-                    </template>
-                    <!-- Select dropdown -->
-                    <template x-if="field.type === 'select'">
-                      <select class="input" style="font-size:12px;padding:4px 8px"
-                              x-effect="populateSelectField($el, field.selectOptions || [], String(field.value))"
-                              @change="field.value = $el.value">
+                <h3 class="cf-editor-section-title">Conditions</h3>
+                <p class="cf-editor-section-help">
+                  Define the rules that must match for this custom format to apply to a release.
+                  Spec types and field options are loaded live from your <span x-text="cfEditorForm.appType" style="text-transform:capitalize"></span> instance.
+                </p>
+              </div>
+              <button class="btn btn-sm"
+                      style="background:var(--accent-green-strong);color:var(--text-on-accent);white-space:nowrap"
+                      @click="addCFSpec()"
+                      :disabled="cfEditorSchemaLoading || !!cfEditorSchemaError"
+                      x-tt="cfEditorSchemaError ? 'Cannot add specs — schema unavailable. Fix the connection above and retry.' : ''">+ Add Condition</button>
+            </div>
+
+            <div x-show="cfEditorSchemaLoading" style="text-align:center;padding:24px;color:var(--text-muted)">
+              <span class="spinner"></span> Loading schema from <span x-text="cfEditorForm.appType" style="text-transform:capitalize"></span>...
+            </div>
+
+            <template x-if="cfEditorSchemaError && !cfEditorSchemaLoading">
+              <div style="font-size:13px;padding:12px;border:1px solid var(--accent-red);border-radius:6px;background:var(--accent-red-bg);color:var(--accent-red);display:flex;align-items:flex-start;gap:10px">
+                <span style="font-size:16px;line-height:1">⚠</span>
+                <div style="flex:1">
+                  <div style="font-weight:600;margin-bottom:4px">Schema unavailable</div>
+                  <div x-text="cfEditorSchemaError"></div>
+                </div>
+                <button class="btn btn-sm" style="flex-shrink:0" @click="retryCFEditorSchema()">Retry</button>
+              </div>
+            </template>
+
+            <template x-if="cfEditorForm.specifications.length === 0 && !cfEditorSchemaLoading && !cfEditorSchemaError">
+              <div class="cf-editor-empty cf-editor-empty-action">
+                <div class="cf-editor-empty-headline">No conditions yet</div>
+                <p class="cf-editor-empty-help">
+                  Add at least one matching rule — a release must match these conditions for this custom format to apply.
+                </p>
+                <button class="btn" style="background:var(--accent-green-strong);color:var(--text-on-accent)"
+                        @click="addCFSpec()">+ Add Condition</button>
+              </div>
+            </template>
+
+            <!-- Condition cards — Profilarr-inspired layout with
+                 IDENTITY / VALUE / FLAGS / ACTIONS sub-sections. Each
+                 card stretches to the editor's full width so even
+                 long regex inputs have room. -->
+            <template x-for="(spec, specIdx) in cfEditorForm.specifications" :key="spec._key">
+              <div class="cf-condition-card">
+                <!-- IDENTITY: name + spec type -->
+                <div class="cf-condition-section">
+                  <div class="cf-condition-section-label">Identity</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div>
+                      <label class="cf-editor-sublabel">Name</label>
+                      <input class="input" x-model="spec.name" placeholder="e.g. Mono">
+                    </div>
+                    <div>
+                      <label class="cf-editor-sublabel">Type</label>
+                      <select class="input"
+                              x-effect="populateImplSelect($el, spec.implementation)"
+                              @change="spec.implementation = $el.value; onSpecTypeChange(specIdx)">
+                        <option value="">Select type...</option>
                       </select>
-                    </template>
-                    <!-- Checkbox (exceptLanguage, etc.) -->
-                    <template x-if="field.type === 'checkbox'">
-                      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-body)">
-                        <input type="checkbox" x-model="field.value"> <span x-text="field.label || field.name"></span>
-                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VALUE: dynamic fields based on impl type -->
+                <template x-if="!spec.implementation">
+                  <div class="cf-condition-section">
+                    <div class="cf-condition-section-label">Value</div>
+                    <p style="font-size:12px;color:var(--text-muted);margin:0;font-style:italic">
+                      Select a Type above to configure the value(s) this condition checks against.
+                    </p>
+                  </div>
+                </template>
+                <template x-if="spec.implementation">
+                  <div class="cf-condition-section">
+                    <div class="cf-condition-section-label">Value</div>
+                    <template x-for="(field, fieldIdx) in spec.fields" :key="field.name">
+                      <div style="margin-bottom:8px">
+                        <label class="cf-editor-sublabel" x-text="field.label || field.name"></label>
+                        <template x-if="field.type === 'textbox'">
+                          <input class="input" x-model="field.value" :placeholder="field.placeholder || ''" style="font-family:monospace;font-size:12px">
+                        </template>
+                        <template x-if="field.type === 'number'">
+                          <input class="input" type="number" x-model.number="field.value" style="max-width:160px">
+                        </template>
+                        <template x-if="field.type === 'select'">
+                          <select class="input" style="max-width:280px"
+                                  x-effect="populateSelectField($el, field.selectOptions || [], String(field.value))"
+                                  @change="field.value = $el.value"></select>
+                        </template>
+                        <template x-if="field.type === 'checkbox'">
+                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-body)">
+                            <input type="checkbox" x-model="field.value">
+                            <span x-text="field.label || field.name"></span>
+                          </label>
+                        </template>
+                      </div>
                     </template>
                   </div>
                 </template>
+
+                <!-- FLAGS: pill toggles for required + negate -->
+                <div class="cf-condition-section">
+                  <div class="cf-condition-section-label">Flags</div>
+                  <div class="cf-flag-pills">
+                    <button type="button" class="cf-flag-pill"
+                            :class="{ 'is-on': spec.required, 'is-required': true }"
+                            :aria-pressed="spec.required ? 'true' : 'false'"
+                            @click="spec.required = !spec.required"
+                            x-tt="'Required: must match for this CF to apply (AND logic across all required conditions)'">
+                      <span class="cf-flag-dot" aria-hidden="true"></span>
+                      <span>Required</span>
+                    </button>
+                    <button type="button" class="cf-flag-pill"
+                            :class="{ 'is-on': spec.negate, 'is-negate': true }"
+                            :aria-pressed="spec.negate ? 'true' : 'false'"
+                            @click="spec.negate = !spec.negate"
+                            x-tt="'Negate: matches when the release does NOT match this condition'">
+                      <span class="cf-flag-dot" aria-hidden="true"></span>
+                      <span>Negate</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- ACTIONS: remove -->
+                <div class="cf-condition-section cf-condition-actions">
+                  <button class="btn btn-sm cf-condition-remove"
+                          @click="cfEditorForm.specifications.splice(specIdx, 1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    Remove
+                  </button>
+                </div>
               </div>
             </template>
-          </div>
-        </template>
-      </div>
+          </section>
 
-      <!-- Logic display -->
-      <template x-if="cfEditorForm.specifications.length > 0">
-        <div style="margin-bottom:16px;padding:8px 12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px">
-          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:4px">Match Logic</label>
-          <template x-for="(spec, si) in cfEditorForm.specifications" :key="spec._key">
-            <div style="font-size:12px;display:flex;align-items:center;gap:6px;padding:2px 0">
-              <span x-show="spec.required" style="background:var(--accent-green-strong);color:var(--text-on-accent);font-size:12px;padding:1px 5px;border-radius:3px">Required</span>
-              <span x-show="spec.negate" style="background:var(--accent-orange);color:var(--text-inverse);font-size:12px;padding:1px 5px;border-radius:3px">NOT</span>
-              <span style="color:var(--text-body)" x-text="spec.name || '(unnamed)'"></span>
-              <span style="color:var(--text-muted);font-size:13px" x-text="'(' + (spec.implementation ? spec.implementation.replace('Specification','') : '?') + ')'"></span>
-              <span style="color:var(--text-muted);font-size:12px;margin-left:auto" x-text="spec.required ? 'AND' : 'OR'"></span>
-            </div>
+          <!-- ===== TRaSH (dev-features only) ===== -->
+          <template x-if="config.devFeatures && config.trashSchemaFields">
+            <section x-show="cfEditorActiveTab === 'trash'" class="cf-editor-section">
+              <h3 class="cf-editor-section-title">TRaSH schema fields</h3>
+              <p class="cf-editor-section-help">Developer fields for round-tripping TRaSH JSON. Gated by <code>CLONARR_DEV_FEATURES=true</code>.</p>
+
+              <div class="cf-editor-field">
+                <label class="cf-editor-label">Trash ID</label>
+                <div style="display:flex;gap:8px">
+                  <input class="input" x-model="cfEditorForm.trashId" placeholder="Auto-generated UUID" style="font-family:monospace;font-size:12px">
+                  <button class="btn btn-sm" @click="cfEditorForm.trashId = genUUID(false)">Generate</button>
+                </div>
+              </div>
+
+              <div class="cf-editor-field">
+                <label class="cf-editor-label">Trash Scores (per context)</label>
+                <div style="border:1px solid var(--border-subtle);border-radius:6px;padding:10px">
+                  <template x-for="(ts, tsIdx) in cfEditorForm.trashScores" :key="ts._key">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                      <select class="input" x-model="ts.context" style="flex:1">
+                        <template x-for="ctx in trashScoreContexts(cfEditorForm.appType)" :key="ctx">
+                          <option :value="ctx" x-text="ctx === 'default' ? 'Default' : ctx"></option>
+                        </template>
+                      </select>
+                      <input class="input" type="number" x-model.number="ts.score" style="width:100px" placeholder="0">
+                      <button class="btn btn-sm cf-action-btn cf-action-delete" @click="cfEditorForm.trashScores.splice(tsIdx, 1)" aria-label="Remove score">&#10005;</button>
+                    </div>
+                  </template>
+                  <button class="btn btn-sm" style="margin-top:4px" @click="cfEditorForm.trashScores.push({_key: ++cfEditorScoreCounter, context:'default', score:0})">+ Add context</button>
+                </div>
+              </div>
+
+              <div class="cf-editor-field">
+                <label class="cf-editor-label">JSON Preview</label>
+                <pre style="background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px;padding:10px;font-size:12px;color:var(--text-muted);max-height:240px;overflow:auto;white-space:pre-wrap" x-text="getCFEditorPreviewJSON()"></pre>
+              </div>
+            </section>
           </template>
         </div>
-      </template>
-
-      <!-- TRaSH schema fields — gated by CLONARR_DEV_FEATURES env + trashSchemaFields toggle. -->
-      <template x-if="config.devFeatures && config.trashSchemaFields">
-        <div style="border:1px solid var(--border-subtle);border-radius:6px;padding:12px;margin-bottom:16px;background:var(--bg-card)">
-          <div style="font-size:12px;color:var(--accent-orange);font-weight:600;margin-bottom:8px">TRaSH schema fields</div>
-          <div class="form-group">
-            <label>Trash ID</label>
-            <div style="display:flex;gap:8px">
-              <input class="input" x-model="cfEditorForm.trashId" placeholder="Auto-generated UUID" style="font-family:monospace;font-size:12px">
-              <button class="btn btn-sm" @click="cfEditorForm.trashId = genUUID(false)">Generate</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Trash Scores</label>
-            <div style="border:1px solid var(--border-subtle);border-radius:4px;padding:8px">
-              <template x-for="(ts, tsIdx) in cfEditorForm.trashScores" :key="ts._key || tsIdx">
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
-                  <select class="input" x-model="ts.context" style="flex:1;font-size:12px;padding:3px 6px">
-                    <template x-for="ctx in trashScoreContexts(cfEditorForm.appType)" :key="ctx">
-                      <option :value="ctx" x-text="ctx === 'default' ? 'Default' : ctx"></option>
-                    </template>
-                  </select>
-                  <input class="input" type="number" x-model.number="ts.score" style="width:80px;font-size:12px;padding:3px 6px" placeholder="0">
-                  <button class="btn btn-sm" style="color:var(--accent-red);padding:2px 6px" @click="cfEditorForm.trashScores.splice(tsIdx, 1)">&#10005;</button>
-                </div>
-              </template>
-              <button class="btn btn-sm" style="margin-top:4px" @click="cfEditorForm.trashScores.push({_key: Date.now(), context:'default',score:0})">+ Add context</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Description (Markdown)</label>
-            <textarea class="input" x-model="cfEditorForm.description" rows="3" style="font-size:12px;font-family:monospace" placeholder="CF description for TRaSH guide..."></textarea>
-          </div>
-        </div>
-      </template>
-
-      <!-- JSON Preview (collapsible) -->
-      <div style="margin-bottom:16px">
-        <button type="button" class="collapse-toggle" style="font-size:12px;color:var(--accent-blue);user-select:none"
-                @click="cfEditorShowPreview = !cfEditorShowPreview"
-                :aria-expanded="cfEditorShowPreview"
-                aria-controls="cf-editor-preview">
-          <span x-text="cfEditorShowPreview ? '▼' : '▶'"></span> JSON Preview
-        </button>
-        <div id="cf-editor-preview" x-show="cfEditorShowPreview" style="margin-top:4px">
-          <pre style="background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-muted);max-height:200px;overflow:auto;white-space:pre-wrap" x-text="getCFEditorPreviewJSON()"></pre>
-        </div>
       </div>
 
-      <!-- Result message -->
-      <div x-show="cfEditorResult" style="margin-bottom:12px;font-size:12px;padding:8px 12px;border-radius:6px"
-           :style="cfEditorResult?.error ? 'background:var(--accent-red-bg);color:var(--accent-red)' : 'background:var(--accent-green-bg);color:var(--accent-green)'"
-           x-text="cfEditorResult?.message"></div>
-
-      <!-- Footer actions -->
-      <div class="modal-actions" style="flex-wrap:wrap">
+      <!-- Result + Footer — fixed at bottom -->
+      <div class="cf-editor-footer">
+        <div x-show="cfEditorResult" style="font-size:12px;padding:6px 10px;border-radius:4px;flex:1"
+             :style="{ background: cfEditorResult?.error ? 'var(--accent-red-bg)' : 'var(--accent-green-bg)', color: cfEditorResult?.error ? 'var(--accent-red)' : 'var(--accent-green)' }"
+             x-text="cfEditorResult?.message"></div>
         <template x-if="cfEditorMode === 'edit'">
           <button class="btn" style="color:var(--accent-red);margin-right:auto" @click="deleteCFFromEditor()">Delete</button>
         </template>
         <template x-if="config.devFeatures && config.trashSchemaFields">
           <button class="btn" style="color:var(--accent-orange)" @click="exportTrashJSON()">Export TRaSH JSON</button>
         </template>
-        <button class="btn" @click="showCFEditor = false">Cancel</button>
+        <button class="btn" @click="closeCFEditor()">Cancel</button>
         <button class="btn btn-primary"
                 @click="saveCFEditor()"
                 :disabled="cfEditorSaving || !cfEditorForm.name.trim() || !!cfEditorSchemaError || cfEditorSchemaLoading"

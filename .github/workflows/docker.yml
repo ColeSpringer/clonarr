@@ -4,11 +4,19 @@ on:
   push:
     branches:
       - main
-      # v2.1.0 release-candidate branch — builds preview image with :v2.1.0-rc
-      # tag for external testers (TRaSH, contributors) while the refactor PR
-      # is still open. Removed from this list when v2.1.0 tags stable.
-      - refactor/go-internal-layout
-    tags: ['v*']
+      # v3 UI work branch — builds preview image with :preview tag so brave
+      # testers can opt in by pointing their Unraid template at
+      # ghcr.io/prophetse7en/clonarr:preview instead of :latest or :dev.
+      # All v3 UI changes (sidebar layout, modern profile editor, etc.) land
+      # here. Merged into main as v3.0.0 when feature-complete.
+      # See dev/docs/layout-v2-plan.md for the full strategy.
+      - feature/v3-modern
+    # Semver-only — vX.Y.Z and pre-releases like vX.Y.Z-rc1. Restore
+    # tags or other named markers (e.g. v3-pre-classic-removal) must
+    # not trigger a build: the metadata-action's tag rules don't
+    # produce a docker tag for non-semver refs, so buildx errors out
+    # with "tag is needed when pushing to registry".
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
   workflow_dispatch:
     inputs:
       push_image:
@@ -69,7 +77,7 @@ jobs:
             type=raw,value=dev,enable={{is_default_branch}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             type=raw,value=rc,enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
-            type=raw,value=v2.1.0-rc,enable=${{ github.ref == 'refs/heads/refactor/go-internal-layout' }}
+            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/feature/v3-modern' }}
             type=semver,pattern=v{{version}}
             type=sha,prefix=sha-,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
 

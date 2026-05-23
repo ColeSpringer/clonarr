@@ -292,6 +292,73 @@ func TestCompareCFGroups_Tiering(t *testing.T) {
 	}
 }
 
+// AllCFsCategorized must always nest custom CFs under a single
+// top-level "Custom" category, never inside a TRaSH-managed category
+// like "Audio" — even when ccf.Category collides with a TRaSH name.
+// Each user-chosen category surfaces as a group inside the Custom
+// parent so the picker stays consistent with the browse-view sidebar.
+func TestAllCFsCategorized_CustomsAlwaysUnderCustomParent(t *testing.T) {
+	ad := &AppData{
+		CustomFormats: map[string]*TrashCF{},
+		CFGroups:      []*TrashCFGroup{},
+	}
+	customs := []CustomCF{
+		{ID: "custom:1", Name: "My Override", Category: "Custom", AppType: "radarr"},
+		{ID: "custom:2", Name: "My Audio Tweak", Category: "Audio", AppType: "radarr"},
+		{ID: "custom:3", Name: "My Codec Heuristic", Category: "My Codec Heuristics", AppType: "radarr"},
+		{ID: "custom:4", Name: "Unlabeled CF", Category: "", AppType: "radarr"},
+	}
+	got := AllCFsCategorized(ad, customs)
+
+	if len(got.Categories) != 1 {
+		t.Fatalf("expected 1 top-level category, got %d: %+v", len(got.Categories), got.Categories)
+	}
+	parent := got.Categories[0]
+	if parent.Category != "Custom" {
+		t.Fatalf("expected top-level Category 'Custom', got %q", parent.Category)
+	}
+
+	wantGroups := map[string]int{
+		"Custom":              2, // "My Override" + "Unlabeled CF"
+		"Audio":               1,
+		"My Codec Heuristics": 1,
+	}
+	if len(parent.Groups) != len(wantGroups) {
+		t.Fatalf("expected %d groups under Custom, got %d: %+v",
+			len(wantGroups), len(parent.Groups), parent.Groups)
+	}
+	for _, g := range parent.Groups {
+		if !g.IsCustom {
+			t.Errorf("group %q under Custom must have IsCustom=true", g.Name)
+		}
+		want, ok := wantGroups[g.Name]
+		if !ok {
+			t.Errorf("unexpected group %q under Custom", g.Name)
+			continue
+		}
+		if len(g.CFs) != want {
+			t.Errorf("group %q has %d CFs, want %d", g.Name, len(g.CFs), want)
+		}
+	}
+	// "Custom" group must be FIRST (pinned), regardless of alpha order
+	if parent.Groups[0].Name != "Custom" {
+		t.Errorf("first group under Custom must be 'Custom', got %q", parent.Groups[0].Name)
+	}
+}
+
+func TestAllCFsCategorized_NoCustomsProducesNoCustomCategory(t *testing.T) {
+	ad := &AppData{
+		CustomFormats: map[string]*TrashCF{},
+		CFGroups:      []*TrashCFGroup{},
+	}
+	got := AllCFsCategorized(ad, nil)
+	for _, c := range got.Categories {
+		if c.Category == "Custom" {
+			t.Errorf("Custom category should not appear when there are no custom CFs, got %+v", c)
+		}
+	}
+}
+
 // Ensure the SQP detection is case-insensitive — TRaSH normally uses the
 // upper-case "[SQP]" prefix but defensive coding for any drift.
 func TestCategoryTier_SQPCaseInsensitive(t *testing.T) {

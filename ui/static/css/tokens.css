@@ -89,6 +89,7 @@
   --cat-german: #f0883e;
   --cat-miscellaneous: #6b8aa8;
   --cat-other: #8b949e;
+  --cat-custom: #ff8c42;   /* user-managed bucket — orange-tan, distinct from Other's grey */
   --cat-required-core: #5eccac;
   --cat-required: #5eccac;
   --cat-sqp: #7c83eb;
@@ -114,6 +115,33 @@
   --banner-warn-bg: #5a1f1f;
   --banner-warn-border: #8b2d2d;
   --banner-warn-text: #ffdada;
+
+  /* v3 app brand colors — official Radarr/Sonarr hex from their source repos.
+     Clonarr green matches the energy-core green in the clonarr logo and is
+     used on app-agnostic global sections (Settings, About) so they get the
+     same fade-banner treatment as Radarr/Sonarr pages, just with Clonarr's
+     own identity. */
+  --radarr-color: #ffc230;
+  --radarr-glow: rgba(255, 194, 48, 0.18);
+  --sonarr-color: #35c5f4;
+  --sonarr-glow: rgba(53, 197, 244, 0.18);
+  --prowlarr-color: #e66000;
+  --prowlarr-glow: rgba(230, 96, 0, 0.18);
+  --clonarr-color: #2faa57;
+  --clonarr-glow: rgba(47, 170, 87, 0.18);
+
+  /* Active app resolves at root level so both sidebar AND main-pane banner
+     pick up the same color via cascade. Default = Radarr; flipped to Sonarr
+     by [data-app="sonarr"] set on the x-data wrapper at runtime. The
+     selector is wrapper-scoped so it cannot accidentally match other
+     elements that happen to use a data-app attribute. */
+  --app-color: var(--radarr-color);
+  --app-glow: var(--radarr-glow);
+}
+
+[x-data="clonarr"][data-app="sonarr"] {
+  --app-color: var(--sonarr-color);
+  --app-glow: var(--sonarr-glow);
 }
 
 :root[data-theme="light"] {
@@ -133,10 +161,18 @@
   --border-muted: #d0d7de;
   --border-faint: #dde2e7;
 
-  /* Text — bumped contrast for legibility on muted bg */
+  /* Text — bumped contrast for legibility on muted bg.
+     --text-secondary was #32383f (luminance ~20%, almost indistinguishable
+     from --text-primary at ~13%). Raised to #57606a (~38%, GitHub-light
+     `--fgColor-muted`) so the secondary text reads visually subordinate
+     to primary and matches dark-mode's relative hierarchy (where
+     secondary b8 is less prominent than muted c0). Affects ~118 usages
+     across the codebase — descriptions, helper text, tab inactive
+     states, app-banner meta, settings nav, etc. — restoring proper
+     hierarchy in light mode where it was collapsed. */
   --text-primary: #1f2328;
   --text-body: #24292f;
-  --text-secondary: #32383f;
+  --text-secondary: #57606a;
   --text-muted: #42474e;
   --text-muted-secondary: #525964;
   --text-soft: #525964;
@@ -207,4 +243,17 @@
   --banner-warn-bg: #ffebe9;
   --banner-warn-border: #ffcecb;
   --banner-warn-text: #82071e;
+
+  /* v3 app brand colors (light-mode override). Radarr's #ffc230 has
+     poor contrast against white/near-white backgrounds — text + borders
+     in that hex disappear in light theme. Darkened to a deeper amber
+     for light mode only; dark mode keeps the original brand hex. Glow
+     follows the new base hue so the soft fade behind app banners
+     reads as the same colour family. */
+  --radarr-color: #c47800;
+  --radarr-glow: rgba(196, 120, 0, 0.12);
+  --sonarr-color: #35c5f4;
+  --sonarr-glow: rgba(53, 197, 244, 0.12);
+  --clonarr-color: #1e8540;
+  --clonarr-glow: rgba(30, 133, 64, 0.12);
 }

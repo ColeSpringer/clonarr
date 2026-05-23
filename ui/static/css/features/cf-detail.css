@@ -10,6 +10,619 @@
   .cf-score.negative { color: var(--accent-red); }
   .cf-score.zero { color: var(--text-secondary); }
 
+  /* ============================================================
+     v3 Sprint 3 — Naming sub-tab cards. Two card families with
+     distinct accent colors so the page reads as two clear regions
+     without too many competing colors:
+       - .naming-card-info  (--app-color) = info-from-guide cards
+                            (Why use a naming scheme, IMDb vs TMDb)
+                            — matches the "Currently on instance"
+                            chip so the active-app theme threads
+                            through everything that's app-scoped.
+       - .naming-card-scheme (--cat-language green) = recommended
+                            naming scheme cards. Green signals
+                            "approved/actionable recommendations"
+                            and is the only non-app-color highlight,
+                            so it stands out clearly.
+     ============================================================ */
+  .naming-card-info .detail-section-header { border-left: 3px solid var(--app-color); }
+  .naming-card-scheme .detail-section-header { border-left: 3px solid var(--cat-language); }
+  .naming-card-info,
+  .naming-card-scheme { margin-bottom: 6px; }
+
+  /* ============================================================
+     v3 Sprint 3 — Custom Formats browse (per-category cards, 1-col
+     CFs, tighter spacing). Browse-specific selectors deliberately
+     scope only to .cf-browse-* containers so the profile detail
+     view (which also uses .detail-section + .cf-row) keeps its
+     existing dimensions.
+     ============================================================ */
+  /* ============================================================
+     v3 Sprint 3 — Maintenance page (Backup & Restore + Cleanup
+     sub-tabs). Section labels, card framing, and danger-state
+     treatment for Delete All actions.
+     ============================================================ */
+  .maintenance-section-label {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin: 16px 0 8px;
+  }
+  .maintenance-section-label.maintenance-section-danger { color: var(--accent-red); }
+
+  .maintenance-card { padding: 12px 14px; margin-bottom: 8px; }
+  .maintenance-card-body {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px;
+  }
+  .maintenance-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .maintenance-card-title-danger { color: var(--accent-red); }
+  .maintenance-card-caveat { color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .maintenance-card-desc {
+    font-size: 12px; color: var(--text-muted);
+    margin-top: 4px; line-height: 1.5;
+  }
+  .maintenance-card-settings { padding: 14px; }
+  /* Destructive cards — same red treatment for BOTH Delete All actions */
+  .maintenance-card-danger {
+    border: 1px solid var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 6%, transparent);
+  }
+  /* Pill scan-button variant scoped to maintenance-card-danger so the
+     destructive action visually matches its host card. */
+  .maintenance-btn-danger {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 10%, transparent);
+  }
+  .maintenance-btn-danger:hover {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 20%, transparent);
+  }
+
+  /* Shared Media Management header — RADARR/SONARR tag + instance
+     picker + connection status. Lives at the top of BOTH Quality
+     Definitions and Movie/Episode Naming sub-tabs so the picker
+     stays at the same y-position when the user switches sub-tabs.
+     Same gradient + --app-color visual language as the Custom
+     Formats toolbar (.cf-browse-toolbar). */
+  .media-mgmt-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, var(--app-glow) 0%, transparent 60%), var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-muted);
+    border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-subtle) 60%, var(--border-subtle) 100%) 1;
+    border-radius: 6px;
+    flex-wrap: wrap;
+  }
+  .media-mgmt-app-tag {
+    color: var(--app-color);
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    flex-shrink: 0;
+  }
+  .media-mgmt-instance-label {
+    font-size: 13px; color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .media-mgmt-instance-select {
+    width: 220px; font-size: 13px; padding: 4px 8px;
+    flex-shrink: 0;
+  }
+  .media-mgmt-status {
+    font-size: 12px; font-weight: 500;
+    padding: 2px 8px; border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .media-mgmt-status-ok { color: var(--accent-green); background: var(--accent-green-bg, transparent); }
+  .media-mgmt-status-fail { color: var(--accent-red); }
+  .media-mgmt-status-warn { color: var(--accent-orange); }
+  .media-mgmt-status-hint { font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+  /* Two-col shell: left sidebar (category filter) + right main pane
+     (the existing toolbar + card list). Mirrors Sync Preview's
+     overview-shell pattern so the two pages feel like the same
+     product. Sidebar collapses to a top strip on narrow viewports. */
+  .cf-browse-shell {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  .cf-browse-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+    position: sticky;
+    top: 12px;
+  }
+  .cf-browse-side-item,
+  .cf-browse-side-parent-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: transparent;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 0 4px 4px 0;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-left-color 0.12s;
+  }
+  .cf-browse-side-item:hover,
+  .cf-browse-side-parent-label:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+  .cf-browse-side-item.active,
+  .cf-browse-side-parent-label.active {
+    background: var(--app-glow);
+    color: var(--app-color);
+    border-left-color: var(--app-color);
+    font-weight: 600;
+  }
+  /* Custom-category sidebar items intentionally use the same visual
+     language as TRaSH parents (Audio / HDR / Streaming / ...) — no
+     special orange tint. The cat-custom CSS token on the right-pane
+     cards (`.cat-custom .detail-section-header { border-left: ... }`)
+     is the only colour signal users need to distinguish them. */
+  .cf-browse-side-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cf-browse-side-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-page);
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .cf-browse-side-item.active .cf-browse-side-count,
+  .cf-browse-side-parent-label.active .cf-browse-side-count {
+    color: var(--app-color);
+  }
+
+  /* Parent row: chevron + label side by side. Chevron is its own
+     button so click target is unambiguous (chevron = toggle, label =
+     filter). Group wrapper holds parent row + children. */
+  .cf-browse-side-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .cf-browse-side-parent-row {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .cf-browse-side-chevron {
+    background: transparent;
+    border: 0;
+    padding: 6px 4px 6px 6px;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.15s, color 0.12s;
+    flex-shrink: 0;
+  }
+  .cf-browse-side-chevron:hover {
+    color: var(--text-primary);
+  }
+  .cf-browse-side-chevron.open {
+    transform: rotate(90deg);
+  }
+  .cf-browse-side-parent-label {
+    flex: 1;
+    min-width: 0;
+    font-weight: 500;
+  }
+  .cf-browse-side-children {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-left: 18px;
+    padding-left: 4px;
+    border-left: 1px solid var(--border-subtle);
+  }
+  .cf-browse-side-item.is-child {
+    font-size: 12.5px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .cf-browse-main {
+    min-width: 0;
+  }
+  @media (max-width: 900px) {
+    .cf-browse-shell { grid-template-columns: 1fr; }
+    .cf-browse-sidebar {
+      flex-direction: row;
+      flex-wrap: wrap;
+      max-height: none;
+      position: static;
+      overflow: visible;
+    }
+    .cf-browse-side-item {
+      border-left: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 4px;
+    }
+    .cf-browse-side-item.active {
+      border-left: 0;
+      border-bottom-color: var(--app-color);
+    }
+  }
+
+  /* Toolbar: app tag + count + search + actions in one row. Gradient
+     background + bottom border-image carry the --app-color so the
+     active app is obvious at a glance — same visual language as the
+     v3-inst-header in Sync Rules and History. */
+  .cf-browse-toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, var(--app-glow) 0%, transparent 60%), var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-muted);
+    border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-subtle) 60%, var(--border-subtle) 100%) 1;
+    border-radius: 6px;
+    flex-wrap: wrap;
+  }
+  .cf-browse-app-tag {
+    color: var(--app-color);
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    flex-shrink: 0;
+  }
+  .cf-browse-count {
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .cf-browse-count strong { color: var(--text-primary); font-weight: 600; }
+  .cf-browse-filter-hint { color: var(--text-muted); }
+  /* Expand all / Collapse all — small subtle text button, lives
+     between the count and the search field. Label flips depending on
+     current state. */
+  .cf-browse-expand-toggle {
+    background: transparent; border: 0; padding: 2px 6px;
+    color: var(--text-secondary);
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .cf-browse-expand-toggle:hover { color: var(--app-color); background: var(--app-glow); }
+  .cf-browse-search-wrap {
+    position: relative;
+    flex: 1; max-width: 360px;
+    min-width: 200px;
+  }
+  .cf-browse-search {
+    width: 100%;
+    padding: 5px 28px 5px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-body);
+    font-size: 13px; font-family: inherit;
+  }
+  .cf-browse-search:focus { outline: none; border-color: var(--app-color); }
+  .cf-browse-search-clear {
+    position: absolute; right: 4px; top: 50%;
+    transform: translateY(-50%);
+    background: transparent; border: 0; padding: 4px;
+    color: var(--text-muted); cursor: pointer;
+    font-size: 12px; line-height: 1;
+  }
+  .cf-browse-search-clear:hover { color: var(--text-primary); }
+  .cf-browse-actions { display: flex; gap: 6px; margin-left: auto; }
+
+  /* Per-category card — tighter margin than the shared default. */
+  .cf-browse-card { margin-bottom: 4px; }
+  /* Card header: title + snippet stacked on the left, count + chevron
+     right. Snippet shows only when collapsed. */
+  .cf-browse-header { padding: 7px 14px; align-items: flex-start; }
+  .cf-browse-header-text {
+    display: flex; flex-direction: column; gap: 1px;
+    flex: 1; min-width: 0;
+  }
+  .cf-browse-snippet {
+    font-size: 12px; color: var(--text-secondary);
+    font-style: italic; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis;
+    /* 2-line clamp keeps the header height bounded even if a TRaSH
+       description truncates awkwardly at the 120-char boundary. */
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  /* Compact CF row — legacy flex layout for rows OUTSIDE a .cf-grid
+     wrapper (none today, but keeps the structure resilient if a
+     future caller skips the grid). */
+  .cf-row-compact { padding: 4px 14px; gap: 10px; }
+  .cf-row-compact .cf-name {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .cf-name-text {
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-primary);
+  }
+
+  /* ============================================================
+     CSS Subgrid layout — rows in the same .cf-grid wrapper share
+     column widths so per-row affordances (ⓘ, guide, json, edit,
+     score) line up perfectly regardless of name length. The widest
+     CF name in the section determines the name column; everything
+     after the name sits at a consistent x-position across rows.
+     Modern browsers only (Chrome 117+, FF 71+, Safari 16+); older
+     browsers fall back to the flex layout above gracefully because
+     .cf-grid is just an extra wrapper div and the subgrid declarations
+     no-op without support.
+     ============================================================ */
+  /* Shared column widths across every .cf-grid AND the page-level
+     .cf-table-header. Fixed pixel widths on name + actions + score
+     so all cards align to the same column positions — pure 1fr on
+     conditions soaks up remaining space (resizes with viewport
+     width). The grid-template-columns custom property is declared
+     on .cf-browse-main so both header and per-card grids consume
+     the same value without duplicating it. */
+  .cf-browse-main {
+    --cf-grid-cols:
+      220px                   /* 1: name + Custom badge (hover for info tooltip) */
+      minmax(0, 1fr)          /* 2: condition pills (flexes + wraps) */
+      110px;                  /* 3: actions cluster (clone + edit/delete for custom) */
+  }
+  .cf-grid {
+    display: grid;
+    grid-template-columns: var(--cf-grid-cols);
+    column-gap: 12px;
+  }
+
+  /* Page-level column header — sits between toolbar and first card,
+     sticky under the toolbar so labels stay visible while scrolling.
+     Uses the same grid-template-columns as .cf-grid via the shared
+     CSS custom property so labels align with the data cells below. */
+  .cf-table-header {
+    display: grid;
+    grid-template-columns: var(--cf-grid-cols);
+    column-gap: 12px;
+    padding: 10px 16px 8px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-radius: 6px 6px 0 0;
+  }
+  .cf-table-header-cell {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    line-height: 1.2;
+  }
+  .cf-table-header-pills { grid-column: 2; }
+  .cf-table-header-actions { grid-column: 3; text-align: right; }
+  .cf-grid .cf-row-compact {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: center;
+    /* Padding zeroed so subgrid cells stay aligned with the parent
+       grid's column lines (subgrid offsets cells by the row's
+       padding). Horizontal padding moves to .cf-grid; vertical
+       spacing comes from min-height + the row border. */
+    padding: 0 14px;
+    min-height: 28px;
+    gap: 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .cf-grid .cf-row-compact:first-child { border-top: 0; }
+  .cf-grid .cf-row-compact:hover { background: var(--bg-elevated-hover); }
+  /* Explicit grid-column on every cell so x-show (display:none)
+     doesn't shift other cells leftward when a cell is hidden. */
+  .cf-grid .cf-cell-name {
+    grid-column: 1;
+    display: flex; align-items: baseline; gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  /* Long CF names that exceed the 220px name column get truncated
+     with ellipsis so cards keep consistent column alignment across
+     the page. Full name still readable via title-tooltip on the
+     truncated text — see x-tt binding on .cf-name-text. */
+  .cf-grid .cf-cell-name .cf-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    cursor: help;
+    /* Match the density of the rest of the row — pills are 10px, score
+       is 13px. Body default was bigger and made the name shout. Bold
+       carries the visual weight without bumping the size. */
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-body);
+  }
+  .cf-grid .cf-cell-name .cf-name-text:hover {
+    color: var(--accent-blue);
+  }
+  .cf-grid .cf-cell-pills {
+    grid-column: 2;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    min-width: 0;
+    align-items: center;
+  }
+  /* Single actions cluster — clone always present, edit+delete only for
+     custom CFs. Right-aligned so the cluster pins to the row edge; gap
+     keeps icons readable as separate buttons but visually grouped. */
+  .cf-grid .cf-cell-actions {
+    grid-column: 3;
+    display: inline-flex; align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .cf-action-edit-group { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ============================================================
+     Condition pills — Profilarr-inspired visual at-a-glance for
+     what matchers a CF uses. Color follows the parent category so
+     a CF row in the "HDR" group has HDR-coloured pills, "Unwanted"
+     gets red pills, etc. Required pills get a solid border ring;
+     negated ("NOT X") pills strike through the label.
+     ============================================================ */
+  /* Binary include/exclude signalling — green = match (include),
+     red = negate (exclude). Category colour lives on the section
+     border already; pills carry the per-spec semantics so the user
+     can see at-a-glance which side of the equation a condition is
+     on. Required gets a thicker ring in the same colour. */
+  /* Pill base — layout only. Visual palette comes from one of the
+     three modifier classes (cf-pill-include / cf-pill-negate /
+     cf-pill-overflow) so there's no compound-selector specificity to
+     debug. cf-pill-required adds a thicker border on top. */
+  .cf-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 7px;
+    border-radius: 9px;
+    font-size: 10px; line-height: 1.6;
+    font-weight: 500;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    cursor: default;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    color: var(--text-body);
+  }
+  /* Border-only signalling — pill text uses regular body color, only
+     the border carries the include/exclude semantic. Quietest possible
+     differentiation while still scannable: the colored ring catches
+     the eye without making every row feel like a status banner. */
+  .cf-pill-include {
+    color: var(--text-body);
+    background: transparent;
+    border-color: color-mix(in srgb, var(--accent-green) 55%, transparent);
+  }
+  .cf-pill-negate {
+    color: var(--text-body);
+    background: transparent;
+    border-color: color-mix(in srgb, var(--accent-red) 55%, transparent);
+  }
+  .cf-pill-overflow {
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-muted);
+    border-color: var(--border-subtle);
+    cursor: help;
+  }
+  .cf-pill-required { border-width: 2px; padding: 0 6px; }
+  .cf-pill .cf-pill-label { font-weight: 600; }
+  .cf-pill .cf-pill-value {
+    overflow: hidden; text-overflow: ellipsis;
+    max-width: 140px;
+    opacity: 0.85;
+  }
+
+  /* Info button — hover trigger for the body-level tooltip portal.
+     Description + TRaSH guide + JSON links are shown together via
+     showCFTooltip / hideCFTooltip (see profiles.js + #cf-tooltip-portal
+     in index.html). The portal handles hover-lock so the links stay
+     clickable when the user moves into the tooltip. */
+  .cf-action-info {
+    color: var(--text-muted);
+    font-size: 13px; cursor: pointer;
+  }
+  .cf-action-info:hover { color: var(--text-body); }
+  .cf-action-info.active { color: var(--accent-blue); }
+
+  /* Clone button — small, neutral, available on every row (TRaSH + custom). */
+  .cf-action-clone {
+    color: var(--text-muted);
+    font-size: 13px; cursor: pointer;
+  }
+  .cf-action-clone:hover { color: var(--accent-blue); }
+
+  /* Custom badge — small, muted-orange pill replaces the inline-style
+     "Custom" tag. Same color signal as before, less visual weight. */
+  .cf-custom-badge {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent-orange);
+    padding: 0 5px;
+    border: 1px solid var(--accent-orange);
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* Custom-CF edit/delete cluster — only present for user CFs. Sits
+     right after the name cluster so it doesn't drift to the far edge. */
+  .cf-edit-actions {
+    display: inline-flex; align-items: center; gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Score cell pinned to the right edge of the row. margin-left:auto
+     gives the row's leftover space to the score's left margin so name
+     + cluster stay packed left while score stays right. */
+  .cf-row-compact .cf-score { margin-left: auto; flex-shrink: 0; }
+
+  /* TRaSH-Guides external links — blue + underline, classic external-
+     link convention so the user instantly recognises them as off-site
+     URLs (no tooltip needed; the labels "guide" / "json" plus the
+     external-link styling are self-explanatory). */
+  .cf-trash-link {
+    color: var(--accent-blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: 11px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    line-height: 1.3;
+  }
+  .cf-trash-link:hover { color: var(--accent-blue); filter: brightness(1.2); }
+  .cf-trash-link:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
+  }
+
+  /* Edit / delete buttons on custom CFs — small icon buttons in the
+     actions cluster, color-coded for affordance (blue = edit, red =
+     delete). Replaces the prior inline-action style mixed into .cf-name. */
+  .cf-action-btn {
+    background: transparent; border: 0; padding: 0;
+    font-size: 15px; line-height: 1;
+    cursor: pointer; font-family: inherit;
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: var(--text-muted);
+    transition: background 0.12s, color 0.12s;
+  }
+  .cf-action-btn:hover { background: var(--bg-elevated); color: var(--text-body); }
+  .cf-action-clone:hover { color: var(--accent-blue); }
+  .cf-action-edit { color: var(--accent-blue); }
+  .cf-action-edit:hover { color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
+  .cf-action-delete { color: var(--accent-red); }
+  .cf-action-delete:hover { color: var(--accent-red); background: color-mix(in srgb, var(--accent-red) 12%, transparent); }
+
   /* Detail section headers */
   .detail-section { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; margin-bottom: 6px; overflow: hidden; }
   .detail-section-header { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; user-select: none; gap: 8px; border: 0; background: transparent; width: 100%; text-align: left; color: inherit; font-family: inherit; }
@@ -37,6 +650,7 @@
   .cat-german .detail-section-header, .cat-german .pb-cat-header { border-left: 3px solid var(--cat-german); }
   .cat-miscellaneous .detail-section-header, .cat-miscellaneous .pb-cat-header { border-left: 3px solid var(--cat-miscellaneous); }
   .cat-other .detail-section-header, .cat-other .pb-cat-header { border-left: 3px solid var(--cat-other); }
+  .cat-custom .detail-section-header, .cat-custom .pb-cat-header { border-left: 3px solid var(--cat-custom); }
   .cat-required-core .detail-section-header, .cat-required-core .pb-cat-header { border-left: 3px solid var(--cat-required-core); }
   .cat-required .detail-section-header, .cat-required .pb-cat-header { border-left: 3px solid var(--cat-required); }
   .cat-sqp .detail-section-header, .cat-sqp .pb-cat-header { border-left: 3px solid var(--cat-sqp); }
@@ -49,5 +663,303 @@
   .desc-table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size:13px; }
   .desc-table th, .desc-table td { border: 1px solid var(--border-subtle); padding: 2px 6px; text-align: left; }
   .desc-table th { background: var(--bg-muted); font-weight: 600; }
+
+  /* ============================================================
+     CF Editor Modal — wide layout with sidebar navigation. Replaces
+     the old narrow stacked-scroll modal. Sections split between
+     General / Conditions / TRaSH so dense forms get room without
+     forcing one giant scroll.
+     ============================================================ */
+  .cf-editor-modal {
+    width: min(1100px, 95vw);
+    max-width: none !important;
+    max-height: 90vh;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  .cf-editor-header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .cf-editor-title {
+    margin: 0; font-size: 16px; font-weight: 600;
+    color: var(--text-body); flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cf-editor-subtitle {
+    color: var(--text-muted); font-weight: 400;
+  }
+  .cf-editor-app-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-secondary);
+  }
+  .cf-editor-app-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; flex-shrink: 0;
+  }
+
+  .cf-editor-body {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    flex: 1; min-height: 0;
+  }
+  .cf-editor-sidebar {
+    border-right: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    padding: 12px 8px;
+    display: flex; flex-direction: column; gap: 2px;
+    overflow-y: auto;
+  }
+  .cf-editor-side-item {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent; border: 0;
+    color: var(--text-secondary); font-size: 13px; font-weight: 500;
+    text-align: left; cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  .cf-editor-side-item:hover {
+    background: var(--bg-elevated-hover);
+    color: var(--text-body);
+  }
+  .cf-editor-side-item.active {
+    background: var(--app-color, var(--accent-blue));
+    color: var(--text-on-accent);
+    font-weight: 600;
+  }
+  .cf-editor-side-count {
+    background: rgba(255,255,255,0.18);
+    color: inherit;
+    font-size: 10px; font-weight: 600;
+    padding: 1px 6px; border-radius: 8px;
+    min-width: 18px; text-align: center;
+  }
+  .cf-editor-side-item:not(.active) .cf-editor-side-count {
+    background: var(--bg-muted); color: var(--text-muted);
+  }
+
+  .cf-editor-pane {
+    padding: 20px 24px;
+    overflow-y: auto;
+    min-width: 0;
+  }
+  .cf-editor-section {}
+  .cf-editor-section-title {
+    margin: 0 0 4px; font-size: 16px; font-weight: 600;
+    color: var(--text-body);
+  }
+  .cf-editor-section-help {
+    margin: 0 0 18px; font-size: 12px;
+    color: var(--text-muted); line-height: 1.5;
+  }
+  .cf-editor-section-head {
+    display: flex; align-items: flex-start; gap: 16px;
+    margin-bottom: 14px;
+  }
+  .cf-editor-field { margin-bottom: 18px; }
+  .cf-editor-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .cf-editor-sublabel {
+    display: block;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.4px;
+    margin-bottom: 4px;
+  }
+  .cf-editor-field-help {
+    font-size: 12px; color: var(--text-secondary);
+    line-height: 1.5; margin-top: 6px;
+  }
+  .cf-editor-field-help code {
+    background: var(--bg-elevated);
+    padding: 1px 4px; border-radius: 3px;
+    font-size: 11px;
+  }
+  .cf-editor-empty {
+    padding: 28px; text-align: center;
+    color: var(--text-muted); font-size: 13px;
+    border: 1px dashed var(--border-subtle); border-radius: 6px;
+  }
+  .cf-editor-empty-action {
+    padding: 40px 28px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 10px;
+  }
+  .cf-editor-empty-headline {
+    font-size: 15px; font-weight: 600;
+    color: var(--text-body);
+  }
+  .cf-editor-empty-help {
+    margin: 0 0 6px;
+    max-width: 480px;
+    color: var(--text-secondary);
+    font-size: 12px; line-height: 1.5;
+  }
+
+  /* Markdown toolbar + textarea + preview pane */
+  /* Inline link popover that replaces the native window.prompt. Sits
+     above the toolbar in document flow, doesn't shift the textarea. */
+  .cf-md-link-popover {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    background: var(--bg-elevated-hover);
+    border: 1px solid var(--accent-blue);
+    border-radius: 4px;
+  }
+  .cf-md-link-label {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    margin: 0;
+  }
+  .cf-md-link-popover .input {
+    flex: 1; min-width: 0;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+  }
+  .cf-md-link-actions {
+    display: inline-flex; gap: 6px;
+  }
+
+  .cf-md-toolbar {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--border-subtle);
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+    background: var(--bg-elevated);
+  }
+  .cf-md-btn {
+    background: transparent; border: 0;
+    padding: 4px 10px;
+    color: var(--text-body); font-size: 12px;
+    cursor: pointer; border-radius: 3px;
+    font-family: inherit;
+    min-width: 28px;
+  }
+  .cf-md-btn:hover { background: var(--bg-elevated-hover); }
+  .cf-md-textarea {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    min-height: 140px;
+    resize: vertical;
+  }
+  .cf-md-preview {
+    border: 1px solid var(--border-subtle);
+    border-radius: 0 0 4px 4px;
+    padding: 12px;
+    min-height: 140px;
+    background: var(--bg-page);
+    font-size: 13px; line-height: 1.6;
+    color: var(--text-body);
+  }
+  .cf-md-preview p { margin: 0 0 10px; }
+  .cf-md-preview p:last-child { margin-bottom: 0; }
+  .cf-md-preview code {
+    background: var(--bg-elevated);
+    padding: 1px 4px; border-radius: 3px;
+    font-size: 12px;
+  }
+  .cf-md-preview a { color: var(--accent-blue); }
+  .cf-md-preview ul, .cf-md-preview ol { padding-left: 20px; margin: 0 0 10px; }
+  .cf-md-preview-toggle {
+    background: transparent; border: 1px solid var(--border-subtle);
+    padding: 2px 8px;
+    color: var(--accent-blue); font-size: 11px;
+    cursor: pointer; border-radius: 3px;
+    font-family: inherit; text-transform: none;
+    letter-spacing: 0;
+  }
+  .cf-md-preview-toggle:hover { background: var(--bg-elevated-hover); }
+
+  /* Condition card — IDENTITY / VALUE / FLAGS / ACTIONS layout */
+  .cf-condition-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--bg-card);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .cf-condition-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .cf-condition-section:last-child { border-bottom: 0; }
+  .cf-condition-section-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .cf-condition-actions {
+    background: var(--bg-page);
+    display: flex; justify-content: flex-end;
+  }
+  .cf-condition-remove {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent-red);
+    border: 1px solid color-mix(in srgb, var(--accent-red) 35%, transparent);
+    background: transparent;
+  }
+  .cf-condition-remove:hover {
+    background: color-mix(in srgb, var(--accent-red) 10%, transparent);
+  }
+
+  /* Flag pills — match the table-view binary-color language */
+  .cf-flag-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cf-flag-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    color: var(--text-secondary); font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .cf-flag-pill .cf-flag-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .cf-flag-pill:hover { background: var(--bg-elevated-hover); }
+  .cf-flag-pill.is-required.is-on {
+    color: var(--accent-green);
+    border-color: color-mix(in srgb, var(--accent-green) 55%, transparent);
+  }
+  .cf-flag-pill.is-required.is-on .cf-flag-dot { background: var(--accent-green); }
+  .cf-flag-pill.is-negate.is-on {
+    color: var(--accent-red);
+    border-color: color-mix(in srgb, var(--accent-red) 55%, transparent);
+  }
+  .cf-flag-pill.is-negate.is-on .cf-flag-dot { background: var(--accent-red); }
+
+  .cf-editor-footer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    background: var(--bg-page);
+  }
 
   /* Profile info tooltip */

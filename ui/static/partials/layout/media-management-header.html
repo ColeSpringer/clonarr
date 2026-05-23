@@ -1,0 +1,38 @@
+{{define "layout/media-management-header"}}
+  <!-- Shared Media Management header — lives at the top of BOTH the
+       Quality Definitions and Movie/Episode Naming sub-tabs. RADARR/
+       SONARR tag carries the app context (same gradient + --app-color
+       language as the Custom Formats toolbar), and the instance
+       picker reads/writes `mediaInstanceId[activeAppType]` — shared
+       across sub-tabs so the picker stays put when the user switches
+       between Quality and Naming. -->
+  <div class="media-mgmt-header">
+    <span class="media-mgmt-app-tag" x-text="activeAppType === 'sonarr' ? 'SONARR' : 'RADARR'"></span>
+    <span class="media-mgmt-instance-label">Instance:</span>
+    <select class="input media-mgmt-instance-select"
+            @change="mediaInstanceId = { ...mediaInstanceId, [activeAppType]: $event.target.value };
+                     if ($event.target.value) {
+                       const _inst = instances.find(i => i.id === $event.target.value);
+                       if (_inst) testInstance(_inst);
+                       loadInstanceQS(activeAppType, $event.target.value);
+                       loadInstanceNaming(activeAppType);
+                     }">
+      <option value="" :selected="!mediaInstanceId[activeAppType]">Select instance…</option>
+      <template x-for="inst in instancesOfType(activeAppType)" :key="inst.id">
+        <option :value="inst.id" x-text="inst.name" :selected="mediaInstanceId[activeAppType] === inst.id"></option>
+      </template>
+    </select>
+    <template x-if="mediaInstanceId[activeAppType] && instanceStatus[mediaInstanceId[activeAppType]] === 'connected'">
+      <span class="media-mgmt-status media-mgmt-status-ok">Connected</span>
+    </template>
+    <template x-if="mediaInstanceId[activeAppType] && instanceStatus[mediaInstanceId[activeAppType]] === 'failed'">
+      <span class="media-mgmt-status media-mgmt-status-fail">Connection failed</span>
+    </template>
+    <template x-if="mediaInstanceId[activeAppType] && !instanceStatus[mediaInstanceId[activeAppType]]">
+      <span class="media-mgmt-status media-mgmt-status-warn">Not tested</span>
+    </template>
+    <template x-if="!mediaInstanceId[activeAppType]">
+      <span class="media-mgmt-status-hint">Select an instance to compare and sync</span>
+    </template>
+  </div>
+{{end}}

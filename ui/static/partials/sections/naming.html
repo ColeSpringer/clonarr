@@ -1,19 +1,27 @@
 {{define "sections/naming"}}
-      <!-- ===== File Naming section ===== -->
-      <div class="page" x-show="currentSection === 'naming'">
-        <div style="font-size:18px;font-weight:600;margin-bottom:4px">File Naming</div>
+      <!-- ===== Naming sub-tab (under Media Management) — label adapts
+           per active app: "Movie Naming" (Radarr) vs "Episode Naming"
+           (Sonarr) to match *arr terminology. ===== -->
+      <div class="page" x-show="currentSection === 'media-management' && getMediaTab(activeAppType) === 'naming'">
+        <div style="font-size:18px;font-weight:600;margin-bottom:4px"
+             x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></div>
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">TRaSH recommended naming schemes for folders and files. Select a media server tab and an instance to compare and apply.</div>
-        <!-- Shared info cards — text sourced verbatim from TRaSH-Guides:
+
+        <!-- Shared Media Management header — same position as on Quality
+             Definitions so the picker doesn't jitter when the user
+             switches sub-tabs. -->
+        {{template "layout/media-management-header" .}}
+
+        <!-- Shared info cards (BLUE accent = info-from-guide) — text
+             sourced verbatim from TRaSH-Guides:
              includes/starr/renaming-description-faq.md
              includes/{sonarr,radarr}/{imdb-vs-tvdb,imdb-vs-tmdb}.md
              includes/{sonarr,radarr}/{tvdb-imdb-info,tmdb-imdb-info}.md -->
-        <div class="card" style="padding:0;margin:12px 0 0;overflow:hidden">
-          <div style="padding:12px 16px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px"
-               @click="namingFAQExpanded = !namingFAQExpanded">
-            <span class="detail-section-chevron" :class="{ open: namingFAQExpanded }" style="color:var(--text-muted);font-size:11px">&#9654;</span>
-            <span style="font-weight:600;color:var(--text-primary);font-size:14px">Why use a naming scheme?</span>
-            <span style="font-size:11px;color:var(--text-secondary);margin-left:auto" x-show="!namingFAQExpanded">click to expand</span>
-          </div>
+        <div class="detail-section naming-card-info">
+          <button type="button" class="detail-section-header" @click="namingFAQExpanded = !namingFAQExpanded">
+            <span class="detail-section-label">Why use a naming scheme?</span>
+            <span class="detail-section-chevron" :class="{ open: namingFAQExpanded }">&#9654;</span>
+          </button>
           <div x-show="namingFAQExpanded" x-cloak style="padding:0 16px 14px;border-top:1px solid var(--bg-muted)">
             <!-- Intro: verbatim from includes/starr/renaming-description-faq.md -->
             <div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-top:10px">
@@ -74,16 +82,14 @@
           </div>
         </div>
 
-        <!-- IMDb vs TMDb/TVDb card — collapsible, default closed. Same pattern
-             as the "Why use a naming scheme?" card above so the two info cards
-             behave consistently. -->
-        <div class="card" style="padding:0;margin:12px 0 0;overflow:hidden">
-          <div style="padding:12px 16px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px"
-               @click="namingIDInfoExpanded = !namingIDInfoExpanded">
-            <span class="detail-section-chevron" :class="{ open: namingIDInfoExpanded }" style="color:var(--text-muted);font-size:11px">&#9654;</span>
-            <span style="font-weight:600;color:var(--text-primary);font-size:14px" x-text="activeAppType === 'radarr' ? 'IMDb vs TMDb' : 'IMDb vs TVDb'"></span>
-            <span style="font-size:11px;color:var(--text-secondary);margin-left:auto" x-show="!namingIDInfoExpanded">click to expand</span>
-          </div>
+        <!-- IMDb vs TMDb/TVDb card — collapsible, default closed. Same
+             pattern as the "Why use a naming scheme?" card above so the
+             two info cards behave consistently. -->
+        <div class="detail-section naming-card-info">
+          <button type="button" class="detail-section-header" @click="namingIDInfoExpanded = !namingIDInfoExpanded">
+            <span class="detail-section-label" x-text="activeAppType === 'radarr' ? 'IMDb vs TMDb' : 'IMDb vs TVDb'"></span>
+            <span class="detail-section-chevron" :class="{ open: namingIDInfoExpanded }">&#9654;</span>
+          </button>
           <div x-show="namingIDInfoExpanded" x-cloak style="padding:0 16px 14px;border-top:1px solid var(--bg-muted)">
             <!-- Info banner verbatim from includes/{radarr,sonarr}/{tmdb,tvdb}-imdb-info.md -->
             <div style="font-size:13px;line-height:1.6;padding:8px 10px;margin-top:10px;background:var(--fill-blue-soft);border-left:3px solid var(--accent-blue);border-radius:3px;color:var(--text-body);display:flex;align-items:flex-start;gap:8px">
@@ -103,33 +109,12 @@
           </div>
         </div>
         <template x-if="getNaming(activeAppType)">
-          <div>
-            <!-- Naming card: instance + tabs + content -->
-            <div class="card" style="margin:16px 0 0;overflow:visible">
-              <!-- Instance selector -->
-              <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--bg-muted)">
-                <span style="font-size:13px;color:var(--text-muted)">Instance:</span>
-                <select class="input" style="width:200px;font-size:13px;padding:4px 8px"
-                  @change="namingSelectedInstance = { ...namingSelectedInstance, [activeAppType]: $event.target.value }; if ($event.target.value) { const _inst = instances.find(i => i.id === $event.target.value); if (_inst) testInstance(_inst); } loadInstanceNaming(activeAppType)">
-                  <option value="" :selected="!namingSelectedInstance[activeAppType]">Select instance...</option>
-                  <template x-for="inst in instancesOfType(activeAppType)" :key="inst.id">
-                    <option :value="inst.id" x-text="inst.name" :selected="namingSelectedInstance[activeAppType] === inst.id"></option>
-                  </template>
-                </select>
-                <template x-if="namingSelectedInstance[activeAppType] && instanceStatus[namingSelectedInstance[activeAppType]] === 'connected'">
-                  <span style="font-size:13px;color:var(--accent-green)">Connected</span>
-                </template>
-                <template x-if="namingSelectedInstance[activeAppType] && instanceStatus[namingSelectedInstance[activeAppType]] === 'failed'">
-                  <span style="font-size:13px;color:var(--accent-red)">Connection failed</span>
-                </template>
-                <template x-if="namingSelectedInstance[activeAppType] && !instanceStatus[namingSelectedInstance[activeAppType]]">
-                  <span style="font-size:13px;color:var(--accent-orange)">Not tested</span>
-                </template>
-                <template x-if="!namingSelectedInstance[activeAppType]">
-                  <span style="font-size:13px;color:var(--text-muted)">Select an instance to enable sync</span>
-                </template>
-              </div>
-              <div style="padding:16px">
+          <div style="margin-top:12px">
+            <!-- Recommended Naming Schemes (instance picker is now at the
+                 top of the page in the shared Media Management header).
+                 Scheme cards below use a GREEN accent so the actionable
+                 content reads as a distinct region from the BLUE info cards. -->
+            <div>
                 <!-- Current naming on the connected Arr instance — rendered as a small card inside
                      the same padded content area as the scheme list, so it shares the same indentation
                      and visual hierarchy. Yellow border-left signals "your current setting" (matches
@@ -141,28 +126,28 @@
                      Series + Season folder). Specials folder omitted —
                      rarely customized, defaults to "Specials". -->
                 <template x-if="namingInstanceData[activeAppType]">
-                  <div style="border:1px solid var(--bg-muted);border-radius:6px;padding:8px 12px;margin-bottom:12px;background:var(--bg-page)">
-                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Currently on instance</div>
+                  <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--app-color);border-radius:6px;padding:8px 12px;margin-bottom:12px;background:var(--app-glow)">
+                    <div style="font-size:11px;color:var(--app-color);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;font-weight:600">Currently on instance</div>
                     <template x-if="activeAppType === 'radarr'">
                       <div style="display:grid;grid-template-columns:70px minmax(0, 1fr);gap:3px 10px;font-size:12px;align-items:baseline">
                         <span style="color:var(--text-muted)">File:</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].standardMovieFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.standardMovieFormat || '(not set)'"></span>
                         <span style="color:var(--text-muted)">Folder:</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].movieFolderFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.movieFolderFormat || '(not set)'"></span>
                       </div>
                     </template>
                     <template x-if="activeAppType === 'sonarr'">
                       <div style="display:grid;grid-template-columns:130px minmax(0, 1fr);gap:3px 10px;font-size:12px;align-items:baseline">
                         <span style="color:var(--text-muted)">Episode (Standard):</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].standardEpisodeFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.standardEpisodeFormat || '(not set)'"></span>
                         <span style="color:var(--text-muted)">Episode (Anime):</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].animeEpisodeFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.animeEpisodeFormat || '(not set)'"></span>
                         <span style="color:var(--text-muted)">Episode (Daily):</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].dailyEpisodeFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.dailyEpisodeFormat || '(not set)'"></span>
                         <span style="color:var(--text-muted)">Series Folder:</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].seriesFolderFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.seriesFolderFormat || '(not set)'"></span>
                         <span style="color:var(--text-muted)">Season Folder:</span>
-                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType].seasonFolderFormat || '(not set)'"></span>
+                        <span style="font-family:monospace;color:var(--text-body);white-space:nowrap;overflow-x:auto" x-text="namingInstanceData[activeAppType]?.seasonFolderFormat || '(not set)'"></span>
                       </div>
                     </template>
                   </div>
@@ -184,14 +169,13 @@
               <div style="font-weight:600;margin:8px 0 12px;color:var(--text-primary);font-size:14px">Recommended Naming Schemes</div>
 
               <template x-for="section in getNamingSections(activeAppType, namingMediaServer[activeAppType] || 'standard')" :key="section.key + ':' + (namingMediaServer[activeAppType] || 'standard')">
-                <div class="card" style="padding:0;margin:0 0 8px;overflow:hidden">
+                <div class="detail-section naming-card-scheme">
                   <!-- Card header — click to expand/collapse -->
-                  <div style="padding:10px 14px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px"
+                  <button type="button" class="detail-section-header"
                        @click="namingSectionExpanded = {...namingSectionExpanded, [activeAppType + ':' + section.key]: !namingSectionExpanded[activeAppType + ':' + section.key]}">
-                    <span class="detail-section-chevron" :class="{ open: namingSectionExpanded[activeAppType + ':' + section.key] }" style="color:var(--text-muted);font-size:11px">&#9654;</span>
-                    <span style="font-weight:600;color:var(--text-primary);font-size:13px" x-text="section.label"></span>
-                    <span style="font-size:11px;color:var(--text-secondary);margin-left:auto" x-show="!namingSectionExpanded[activeAppType + ':' + section.key]">click to expand</span>
-                  </div>
+                    <span class="detail-section-label" x-text="section.label"></span>
+                    <span class="detail-section-chevron" :class="{ open: namingSectionExpanded[activeAppType + ':' + section.key] }">&#9654;</span>
+                  </button>
 
                   <!-- Card body -->
                   <div x-show="namingSectionExpanded[activeAppType + ':' + section.key]" x-cloak style="padding:0 14px 12px;border-top:1px solid var(--bg-muted)">
@@ -227,12 +211,12 @@
                             <span style="font-size:12px;font-weight:600;color:var(--text-body)" x-text="scheme.label"></span>
                             <span style="margin-left:auto;display:flex;gap:10px;align-items:center">
                               <button type="button" class="inline-action" style="font-size:11px;color:var(--accent-blue)" @click="copyToClipboard(scheme.pattern)">Copy</button>
-                              <template x-if="namingSelectedInstance[activeAppType]">
+                              <template x-if="mediaInstanceId[activeAppType]">
                                 <button type="button" class="inline-action" style="font-size:11px;color:var(--text-secondary)"
                                   @click="compareNamingScheme(activeAppType, section.key, scheme)"
                                   x-tt="'Compare this scheme with what is currently set on the instance — view diff without applying'">Compare</button>
                               </template>
-                              <template x-if="namingSelectedInstance[activeAppType]">
+                              <template x-if="mediaInstanceId[activeAppType]">
                                 <button type="button" class="inline-action" style="font-size:11px;color:var(--accent-orange)"
                                   @click="confirmApplyNamingScheme(activeAppType, section.key, scheme)">Sync</button>
                               </template>
@@ -249,7 +233,6 @@
                   </div>
                 </div>
               </template>
-              </div>
             </div>
           </div>
         </template>

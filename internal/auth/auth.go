@@ -78,7 +78,7 @@ const (
 type Config struct {
 	Mode             AuthMode
 	Requirement      Requirement
-	TrustedProxies   []net.IP
+	TrustedProxies   []*net.IPNet
 	// TrustedNetworks is the user-curated list of IPs/CIDRs that bypass auth
 	// when Requirement == RequireExtLocal. Empty means: fall back to the
 	// hardcoded default (loopback + RFC1918 + link-local + ULA — Radarr
@@ -613,11 +613,11 @@ func (s *Store) RefreshTrustedProxies() (int, bool) {
 	s.mu.RLock()
 	hostnamesSnap := append([]string(nil), s.cfg.TrustedProxyHostnames...)
 	rawSnap := s.cfg.TrustedProxiesRaw
-	currentIPs := append([]net.IP(nil), s.cfg.TrustedProxies...)
+	currentNets := append([]*net.IPNet(nil), s.cfg.TrustedProxies...)
 	s.mu.RUnlock()
 
 	if len(hostnamesSnap) == 0 {
-		return len(currentIPs), false
+		return len(currentNets), false
 	}
 
 	// Re-resolve each hostname. Successful resolutions update the
@@ -645,7 +645,7 @@ func (s *Store) RefreshTrustedProxies() (int, bool) {
 	// otherwise). Using the raw CSV as literals-source is precise even
 	// when a literal IP happens to equal a hostname's current
 	// resolution.
-	literalIPs, _, _ := netsec.ParseTrustedProxyEntries(rawSnap)
+	literalIPs, cidrs, _, _ := netsec.ParseTrustedProxyEntries(rawSnap)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -676,13 +676,74 @@ func (s *Store) RefreshTrustedProxies() (int, bool) {
 		}
 	}
 
-	newIPs := append([]net.IP(nil), literalIPs...)
-	for _, host := range hostnamesSnap {
-		newIPs = append(newIPs, s.trustedProxyResolved[host]...)
+	// Build the effective IPNet slice: literals promoted to /32, CIDR
+	// ranges as-is, hostname resolutions promoted to /32 per IP.
+	newNets := make([]*net.IPNet, 0, len(literalIPs)+len(cidrs))
+	for _, ip := range literalIPs {
+		if n := ipToIPNet(ip); n != nil {
+			newNets = append(newNets, n)
+		}
 	}
-	changed := !ipSlicesEqual(currentIPs, newIPs)
-	s.cfg.TrustedProxies = newIPs
-	return len(newIPs), changed
+	newNets = append(newNets, cidrs...)
+	for _, host := range hostnamesSnap {
+		for _, ip := range s.trustedProxyResolved[host] {
+			if n := ipToIPNet(ip); n != nil {
+				newNets = append(newNets, n)
+			}
+		}
+	}
+	changed := !ipNetSlicesEqual(currentNets, newNets)
+	s.cfg.TrustedProxies = newNets
+	return len(newNets), changed
+}
+
+// ipToIPNet promotes a literal IP to /32 (v4) or /128 (v6). Mirrors
+// netsec.ipToIPNet so the refresh loop doesn't need to import that
+// package's unexported helper.
+func ipToIPNet(ip net.IP) *net.IPNet {
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+}
+
+// ipNetSlicesEqual returns true when both slices describe the same
+// networks as a multiset (order-insensitive). Used by
+// RefreshTrustedProxies to suppress noisy "no change" log lines on
+// every tick. The original ipSlicesEqual was multiset-based; this
+// preserves that property so DNS resolvers returning A/AAAA records
+// in different orders across calls don't produce phantom "changed"
+// signals.
+func ipNetSlicesEqual(a, b []*net.IPNet) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]int{}
+	for _, n := range a {
+		seen[ipNetKey(n)]++
+	}
+	for _, n := range b {
+		seen[ipNetKey(n)]--
+	}
+	for _, c := range seen {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ipNetKey produces a comparable string for IPNet multiset membership.
+// nil networks share a sentinel so the equal-set logic treats them
+// consistently with the prior nil-handling.
+func ipNetKey(n *net.IPNet) string {
+	if n == nil {
+		return ""
+	}
+	return n.IP.String() + "/" + n.Mask.String()
 }
 
 // stringSlicesEqual is the order-sensitive multiset for hostname
@@ -693,28 +754,6 @@ func stringSlicesEqual(a, b []string) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// ipSlicesEqual returns true when both slices contain the same IPs
-// (order-insensitive). Used by RefreshTrustedProxies to suppress
-// noisy "no change" log lines on every tick.
-func ipSlicesEqual(a, b []net.IP) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	seen := map[string]int{}
-	for _, ip := range a {
-		seen[ip.String()]++
-	}
-	for _, ip := range b {
-		seen[ip.String()]--
-	}
-	for _, n := range seen {
-		if n != 0 {
 			return false
 		}
 	}
@@ -1186,7 +1225,7 @@ func (s *Store) IsRequestFromTrustedProxy(r *http.Request) bool {
 		return false
 	}
 	for _, tp := range tps {
-		if tp.Equal(peer) {
+		if tp != nil && tp.Contains(peer) {
 			return true
 		}
 	}

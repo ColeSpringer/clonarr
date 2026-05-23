@@ -23,6 +23,7 @@ import profiles from './features/profiles.js';
 import qualitySizes from './features/quality-sizes.js';
 import scoring from './features/scoring.js';
 import toasts from './features/toasts.js';
+import trashProfileDiscovery from './features/trash-profile-discovery.js';
 
 const featureModules = [
   navigation,
@@ -40,6 +41,7 @@ const featureModules = [
   maintenance,
   backupRestore,
   profiles,
+  trashProfileDiscovery,
   scoring,
   cfGroupBuilder,
 ];
@@ -368,6 +370,16 @@ export function clonarr() {
       // round-trip back to the same physical position. Defaults to 1 when
       // no zoom is applied.
       const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      // Collapsed-sidebar triggers (60px wide, anchored at the left edge)
+      // would land their centered-above tooltip ~130px to the right of
+      // the icon because the horizontal clamp below forces x ≥ halfMax+margin.
+      // Anchor to the right of the trigger instead, vertically centered.
+      if (el.closest('.sidebar.collapsed')) {
+        const xR = (r.right + margin) / zoom;
+        const yR = (r.top + r.height / 2) / zoom;
+        this.tt = { show: true, text: text, x: xR, y: yR, flip: false, placement: 'right' };
+        return;
+      }
       const triggerCenterX = (r.left + r.width / 2) / zoom;
       const triggerTop = r.top / zoom;
       const triggerBottom = r.bottom / zoom;
@@ -379,11 +391,55 @@ export function clonarr() {
         flip = true;
       }
       const x = Math.max(halfMax + margin, Math.min(triggerCenterX, viewportW - halfMax - margin));
-      this.tt = { show: true, text: text, x: x, y: y, flip: flip };
+      this.tt = { show: true, text: text, x: x, y: y, flip: flip, placement: 'top' };
     },
     hideTooltip() {
       this.tt.show = false;
     },
+
+    // v3 collapsed-sidebar sub-nav flyout — hover-based, VS Code activity-bar
+    // pattern. Hover icon → 150ms delay → popup appears anchored to icon.
+    // Move mouse to popup → stays open. Move away → 250ms delay → closes.
+    // Switching between hovered sections is instant (no delay) when a popup
+    // is already showing.
+    //
+    // Timers live on the Alpine instance but outside the reactive surface
+    // (we don't watch them), so writing to them doesn't trigger re-renders.
+    _sidebarHoverShowTimer: null,
+    _sidebarHoverHideTimer: null,
+
+    showSidebarSubnav(section, el) {
+      if (!this.sidebarCollapsed) return;
+      if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+      if (this.sidebarSubnavPopup === section) return; // already showing this section
+      if (this.sidebarSubnavPopup) {
+        // Switching from another section's popup — instant, no delay
+        if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+        this.sidebarSubnavPopupTop = el.getBoundingClientRect().top;
+        this.sidebarSubnavPopup = section;
+        return;
+      }
+      // Fresh hover — delayed open avoids flicker on quick sweep-by
+      if (this._sidebarHoverShowTimer) clearTimeout(this._sidebarHoverShowTimer);
+      this._sidebarHoverShowTimer = setTimeout(() => {
+        this.sidebarSubnavPopupTop = el.getBoundingClientRect().top;
+        this.sidebarSubnavPopup = section;
+        this._sidebarHoverShowTimer = null;
+      }, 150);
+    },
+    scheduleHideSidebarSubnav() {
+      // Cancel any pending show — user moved away before delay elapsed
+      if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+      if (this._sidebarHoverHideTimer) clearTimeout(this._sidebarHoverHideTimer);
+      this._sidebarHoverHideTimer = setTimeout(() => {
+        this.sidebarSubnavPopup = '';
+        this._sidebarHoverHideTimer = null;
+      }, 250);
+    },
+    cancelHideSidebarSubnav() {
+      if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+    },
+
     async init() {
       // Apply saved UI scale. `zoom` is a Chromium-original property that
       // Firefox only added in v126 (May 2024); the CSS.supports guard avoids
@@ -396,6 +452,22 @@ export function clonarr() {
       matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
         if (this.theme === 'system') this.applyTheme();
       });
+      // v3 sidebar mobile auto-collapse — sidebars on narrow viewports
+      // (Unraid sub-window side-by-side, half-screen split, etc.) eat too
+      // much real estate. Force collapsed below 1100px; restore the user's
+      // last manual preference (from localStorage) when going wide again.
+      // The manual toggleSidebar() button still writes to localStorage, so
+      // the user's intentional choice wins on wide widths.
+      const narrowMQ = matchMedia('(max-width: 1100px)');
+      const applyNarrow = (matches) => {
+        if (matches) {
+          this.sidebarCollapsed = true;
+        } else {
+          this.sidebarCollapsed = localStorage.getItem('clonarr-sidebar-collapsed') === '1';
+        }
+      };
+      narrowMQ.addEventListener('change', (e) => applyNarrow(e.matches));
+      if (narrowMQ.matches) applyNarrow(true);
       // Load the UI manifest first — it carries enum option lists, agent
       // field specs, and category-color tokens that downstream renders need.
       // Awaited so getCategoryClass() / agent modal lookups don't race on
@@ -429,12 +501,98 @@ export function clonarr() {
       // is safe to fire alongside watchers that call pushNav.
       window.addEventListener('hashchange', () => this.restoreFromHash(location.hash));
 
+      // Issue #52 — guard sidebar anchor navigation when the profile
+      // editor has unsaved changes. Sidebar links are pure <a href="#x">
+      // anchors so hashchange fires AFTER the location update — too late
+      // to revert without flicker. Intercept the click in the capture
+      // phase, prevent default, show Stay/Discard via closeProfileEditor,
+      // then manually navigate on Discard.
+      document.addEventListener('click', (event) => {
+        if (event.defaultPrevented) return;
+        if (event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const anchor = event.target.closest('a[href^="#"]');
+        if (!anchor) return;
+        // Only guard nav-style anchors (sidebar + topnav). Filter
+        // tooltip-anchors, in-page #section links, etc. by requiring
+        // the href to look like our hash routes (radarr/sonarr/settings/
+        // about) — anything else is a real in-page anchor we shouldn't
+        // hijack.
+        const href = anchor.getAttribute('href') || '';
+        if (!/^#(radarr|sonarr|settings|about)(\/|$)/.test(href)) return;
+        if (!this.profileDetail) return;
+        if (typeof this.profileDetailIsDirty !== 'function' || !this.profileDetailIsDirty()) return;
+        event.preventDefault();
+        this.closeProfileEditor(() => {
+          location.hash = href;
+        });
+      }, true);
+
+      // Issue #52 — browser-level guard for reload / tab close / cross-
+      // site navigation. Modern browsers ignore the returnValue text and
+      // show their own generic "Leave site?" prompt, but setting
+      // returnValue (or calling preventDefault) is enough to trigger it.
+      window.addEventListener('beforeunload', (event) => {
+        // Profile editor (Sync Preview) dirty-check from Issue #52.
+        const profileDirty = typeof this.profileDetailIsDirty === 'function'
+          && this.profileDetailIsDirty();
+        // CF editor dirty-check — same pattern, applied to the CF
+        // Editor modal (Create / Edit Custom Format). Without this a
+        // browser reload while editing a CF silently drops the form.
+        const cfDirty = this.showCFEditor
+          && typeof this.cfEditorIsDirty === 'function'
+          && this.cfEditorIsDirty();
+        if (!profileDirty && !cfDirty) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+
       // Section change clears stale per-section state (was inline in the old
       // switchSection). Fires for both anchor clicks and hash restoration.
       this.$watch('currentSection', () => {
         this.profileDetail = null;
         this.syncPlan = null;
         this.syncResult = null;
+        // v3: any section change closes the collapsed-sidebar sub-nav
+        // popup. @click.outside doesn't fire reliably when navigation is
+        // triggered from a sidebar anchor (Settings, About, etc.), so a
+        // state-watcher is the robust way to dismiss it.
+        this.sidebarSubnavPopup = '';
+      });
+      // Navigation into the Sync Rules tab triggers the customizations
+      // cache load. We don't fire it from every loadAutoSyncRules call
+      // (would hammer the backend on init / every toggle); instead the
+      // tab-mount is the canonical entry point. Reactive on both
+      // section and per-app profileTab changes.
+      const maybeLoadCustomizations = () => {
+        if (this.currentSection === 'profiles'
+            && this.getProfileTab(this.activeAppType) === 'sync-rules'
+            && typeof this.loadRuleCustomizations === 'function') {
+          this.loadRuleCustomizations();
+        }
+      };
+      this.$watch('currentSection', maybeLoadCustomizations);
+      this.$watch('profileTabs', maybeLoadCustomizations);
+      this.$watch('activeAppType', maybeLoadCustomizations);
+
+      // Expanding the sidebar (Ctrl+B or click-toggle) closes the popup —
+      // when the inline subnav becomes visible, the popup is redundant.
+      // Also cancel any pending show-timer: if user was hovering an icon
+      // and the 150ms delay hadn't elapsed yet, the timer would otherwise
+      // open the popup AFTER the sidebar already expanded.
+      this.$watch('sidebarCollapsed', (val) => {
+        if (!val) {
+          this.sidebarSubnavPopup = '';
+          if (this._sidebarHoverShowTimer) { clearTimeout(this._sidebarHoverShowTimer); this._sidebarHoverShowTimer = null; }
+          if (this._sidebarHoverHideTimer) { clearTimeout(this._sidebarHoverHideTimer); this._sidebarHoverHideTimer = null; }
+        }
+      });
+      // Window resize closes the popup. The popup's captured top coord
+      // becomes stale on resize (the icon's getBoundingClientRect changes
+      // if the layout reflows), and the simplest robust answer is dismiss
+      // rather than try to re-anchor mid-interaction.
+      window.addEventListener('resize', () => {
+        if (this.sidebarSubnavPopup) this.sidebarSubnavPopup = '';
       });
 
       // Settings → Security loads the API key. Was inline on the old
@@ -481,6 +639,15 @@ export function clonarr() {
           if (this.advancedTab === 'group-builder') this.cfgbLoad(appType);
           else if (this.advancedTab === 'scoring') this.loadSandbox(appType);
         }
+        // Media Management — ensure the new app's Quality + Naming
+        // instance data is loaded whenever we switch app types. Without
+        // this, switching Radarr→Sonarr (or vice-versa) on Naming/
+        // Quality showed an empty "Currently on instance" card until
+        // the user clicked the picker.
+        if (this.mediaInstanceId[appType]) {
+          this.loadInstanceQS(appType, this.mediaInstanceId[appType]);
+          this.loadInstanceNaming(appType);
+        }
         ensureHistory();
       });
       await this.loadConfig();
@@ -497,7 +664,20 @@ export function clonarr() {
         const savedSection = localStorage.getItem('clonarr_section');
         const savedAppType = localStorage.getItem('clonarr_appType');
         if (savedSection) {
-          this.currentSection = savedSection;
+          // Legacy alias: pre-v3 the Quality Definitions and File Naming
+          // sections were top-level. v3 folds both into Media Management
+          // with sub-tabs. A stored section value of 'quality-size' or
+          // 'naming' now has no matching nav-item and would render a blank
+          // page (gates check `currentSection === 'media-management'`).
+          // Map to media-management and seed the corresponding sub-tab.
+          // Mirrors the restoreFromHash() alias logic at navigation.js:195.
+          if (savedSection === 'quality-size' || savedSection === 'naming') {
+            this.currentSection = 'media-management';
+            const seedAppType = savedAppType || (this.instances[0] && this.instances[0].type) || 'radarr';
+            this.setMediaTab(seedAppType, savedSection === 'naming' ? 'naming' : 'quality');
+          } else {
+            this.currentSection = savedSection;
+          }
         } else if (oldTab === 'settings' || oldTab === 'about') {
           this.currentSection = oldTab;
         }
@@ -519,6 +699,8 @@ export function clonarr() {
       }
       this.loadTrashProfiles('radarr');
       this.loadTrashProfiles('sonarr');
+      this.loadTrashProfileDescriptions('radarr');
+      this.loadTrashProfileDescriptions('sonarr');
       this.loadQualitySizes('radarr');
       this.loadQualitySizes('sonarr');
       this.loadCFBrowse('radarr');
@@ -544,8 +726,7 @@ export function clonarr() {
       this.checkCleanupEvents();
       // Auto-select instance if only one per type (no need to choose)
       // Build auto-select maps, then assign all at once for Alpine reactivity
-      const autoQs = {};
-      const autoNaming = {};
+      const autoMedia = {};
       const autoCompare = {};
       const autoLoads = [];
       for (const type of ['radarr', 'sonarr']) {
@@ -553,15 +734,17 @@ export function clonarr() {
         if (typeInsts.length === 1) {
           const inst = typeInsts[0];
           autoCompare[type] = inst.id;
-          autoQs[type] = inst.id;
-          autoNaming[type] = inst.id;
+          autoMedia[type] = inst.id;
           autoLoads.push({ type, inst });
         }
       }
       // Assign entire objects to trigger Alpine reactivity
       if (Object.keys(autoCompare).length) this.compareInstanceIds = { ...this.compareInstanceIds, ...autoCompare };
-      if (Object.keys(autoQs).length) this.qsInstanceId = { ...this.qsInstanceId, ...autoQs };
-      if (Object.keys(autoNaming).length) this.namingSelectedInstance = { ...this.namingSelectedInstance, ...autoNaming };
+      // v3 — Quality Definitions and Movie/Episode Naming share one
+      // instance picker (mediaInstanceId) instead of separate qsInstanceId
+      // and namingSelectedInstance, so the picker stays put when the
+      // user switches between Media Management sub-tabs.
+      if (Object.keys(autoMedia).length) this.mediaInstanceId = { ...this.mediaInstanceId, ...autoMedia };
       // Load data for auto-selected instances
       for (const { type, inst } of autoLoads) {
         this.loadInstanceProfiles(inst);
@@ -952,11 +1135,61 @@ Object.assign(window, {
 //   - Suspenders: if a future HTML edit reorders the tags, the
 //     `if (window.Alpine)` branch catches the case where Alpine
 //     already loaded — we just register directly.
+// Ctrl/Cmd+B toggles the v3 sidebar collapsed state. Pattern lifted from
+// VS Code / Linear / Notion. Skips when a typeable element is focused so we
+// don't steal "select to bold" inside text inputs.
+function registerSidebarToggleShortcut() {
+  document.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() !== 'b') return;
+    const target = event.target;
+    const tag = (target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+    event.preventDefault();
+    // Find the active clonarr Alpine root via the body's $data and call
+    // toggleSidebar(). Falls back silently if Alpine isn't ready yet.
+    const root = document.querySelector('[x-data="clonarr"]');
+    const data = root && window.Alpine ? window.Alpine.$data(root) : null;
+    if (data && typeof data.toggleSidebar === 'function') data.toggleSidebar();
+  });
+}
+
+// `/` focuses the first visible page-search input on the current section.
+// Industry standard (Slack, GitHub, Discord, Gmail, YouTube) — does NOT
+// hijack browser Ctrl+F, which stays available for in-page find. Skips
+// when a typeable element is already focused so it doesn't intercept the
+// literal slash a user is trying to type into something else.
+function registerSearchShortcut() {
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== '/') return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target;
+    const tag = (target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+    // Find any visible search field marked with the convention class. Today
+    // that's only the Custom Formats browse search; future search fields
+    // (Profiles, History, etc.) tag themselves the same way and the
+    // shortcut works without further wiring.
+    const searches = document.querySelectorAll('.js-page-search');
+    for (const el of searches) {
+      const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+      if (visible) {
+        event.preventDefault();
+        el.focus();
+        if (typeof el.select === 'function') el.select();
+        return;
+      }
+    }
+  });
+}
+
 function registerClonarr() {
   window.Alpine.data('clonarr', clonarr);
   registerModalTrapDirective(window.Alpine);
   registerTooltipEscapeListener();
   registerSkipLinkHandler();
+  registerSidebarToggleShortcut();
+  registerSearchShortcut();
   // x-tt="'tooltip text'" — viewport-aware custom tooltip directive.
   // Replaces native title="" for elements where the OS tooltip would overflow
   // the viewport (right-edge buttons, long messages). Wires hover, focus, and

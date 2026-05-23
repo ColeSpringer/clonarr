@@ -1,0 +1,1098 @@
+/* Sync Preview overlay — parallel rewrite of profile-detail.
+   All classes prefixed sp- to avoid clashing with existing profile/detail styles.
+   Removed when Sync Preview ships and profile-detail.html is retired. */
+
+.sp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  /* Breathing room between the app banner (Radarr / Profiles / TRaSH
+     Profiles breadcrumb) and the Sync Preview's own sticky action bar
+     below it. Without this they read as one squished header. */
+  margin-top: 12px;
+}
+
+/* ===== Action bar (sticky) ===== */
+.sp-action-bar {
+  display: grid;
+  /* Two columns: title block flexes (1fr), action buttons stick to the
+     right (auto). Removed the leading auto-column that used to hold
+     the "← Classic editor" link — without that slot the layout was
+     "title auto / buttons 1fr", which made the buttons drift with
+     title length. */
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.sp-action-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.sp-action-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: help;
+}
+/* "based on <trash name>" appears next to the Arr profile name in
+   Edit mode. Muted + smaller so the Arr name stays dominant; the
+   "based on" wording keeps the relationship explicit without
+   requiring a tooltip read. */
+.sp-action-source {
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: help;
+}
+.sp-action-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sp-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ===== Basics strip ===== */
+.sp-basics {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 6px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+}
+.sp-basics-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.sp-basics-lbl {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sp-basics-val {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+/* Modified-value affordance is the red reset button next to the field
+   (presence = "this is modified"). The orange .overridden colour
+   treatment is dropped — reset icon + tooltip ("Reset to <default>")
+   communicates both "this changed" and "click to restore" in one
+   element, less visual noise than colour + value + extra hint text. */
+.sp-basics-default {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+.sp-basics-input {
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+}
+.sp-basics-input-num { width: 70px; }
+.sp-basics-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
+.sp-basics-toggle { transform: translateY(2px); }
+.sp-basics-reset {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--accent-red);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sp-basics-reset:hover { color: var(--accent-red-strong, var(--accent-red)); }
+/* Qualities allowed launcher — looks like a value cell but clickable
+   with an underline-on-hover affordance so it reads as "interactive". */
+.sp-basics-quality-launcher {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent-blue);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+}
+.sp-basics-quality-launcher:hover { text-decoration: underline; }
+
+/* Clean state — "Profile default" + small edit pencil. The pencil is
+   the only interactive element; the text itself is read-only. */
+.sp-basics-val-clean {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-secondary);
+}
+.sp-basics-edit-icon {
+  background: transparent; border: 0; padding: 2px 4px;
+  color: var(--text-muted); font-size: 12px; line-height: 1;
+  cursor: pointer; border-radius: 3px;
+  font-family: inherit;
+}
+.sp-basics-edit-icon:hover { color: var(--accent-blue); background: var(--bg-elevated); }
+
+/* CF score inline editor — replaces .sp-cf-score in editor mode.
+   Compact number input + adjacent reset-icon (only when overridden).
+   Sits in the same right-aligned column as the read-only score so
+   row layout doesn't shift when Customize flips. */
+.sp-cf-score-edit {
+  /* Two-cell inner grid: 20px reserved for the reset button (rendered
+     when overridden, empty cell otherwise) + 70px input. With reset
+     in its own fixed-width column, toggling override on/off doesn't
+     shift the input field — input stays anchored at the same x. */
+  display: grid;
+  grid-template-columns: 20px 70px;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+}
+.sp-cf-score-edit > .sp-cf-score-reset { grid-column: 1 / 2; }
+.sp-cf-score-edit > .sp-cf-score-input { grid-column: 2 / 3; }
+.sp-cf-score-input {
+  width: 70px;
+  font-size: 12px;
+  padding: 1px 6px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.sp-cf-score-input:focus { outline: 1px solid var(--app-color); outline-offset: 0; }
+.sp-cf-score-reset { font-size: 13px; }
+.sp-basics-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-muted);
+}
+/* ===== Customizations summary strip =====
+   Sits between the basics card and the tabs. Two-column layout: status
+   text (clickable when customizations exist — jumps to Diffs) + action
+   button (Customize this profile / Reset to profile defaults). Card
+   styling mirrors .sp-basics so the two read as a stacked pair. */
+.sp-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  margin-top: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  font-size: 13px;
+}
+.sp-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Span variant (Customize OFF) — informational, non-clickable. */
+.sp-summary-clean {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+/* Button variant (Customize ON) — clickable, jumps to Diffs. */
+button.sp-summary-active {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex-wrap: wrap;
+}
+button.sp-summary-active:hover .sp-summary-lead {
+  text-decoration: underline;
+}
+button.sp-summary-active:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.sp-summary-lead {
+  color: var(--accent-orange);
+  font-weight: 600;
+}
+.sp-summary-badge {
+  font-size: 11px;
+  color: var(--accent-orange);
+  padding: 1px 6px;
+  border: 1px solid var(--accent-orange);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.sp-summary-action {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ===== Tabs ===== */
+.sp-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sp-tab {
+  padding: 8px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-tab:hover { color: var(--text-primary); }
+.sp-tab.active {
+  color: var(--app-color);
+  border-bottom-color: var(--app-color);
+}
+.sp-tab-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+/* ===== Body — two-column layout (sub-nav + content) ===== */
+.sp-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.sp-sub-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.sp-sub-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+  /* Category colour lives here — the group inherits its --cat token
+     from the matching cat-* class so the section header + active item
+     pick it up via currentColor / var lookup. */
+  --cat: var(--cat-other);
+  border-left: 2px solid var(--cat);
+  padding-left: 6px;
+  margin-left: 2px;
+}
+.sp-sub-nav-section {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--cat);
+  padding: 3px 6px 2px;
+  margin-top: 2px;
+}
+.sp-sub-nav-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.sp-sub-nav-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.sp-sub-nav-item.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+/* Group has 0 active CFs — dim the whole row so the user can skim
+   past unused groups. Active-state styling overrides this so the
+   currently-viewed group stays readable even if it's empty. */
+.sp-sub-nav-item.inactive { opacity: 0.5; }
+.sp-sub-nav-item.inactive.active { opacity: 1; }
+/* Required CFs is the lone item that has no section header above it,
+   so it carries its own coloured left-border + label tint to stay
+   visually parallel with the section-grouped items. */
+.sp-sub-nav-standalone {
+  border-left: 2px solid var(--cat-required);
+  padding-left: 6px;
+  margin-left: 2px;
+  color: var(--cat-required);
+}
+.sp-sub-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-sub-nav-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Category colour lookup — wire each canonical cat-* class to its
+   --cat-<id> token so the group's --cat var resolves to the right
+   colour for the section header + left-border. Same token set as
+   Custom Formats, Classic editor, Profile Builder, Sandbox CF
+   browser — adding a category in backend categories.go propagates
+   here automatically via tokens.css. */
+.sp-sub-nav-group.cat-audio              { --cat: var(--cat-audio); }
+.sp-sub-nav-group.cat-hdr                { --cat: var(--cat-hdr); }
+.sp-sub-nav-group.cat-streaming          { --cat: var(--cat-streaming); }
+.sp-sub-nav-group.cat-unwanted           { --cat: var(--cat-unwanted); }
+.sp-sub-nav-group.cat-optional           { --cat: var(--cat-optional); }
+.sp-sub-nav-group.cat-anime              { --cat: var(--cat-anime); }
+.sp-sub-nav-group.cat-french             { --cat: var(--cat-french); }
+.sp-sub-nav-group.cat-german             { --cat: var(--cat-german); }
+.sp-sub-nav-group.cat-language           { --cat: var(--cat-language); }
+.sp-sub-nav-group.cat-resolution         { --cat: var(--cat-resolution); }
+.sp-sub-nav-group.cat-hq-release-groups  { --cat: var(--cat-hq-release-groups); }
+.sp-sub-nav-group.cat-golden-rule        { --cat: var(--cat-golden-rule); }
+.sp-sub-nav-group.cat-miscellaneous      { --cat: var(--cat-miscellaneous); }
+.sp-sub-nav-group.cat-required-core      { --cat: var(--cat-required-core); }
+.sp-sub-nav-group.cat-required           { --cat: var(--cat-required); }
+.sp-sub-nav-group.cat-sqp                { --cat: var(--cat-sqp); }
+.sp-sub-nav-group.cat-other              { --cat: var(--cat-other); }
+.sp-sub-nav-group.cat-custom             { --cat: var(--cat-custom); }
+
+/* ===== Main content ===== */
+.sp-content {
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  min-height: 200px;
+}
+.sp-content-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-content-title-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.sp-content-section {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 15px;
+}
+.sp-content-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+/* TRaSH group description — same italic prose treatment as the existing
+   classic editor uses for group descriptions, but with looser line-height
+   so the multi-line HTML from TRaSH (often with <br> and <a> tags) reads
+   comfortably above the compact CF list. */
+.sp-group-desc {
+  font-size: 13px;
+  color: var(--text-body);
+  margin: 0 0 14px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  background: var(--bg-page);
+  border-left: 3px solid var(--app-color);
+  border-radius: 3px;
+}
+.sp-group-desc a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+.sp-group-desc a:hover { text-decoration: underline; }
+.sp-group-desc code {
+  background: var(--bg-muted);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+.sp-group-badges {
+  display: inline-flex;
+  gap: 6px;
+}
+.sp-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+/* ===== Action rows (group toggle + All-optional) =====
+   Both rows share the same left-aligned layout so the user's eye
+   scans a single column of switches that continues into the CF list
+   below. Count info pushed to the right with margin-left:auto. */
+.sp-action-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.sp-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  background: var(--bg-page);
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: default;
+}
+.sp-action-row .toggle { flex-shrink: 0; }
+/* Combined single-CF row — lock icon between toggle and label, score
+   on the right where the count usually sits. */
+.sp-action-row-combined .sp-cf-icon {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.sp-action-row-combined .sp-cf-score {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+}
+.sp-action-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sp-action-state {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.sp-action-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== CF list ===== */
+.sp-cf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sp-cf-row {
+  display: grid;
+  /* Fixed columns so the score lines up at the same x across every
+     row in the list — variable CF-name lengths don't shift the score
+     position. 240px name column fits the widest TRaSH names (~24
+     chars × 13px). 1fr trailing column absorbs remaining card width
+     so the cluster stays packed on the left. */
+  grid-template-columns: 22px 240px 100px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+.sp-cf-row:hover {
+  background: var(--bg-elevated);
+}
+.sp-cf-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.sp-cf-icon svg { display: block; }
+.sp-cf-row .toggle { justify-self: start; }
+.sp-cf-locked .sp-cf-icon { color: var(--text-muted); }
+/* Phase 2c — lock icon turns into a button when Customize is on so
+   the user can opt out of a required CF. Clickable affordance keeps
+   the icon glyph but adds hover/focus chrome and a state colour. */
+.sp-cf-icon-clickable {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+.sp-cf-icon-clickable:hover { color: var(--accent-orange); }
+.sp-cf-icon-clickable:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+/* Pressed state — required CF currently excluded. Red leans the
+   icon visually toward "this is opted out" and matches the strike
+   on the CF name. */
+.sp-cf-icon-clickable.sp-cf-icon-excluded { color: var(--accent-red); }
+.sp-cf-icon-clickable.sp-cf-icon-excluded:hover { color: var(--accent-orange); }
+/* Strikethrough on the CF name when a required CF is excluded.
+   Mirrors the .sp-ov-cf-excluded treatment in the Profile overview /
+   Diffs view so the visual language is consistent across both
+   editor mode and summary mode. */
+.sp-cf-name-excluded {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.sp-cf-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* "recommended" is our UI translation of TRaSH's `cf.default: true`
+   — the CF auto-checks when its group is enabled. Rendered as muted
+   meta-text rather than a pill so a group like Unwanted Formats with
+   12 of 16 default-on CFs doesn't read as a wall of green badges. */
+.sp-cf-recommended {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+.sp-cf-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+.sp-cf-score.positive { color: var(--accent-green); }
+.sp-cf-score.negative { color: var(--accent-red); }
+.sp-cf-score.zero     { color: var(--text-muted); }
+
+/* ===== Profile overview tab =====
+   Uses the same .sp-body two-column layout as Profile default (sub-nav
+   + main content). Right side stacks cards for the sections the user
+   has selected — "All" shows every card; the other filter views show
+   just one. Customizations render INLINE on the rows they apply to
+   (struck-through original + new value + small "customized" tag)
+   rather than in a separate summary card.
+
+   Sub-nav in this tab is a FLAT list — there are no real categories
+   here (every item is a view of the same data), so the cat-color
+   border-left + tinted text the Profile default sub-nav uses is
+   neutralized. A subtle divider visually separates summary views
+   (Overview / Diffs) from filter views (the rest). */
+.sp-overview-nav {
+  /* The parent .sp-sub-nav already gives us the card chrome. We just
+     need to strip the category-style affordances that .sp-sub-nav-item
+     inherits when wrapped in .sp-sub-nav-group, and reset spacing so
+     items start at the same x-offset. */
+  gap: 0;
+}
+.sp-overview-nav .sp-sub-nav-item {
+  /* No left-border, no inherited --cat color, no margin shifts. */
+  border-left: 0;
+  padding-left: 10px;
+  margin-left: 0;
+  color: var(--text-secondary);
+}
+.sp-overview-nav .sp-sub-nav-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+.sp-overview-nav .sp-sub-nav-item.active {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  font-weight: 500;
+}
+.sp-overview-nav-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 6px;
+}
+.sp-overview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  min-height: auto;
+}
+.sp-ov-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 10px 14px;
+}
+.sp-ov-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sp-ov-card-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Notes card — collapsible compact variant. Header acts as the toggle
+   and shows a snippet of the notes (or "+ Add notes" CTA) when
+   collapsed so the user gets at-a-glance context without expanding. */
+.sp-ov-notes-card { padding: 0; }
+.sp-ov-notes-header {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent; border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-body);
+  border-radius: 7px;
+}
+.sp-ov-notes-header:hover { background: var(--bg-elevated-hover); }
+.sp-ov-notes-label {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-body);
+  flex-shrink: 0;
+}
+.sp-ov-notes-snippet {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-ov-notes-empty {
+  font-size: 12px;
+  color: var(--accent-blue);
+  font-weight: 500;
+  flex: 1; min-width: 0;
+}
+.sp-ov-notes-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.sp-ov-notes-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: -1px; /* avoid double border with header */
+}
+.sp-ov-notes-toolbar-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding-top: 10px; margin-bottom: 8px;
+}
+.sp-ov-notes-help {
+  flex: 1; min-width: 0;
+  margin: 0;
+  font-size: 12px; line-height: 1.45;
+  color: var(--text-secondary);
+}
+/* "Show CF Groups" toggle — pinned right in the card title. Shared
+   spOverviewGroupCFs state across all three CF section cards, persisted
+   per-browser via localStorage. */
+.sp-ov-group-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sp-ov-group-toggle input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+}
+/* Clickable column header row — sits above the CF list, click cycles
+   sort direction for that column. Active column gets app-color tint
+   + visible arrow indicator. */
+.sp-ov-cf-header {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+.sp-ov-cf-header-cell {
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.sp-ov-cf-header-cell:hover { color: var(--text-primary); }
+.sp-ov-cf-header-cell.active { color: var(--app-color); }
+.sp-ov-cf-header-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+}
+
+/* Basics — horizontal flex-wrap, same pattern as the top header
+   strip so the General section reads like an at-a-glance summary
+   instead of a vertical 6-row list. Each row becomes an inline
+   `label value` cluster; modified items inline their customized
+   tag + struck-through default after the value. Wraps to additional
+   rows as needed for narrow viewports. */
+.sp-ov-basics-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.sp-ov-basics-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  font-size: 13px;
+}
+.sp-ov-basics-lbl {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sp-ov-basics-val {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sp-ov-basics-default {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Enabled CFs — section per source, with optional category color on
+   the section-title's left border so user can tell at a glance which
+   block the CFs come from. */
+.sp-ov-cf-section {
+  margin-bottom: 6px;
+  --cat: var(--cat-other);
+  border-left: 2px solid var(--cat);
+  padding-left: 10px;
+}
+.sp-ov-cf-section:last-child { margin-bottom: 0; }
+.sp-ov-cf-section.cat-audio              { --cat: var(--cat-audio); }
+.sp-ov-cf-section.cat-hdr                { --cat: var(--cat-hdr); }
+.sp-ov-cf-section.cat-streaming          { --cat: var(--cat-streaming); }
+.sp-ov-cf-section.cat-unwanted           { --cat: var(--cat-unwanted); }
+.sp-ov-cf-section.cat-optional           { --cat: var(--cat-optional); }
+.sp-ov-cf-section.cat-anime              { --cat: var(--cat-anime); }
+.sp-ov-cf-section.cat-french             { --cat: var(--cat-french); }
+.sp-ov-cf-section.cat-german             { --cat: var(--cat-german); }
+.sp-ov-cf-section.cat-language           { --cat: var(--cat-language); }
+.sp-ov-cf-section.cat-resolution         { --cat: var(--cat-resolution); }
+.sp-ov-cf-section.cat-hq-release-groups  { --cat: var(--cat-hq-release-groups); }
+.sp-ov-cf-section.cat-golden-rule        { --cat: var(--cat-golden-rule); }
+.sp-ov-cf-section.cat-miscellaneous      { --cat: var(--cat-miscellaneous); }
+.sp-ov-cf-section.cat-required-core      { --cat: var(--cat-required-core); }
+.sp-ov-cf-section.cat-required           { --cat: var(--cat-required); }
+.sp-ov-cf-section.cat-sqp                { --cat: var(--cat-sqp); }
+.sp-ov-cf-section.cat-other              { --cat: var(--cat-other); }
+.sp-ov-cf-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cat);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.sp-ov-cf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.sp-ov-cf-row {
+  display: grid;
+  /* Mirror .sp-cf-row column widths so name + score align identically
+     between Profile default editor and Profile overview's CF lists.
+     Customized info (default value → new value) lives INSIDE the score
+     cell so the score column starts at the same x across all rows
+     regardless of whether the row is overridden. Trailing 1fr column
+     absorbs remaining card width. */
+  grid-template-columns: 240px 160px 1fr;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.sp-ov-cf-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.sp-ov-cf-score {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  text-align: left;
+}
+/* Customized value (basics or CF score) — orange so it stands out
+   from default values, tooltip on hover reveals the profile default.
+   Cleaner than the inline "default → new" pattern that visually
+   doubled up the value column. */
+.sp-ov-basics-row.sp-ov-modified .sp-ov-basics-val {
+  color: var(--accent-orange);
+  cursor: help;
+}
+.sp-ov-cf-score.overridden {
+  color: var(--accent-orange);
+  cursor: help;
+}
+/* General-section value as a click-to-scroll button when Customize
+   is on. Looks like the read-only val (no button chrome) but cursor
+   + hover-underline hints that it's interactive — clicking scrolls
+   to the basics-strip editor at the top of the page where the
+   actual inline inputs live. */
+.sp-ov-basics-editlink {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+.sp-ov-basics-editlink:hover { text-decoration: underline; }
+.sp-ov-basics-editlink.sp-ov-basics-val-modified {
+  color: var(--accent-orange);
+}
+.sp-ov-cf-score.positive { color: var(--accent-green); }
+.sp-ov-cf-score.negative { color: var(--accent-red); }
+.sp-ov-cf-score.zero     { color: var(--text-muted); }
+/* Diffs card — fixed-column grid so reset, label, old-value, arrow,
+   new-value land in the same x-position across rows. Reset-icon at
+   column 1 (far left) keeps it in a consistent place regardless of
+   value-content length. Old + new values both left-aligned within
+   their 100px columns so the start-position aligns ("0", "Original",
+   "Remux-2160p" all begin at the same x). No strikethrough on the
+   old value — dimmed colour + opacity is easier to read. */
+.sp-ov-card-diffs .sp-ov-diff-row {
+  display: grid;
+  /* Fixed widths so labels + values align across rows in the same
+     section. Trailing 1fr column absorbs remaining card width so the
+     data cluster stays packed next to the label on the left.
+     reset | label | old | → | new | spacer */
+  grid-template-columns: 20px 220px 80px 14px 80px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.sp-ov-card-diffs .sp-ov-diff-row .sp-ov-cf-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+}
+/* "from <group>" meta on score-override rows lives under the label
+   in a second visual line — moves to grid-column 1 / row 2 so the
+   data columns aren't pushed sideways. */
+/* CF-name cell in Diffs rows can hold both the CF name and an inline
+   "· from <group>" source label. flex layout so both share one line;
+   long source names get truncated via the parent ellipsis rule. */
+.sp-ov-card-diffs .sp-ov-cf-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sp-ov-cf-name-text {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.sp-ov-cf-source {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.sp-ov-diff-old {
+  color: var(--text-muted);
+  opacity: 0.7;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-ov-diff-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.sp-ov-diff-new {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-ov-diff-new.positive { color: var(--accent-green); }
+.sp-ov-diff-new.negative { color: var(--accent-red); }
+.sp-ov-diff-new.zero     { color: var(--text-muted); }
+/* Placeholder in the Profile default column when the row has no
+   meaningful baseline (custom CFs have no TRaSH default; opted-in
+   Additional CFs would just echo Your value). Muted + smaller so it
+   doesn't compete with real default values. */
+.sp-ov-diff-na {
+  font-style: italic;
+  opacity: 0.55;
+  font-size: 11px;
+}
+/* "excluded" tag in the Your value column for Excluded default-on CFs.
+   Communicates the state instead of an empty cell. */
+.sp-ov-diff-excluded-tag {
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.sp-ov-diff-reset {
+  grid-column: 1;
+  grid-row: 1;
+  text-align: center;
+}
+
+/* Excluded-CF row in the Diffs view — name gets struck-through too
+   since the row represents "this CF would normally sync but you
+   removed it from the active set". */
+.sp-ov-cf-excluded .sp-ov-cf-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.sp-ov-section-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+  font-style: italic;
+}
+.sp-ov-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Quality items — flat wrapping chip list. Groups distinguished by a
+   stronger background + small downward arrow + tooltip listing the
+   members. Singles are plain chips. Keeps the section compact even
+   for profiles with 15+ qualities. */
+.sp-ov-quality-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* When Customize is on, the whole chip area acts as a click target
+   that opens the Quality Items editor. Subtle hover affordance so
+   the cursor + faint outline tell the user the area is interactive. */
+.sp-ov-quality-list-editable {
+  cursor: pointer;
+  padding: 6px;
+  margin: -6px;
+  border-radius: 4px;
+  transition: background 0.12s, outline-color 0.12s;
+  outline: 1px dashed transparent;
+}
+.sp-ov-quality-list-editable:hover {
+  background: var(--bg-elevated-hover);
+  outline-color: var(--border-subtle);
+}
+.sp-ov-quality-chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-ov-quality-chip.is-group {
+  background: var(--bg-elevated);
+  border-color: var(--app-color);
+  cursor: help;
+}
+.sp-ov-quality-group-marker {
+  font-size: 9px;
+  color: var(--app-color);
+  line-height: 1;
+}
+

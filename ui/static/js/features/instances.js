@@ -8,6 +8,24 @@ export default {
     instanceForm: { name: '', type: 'radarr', url: '', apiKey: '' },
     instanceFormErrors: {},
     modalTestResult: null,
+    // Prowlarr's data shape (single global config) differs from the
+    // multi-instance Radarr/Sonarr list. The v3 Instances page presents
+    // it as a sibling section using the same row + inline-edit pattern,
+    // so visually it matches Radarr/Sonarr (Test/Edit/Delete on the row,
+    // Save/Cancel at the bottom of the form). prowlarrForm holds the
+    // staged edits so Cancel can discard cleanly — unlike the old
+    // @change auto-save which made Cancel misleading.
+    prowlarrForm: { enabled: false, url: '', apiKey: '', radarrCategories: [], sonarrCategories: [] },
+    // v3 Instances page uses inline-expand for Edit (matches Prowlarr's
+    // pattern) instead of a modal. inlineEditingId tracks which row's
+    // form is open:
+    //   null            → no inline form open
+    //   inst.id (string) → editing an existing instance
+    //   'new-radarr'    → adding a new Radarr (form at section bottom)
+    //   'new-sonarr'    → adding a new Sonarr
+    // Only one slot can be open at a time; clicking Edit on another row
+    // silently switches.
+    inlineEditingId: null,
   },
 
   methods: {
@@ -38,15 +56,90 @@ export default {
       return is4k ? 'icons/sonarr4k.png' : 'icons/sonarr.png';
     },
 
-    openInstanceModal(inst = null) {
+    // defaultType lets the v3 Instances page's per-section "+ Add"
+    // buttons preselect the right type ("+ Add Radarr" → radarr) without
+    // depending on the active app cascade.
+    openInstanceModal(inst = null, defaultType = null) {
       this.editingInstance = inst;
       this.modalTestResult = null;
       if (inst) {
         this.instanceForm = { name: inst.name, type: inst.type, url: inst.url, apiKey: '' };
       } else {
-        this.instanceForm = { name: '', type: ['radarr','sonarr'].includes(this.activeAppType) ? this.activeAppType : 'radarr', url: '', apiKey: '' };
+        const fallbackType = ['radarr','sonarr'].includes(this.activeAppType) ? this.activeAppType : 'radarr';
+        this.instanceForm = { name: '', type: defaultType || fallbackType, url: '', apiKey: '' };
       }
       this.showInstanceModal = true;
+    },
+
+    // Inline-edit entry points used by the v3 Instances page. Same form
+    // state (instanceForm + instanceFormErrors + modalTestResult) so
+    // saveInstance / testConnectionInModal don't need a parallel code
+    // path — they read instanceForm regardless of which surface opened
+    // the form.
+    startInlineEdit(inst) {
+      this.inlineEditingId = inst.id;
+      this.editingInstance = inst;
+      this.instanceForm = { name: inst.name, type: inst.type, url: inst.url, apiKey: '' };
+      this.instanceFormErrors = {};
+      this.modalTestResult = null;
+    },
+    startInlineAdd(type) {
+      this.inlineEditingId = 'new-' + type;
+      this.editingInstance = null;
+      this.instanceForm = { name: '', type, url: '', apiKey: '' };
+      this.instanceFormErrors = {};
+      this.modalTestResult = null;
+    },
+    cancelInlineEdit() {
+      this.inlineEditingId = null;
+      this.editingInstance = null;
+      this.instanceFormErrors = {};
+      this.modalTestResult = null;
+    },
+
+    // Prowlarr-specific inline-edit helpers. Same UX shape as
+    // startInlineEdit/Add but talks to the prowlarrForm temp state +
+    // config.prowlarr singleton instead of the instance list.
+    startProwlarrEdit() {
+      this.inlineEditingId = 'prowlarr';
+      this.prowlarrForm = {
+        enabled: !!this.config.prowlarr?.enabled,
+        url: this.config.prowlarr?.url || '',
+        apiKey: this.config.prowlarr?.apiKey || '',
+        radarrCategories: [...(this.config.prowlarr?.radarrCategories || [])],
+        sonarrCategories: [...(this.config.prowlarr?.sonarrCategories || [])],
+      };
+      this.prowlarrTestResult = null;
+    },
+    startProwlarrAdd() {
+      this.inlineEditingId = 'new-prowlarr';
+      this.prowlarrForm = { enabled: true, url: '', apiKey: '', radarrCategories: [], sonarrCategories: [] };
+      this.prowlarrTestResult = null;
+    },
+    async saveProwlarrConfig() {
+      // Commit prowlarrForm into config.prowlarr and persist via the
+      // existing config save endpoint (same path the old @change wiring
+      // used — sync engine untouched).
+      if (!this.config.prowlarr) this.config.prowlarr = {};
+      this.config.prowlarr.enabled = this.prowlarrForm.enabled;
+      this.config.prowlarr.url = (this.prowlarrForm.url || '').trim();
+      this.config.prowlarr.apiKey = (this.prowlarrForm.apiKey || '').trim();
+      this.config.prowlarr.radarrCategories = this.prowlarrForm.radarrCategories;
+      this.config.prowlarr.sonarrCategories = this.prowlarrForm.sonarrCategories;
+      await this.saveConfig(['prowlarr']);
+      this.inlineEditingId = null;
+    },
+    async deleteProwlarr() {
+      const confirmed = await new Promise(resolve => {
+        this.confirmModal = { show: true, title: 'Remove Prowlarr', message: 'Disconnect Prowlarr from Clonarr? The Scoring Sandbox will lose release-search until you reconnect.', confirmLabel: 'Remove', onConfirm: () => resolve(true), onCancel: () => resolve(false) };
+      });
+      if (!confirmed) return;
+      if (!this.config.prowlarr) this.config.prowlarr = {};
+      this.config.prowlarr.enabled = false;
+      this.config.prowlarr.url = '';
+      this.config.prowlarr.apiKey = '';
+      await this.saveConfig(['prowlarr']);
+      this.prowlarrTestResult = null;
     },
 
     async saveInstance() {
@@ -78,6 +171,7 @@ export default {
         return;
       }
       this.showInstanceModal = false;
+      this.inlineEditingId = null;
       await this.loadInstances();
       this.testAllInstances();
       // Reload sync data in case orphaned data was migrated.

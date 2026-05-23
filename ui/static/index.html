@@ -49,14 +49,16 @@
      in main.js (CSP-tightening compatibility — no inline onclick). -->
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div x-data="clonarr" x-init="init()" x-cloak>
+<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'" :data-content-align="contentAlign" :data-nav-style="navStyle">
 
+  {{template "layout/sidebar" .}}
   {{template "layout/top-nav" .}}
   <main id="main-content" tabindex="-1">
+  {{template "layout/app-banner" .}}
   {{template "sections/app-pages" .}}
   {{template "sections/advanced" .}}
   {{template "overlays/profile-builder" .}}
-  {{template "overlays/profile-detail" .}}
+  {{template "overlays/profile-sync-preview" .}}
   {{template "sections/settings" .}}
   {{template "sections/about" .}}
   </main>
@@ -70,6 +72,7 @@
   {{template "modals/backup-instance" .}}
   {{template "modals/restore-instance" .}}
   {{template "modals/confirm-dialog" .}}
+  {{template "modals/quality-editor" .}}
   {{template "modals/input-dialog" .}}
   {{template "modals/tooltip" .}}
   {{template "modals/sandbox-copy" .}}
@@ -77,7 +80,7 @@
   {{template "modals/cf-editor" .}}
   {{template "modals/cf-export" .}}
   {{template "modals/import-cf" .}}
-  {{template "layout/footer" .}}
+  {{template "modals/clone-cf" .}}
   {{template "modals/disable-auth" .}}
 
 </div>

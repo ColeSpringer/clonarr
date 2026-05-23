@@ -1,7 +1,6 @@
 export default {
   state: {
     namingData: {},
-    namingSelectedInstance: {},
     namingInstanceData: {},
     namingApplyResult: {},
     namingMediaServer: {},
@@ -278,7 +277,7 @@ export default {
     },
 
     async loadInstanceNaming(appType) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) {
         this.namingInstanceData = { ...this.namingInstanceData, [appType]: null };
         return;
@@ -370,26 +369,30 @@ export default {
       if (isUnset) {
         return (
           '<div style="font-size:11px;color:var(--text-secondary);margin-top:14px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Currently on instance</div>' +
-          '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--bg-muted);border-radius:3px;padding:6px 8px;color:var(--text-muted);font-style:italic">(not set)</div>' +
+          '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:3px;padding:6px 8px;color:var(--text-muted);font-style:italic">(not set)</div>' +
           '<div style="font-size:11px;color:var(--text-secondary);margin-top:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Would set to</div>' +
-          '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--bg-muted);border-left:3px solid var(--accent-green);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + escapeHtml(newPattern) + '</div>'
+          '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-left:3px solid var(--app-color);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + escapeHtml(newPattern) + '</div>'
         );
       }
 
       const diff = this.diffNamingTokens(currentPattern, newPattern);
       const diffHTML = diff.map(t => {
         const text = escapeHtml(t.text);
+        // Red/green retained ONLY in the diff itself — that's where they
+        // carry direct semantic meaning (added/removed tokens). The
+        // current/new pattern boxes above use neutral framing so red
+        // doesn't read as "current is bad" and green as "new is good".
         if (t.type === 'add') return `<span style="background:var(--accent-green-bg);color:var(--accent-green);padding:0 2px;border-radius:2px">${text}</span>`;
         if (t.type === 'remove') return `<span style="background:var(--accent-red-bg);color:var(--accent-red);padding:0 2px;border-radius:2px;text-decoration:line-through">${text}</span>`;
         return text;
       }).join('');
       return (
         '<div style="font-size:11px;color:var(--text-secondary);margin-top:14px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Currently on instance</div>' +
-        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--bg-muted);border-left:3px solid var(--accent-red);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-muted)">' + escapeHtml(currentPattern) + '</div>' +
+        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + escapeHtml(currentPattern) + '</div>' +
         '<div style="font-size:11px;color:var(--text-secondary);margin-top:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Would change to</div>' +
-        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--bg-muted);border-left:3px solid var(--accent-green);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + escapeHtml(newPattern) + '</div>' +
-        '<div style="font-size:11px;color:var(--text-secondary);margin-top:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Diff (added in green, removed in red)</div>' +
-        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--bg-muted);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + diffHTML + '</div>'
+        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-left:3px solid var(--app-color);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + escapeHtml(newPattern) + '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary);margin-top:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Diff</div>' +
+        '<div style="font-family:monospace;font-size:12px;background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:3px;padding:6px 8px;white-space:nowrap;overflow-x:auto;color:var(--text-body)">' + diffHTML + '</div>'
       );
     },
 
@@ -398,7 +401,7 @@ export default {
     // multiple schemes against the current instance state before deciding
     // which to apply.
     compareNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -413,6 +416,7 @@ export default {
         title: 'Compare naming scheme',
         message,
         html: true,
+        wide: true,  // long monospace patterns need room — bumps modal to 760px
         confirmLabel: 'Apply',
         cancelLabel: 'Close',
         // hideCancel defaults to false — both buttons visible. User can
@@ -429,7 +433,7 @@ export default {
     // Per feedback_dryrun_preview: destructive-ish UI ops should show a
     // concrete preview, not just "Are you sure?".
     confirmApplyNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -445,6 +449,7 @@ export default {
         title: 'Apply naming scheme',
         message,
         html: true,
+        wide: true,
         confirmLabel: 'Apply',
         cancelLabel: 'Cancel',
         onConfirm: () => this.applyNamingScheme(appType, sectionKey, scheme),
@@ -453,7 +458,7 @@ export default {
     },
 
     async applyNamingScheme(appType, sectionKey, scheme) {
-      const instId = this.namingSelectedInstance[appType];
+      const instId = this.mediaInstanceId[appType];
       if (!instId) return;
       const instName = this.getInstanceName(appType, instId);
       // Maps section keys to the request-body field expected by handleApplyNaming

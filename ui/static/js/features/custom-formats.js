@@ -1,5 +1,35 @@
 export default {
-  state: {},
+  state: {
+    // Custom Formats browse — name/category text filter. Single string
+    // applies across all categories simultaneously; matching categories
+    // auto-expand so results are visible without manual clicks.
+    cfBrowseFilter: '',
+    // Sidebar category-filter selection. Three formats:
+    //   'all'                 — every category (today's stacked cards)
+    //   'parent:<prefix>'     — filter to every sub-group under a parent
+    //                           (e.g. 'parent:Unwanted' = all Unwanted variants)
+    //   '<displayName>'       — filter to one specific sub-group
+    // Persisted to localStorage so the choice survives reload.
+    cfBrowseActiveCategory: localStorage.getItem('clonarr_cfBrowseCategory') || 'all',
+    // Per-parent expand state for the sidebar tree. Independent of
+    // main-pane detailSections — sidebar parents collapse to a single
+    // row while main cards stay individually controllable. Stored as
+    // {<parentPrefix>: bool}. Persisted so user's "what's interesting
+    // to me" survives reload.
+    cfBrowseSidebarExpanded: (() => {
+      try { return JSON.parse(localStorage.getItem('clonarr_cfBrowseExpanded') || '{}'); }
+      catch (_) { return {}; }
+    })(),
+    // Clone-flow modal state — set by cloneCFRow when the ⧉ button is
+    // clicked, cleared by cancelCloneCF / commitCloneCF (backdrop
+    // click is NOT a close path — Cancel button or ESC only, matches
+    // the modal-no-backdrop-close rule). No API call happens until
+    // the user clicks Save in the modal.
+    cloneModal: { open: false, sourceCF: null, sourceAppType: '', name: '', saving: false, error: '' },
+    // cfEditorActiveTab + cfEditorDescriptionPreview live in state.js
+    // alongside the rest of the cf-editor state — this section only
+    // holds CF browse / clone state.
+  },
   methods: {
     async loadCFBrowse(appType) {
       try {
@@ -13,6 +43,16 @@ export default {
         const groups = await groupsRes.json();
         const customCFs = customRes.ok ? await customRes.json() : [];
         this.cfBrowseData = { ...this.cfBrowseData, [appType]: { cfs, groups, customCFs } };
+        // Invalidate the /all-cfs catalog cache so Sync Preview's
+        // Additional CF picker + Diffs view pick up freshly created /
+        // edited / deleted custom CFs immediately. loadCFBrowse is the
+        // central re-fetch point hit by save / delete / import flows.
+        // Without this, the cache marker stays set and the picker
+        // serves stale catalog until container restart.
+        if (this._extraCFGroupsCachedType === appType) {
+          this._extraCFGroupsCachedType = null;
+          this.extraCFGroups = [];
+        }
       } catch (e) { /* not yet cloned */ }
     },
 
@@ -21,6 +61,210 @@ export default {
         const res = await fetch(`/api/trash/${appType}/conflicts`);
         if (res.ok) this.conflictsData = { ...this.conflictsData, [appType]: await res.json() };
       } catch (e) { /* not available */ }
+    },
+
+    // Filtered view of getCFBrowseGroups. When cfBrowseFilter is empty,
+    // returns the raw category list. When set:
+    //   - Category whose displayName matches → include with all CFs intact
+    //   - Otherwise, filter each group's CFs by name match; drop groups
+    //     with no matches; drop the category if all groups are empty.
+    // Case-insensitive substring match. The result feeds the template so
+    // categories with zero matching CFs disappear entirely.
+    filteredCFBrowseGroups(appType) {
+      const filter = (this.cfBrowseFilter || '').trim().toLowerCase();
+      let groups = this.getCFBrowseGroups(appType) || [];
+      // Sidebar category pin — if the user selected a specific
+      // category, drop everything else BEFORE the text filter runs.
+      // Three forms: 'all' = no pin, 'parent:<name>' = all subs under
+      // that parent, '<displayName>' = exact single subgroup.
+      const active = this.cfBrowseActiveCategory;
+      if (active && active !== 'all') {
+        if (active.startsWith('parent:')) {
+          const parentName = active.slice('parent:'.length);
+          groups = groups.filter(cat => (cat.category || 'Other') === parentName);
+        } else {
+          groups = groups.filter(cat => cat.displayName === active);
+        }
+      }
+      if (!filter) return groups;
+      return groups
+        .map(cat => {
+          if (cat.displayName.toLowerCase().includes(filter)) return cat;
+          const filteredGroups = (cat.groups || [])
+            .map(g => ({ ...g, cfs: (g.cfs || []).filter(cf => cf.name.toLowerCase().includes(filter)) }))
+            .filter(g => g.cfs.length > 0);
+          if (filteredGroups.length === 0) return null;
+          return {
+            ...cat,
+            groups: filteredGroups,
+            totalCFs: filteredGroups.reduce((acc, g) => acc + g.cfs.length, 0),
+          };
+        })
+        .filter(Boolean);
+    },
+
+    // TRaSH name → kebab-case slug used in both the docs anchors and
+    // the GitHub JSON filenames. "1.0 Mono" → "10-mono", "5.1 Surround"
+    // → "51-surround", "BR-DISK" → "br-disk". Rules: lowercase, drop
+    // dots, every non-alphanumeric run collapses to one dash, trim
+    // leading/trailing dashes.
+    _cfSlug(name) {
+      return (name || '').toLowerCase()
+        .replace(/\./g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    },
+
+    // Links a CF to the TRaSH-Guides docs collection page with an
+    // anchor that scrolls to the CF section. Falls back to the
+    // collection landing page if the slug can't be derived. Empty for
+    // custom CFs (no upstream).
+    //
+    // TRaSH-Guides uses inconsistent casing per app — Radarr's page
+    // path is /Radarr/Radarr-collection-of-custom-formats/ (both
+    // capitalized) but Sonarr's is /Sonarr/sonarr-collection-of-custom-
+    // formats/ (capital dir, lowercase filename). Verified by curl
+    // against trash-guides.info — the wrong case returns 404. The
+    // ?h={slug} query param triggers Material's search-highlight on
+    // the destination page.
+    trashCFGuideUrl(cf, appType) {
+      if (!cf || cf.isCustom) return '';
+      const slug = this._cfSlug(cf.name);
+      const base = appType === 'sonarr'
+        ? 'https://trash-guides.info/Sonarr/sonarr-collection-of-custom-formats/'
+        : 'https://trash-guides.info/Radarr/Radarr-collection-of-custom-formats/';
+      return slug ? `${base}?h=${slug}#${slug}` : base;
+    },
+
+    // Links a CF to the raw JSON file on TRaSH-Guides GitHub. TRaSH
+    // names files by the kebab-case slug, not trash_id.
+    trashCFJsonUrl(cf, appType) {
+      if (!cf || cf.isCustom) return '';
+      const slug = this._cfSlug(cf.name);
+      if (!slug) return '';
+      const app = (appType === 'sonarr' || appType === 'radarr') ? appType : 'radarr';
+      return `https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/${app}/cf/${slug}.json`;
+    },
+
+    // Category-snippet helper for the collapsed-card preview line.
+    // Strips TRaSH's HTML description down to plain text and truncates
+    // to ~120 chars. Memoised on the cat object itself (a hidden
+    // `_snippetCache` key) so Alpine re-evaluating this every
+    // keystroke / filter change / expand toggle doesn't re-parse the
+    // HTML through document.createElement each call. The cat objects
+    // are rebuilt on every catalog refresh, so the cache invalidates
+    // naturally with the data.
+    cfCategorySnippet(cat) {
+      if (!cat) return '';
+      if (cat._snippetCache !== undefined) return cat._snippetCache;
+      const html = cat.trashDescription;
+      if (!html) { cat._snippetCache = ''; return ''; }
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const text = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+      if (!text) { cat._snippetCache = ''; return ''; }
+      cat._snippetCache = text.length > 120 ? text.slice(0, 120).trim() + '…' : text;
+      return cat._snippetCache;
+    },
+
+    // Set the sidebar category filter and persist the choice.
+    setCFBrowseCategory(name) {
+      this.cfBrowseActiveCategory = name || 'all';
+      try { localStorage.setItem('clonarr_cfBrowseCategory', this.cfBrowseActiveCategory); } catch (_) {}
+    },
+
+    // Toggle a single parent's expansion in the sidebar tree.
+    toggleCFBrowseParent(parent) {
+      this.cfBrowseSidebarExpanded = {
+        ...this.cfBrowseSidebarExpanded,
+        [parent]: !this.cfBrowseSidebarExpanded[parent],
+      };
+      try { localStorage.setItem('clonarr_cfBrowseExpanded', JSON.stringify(this.cfBrowseSidebarExpanded)); } catch (_) {}
+    },
+
+    // True when a parent is currently expanded. Also auto-expanded
+    // when the active filter targets one of its children (so the
+    // user always sees what they're filtering on).
+    isCFBrowseParentExpanded(parent, children) {
+      if (this.cfBrowseSidebarExpanded[parent]) return true;
+      const active = this.cfBrowseActiveCategory;
+      if (active === 'parent:' + parent) return true;
+      if (active && active !== 'all' && !active.startsWith('parent:')) {
+        return (children || []).some(c => c.displayName === active);
+      }
+      return false;
+    },
+
+    // Group the flat category list by their bracket-prefix into a
+    // two-level structure: parents (Audio, HDR, Unwanted, ...) with
+    // children (Audio Formats, Audio Channels, Unwanted Default,
+    // Unwanted SQP, ...). Each parent carries its total CF count
+    // across all children. Custom user-created CFs collapse into
+    // a "Custom" parent on top.
+    cfBrowseCategoriesHierarchy(appType) {
+      const flat = this.getCFBrowseGroups(appType) || [];
+      const byParent = new Map();
+      for (const cat of flat) {
+        const key = cat.category || 'Other';
+        if (!byParent.has(key)) byParent.set(key, []);
+        byParent.get(key).push(cat);
+      }
+      const out = [];
+      for (const [parent, children] of byParent) {
+        out.push({
+          parent,
+          children,
+          totalCFs: children.reduce((a, c) => a + (c.totalCFs || 0), 0),
+          isCustom: children.some(c => c.isCustom),
+        });
+      }
+      return out;
+    },
+
+    // True when the category should render expanded. Either the user
+    // explicitly opened it OR a non-empty cfBrowseFilter is active —
+    // search results need to be visible without manual clicks. When
+    // the sidebar pins a single category, that category renders
+    // expanded by default so the user sees its CFs immediately.
+    isCFCategoryExpanded(cat) {
+      if (this.cfBrowseActiveCategory && this.cfBrowseActiveCategory !== 'all'
+          && this.cfBrowseActiveCategory === cat.displayName) {
+        return true;
+      }
+      return !!this.cfBrowseFilter || !!this.detailSections['cfb_' + cat.displayName];
+    },
+
+    // True if ANY sidebar parent or main category card is currently
+    // expanded. Drives the Expand all / Collapse all toggle label so
+    // the button always offers the action that has effect.
+    anyCFCategoryExpanded(appType) {
+      const cats = this.getCFBrowseGroups(appType) || [];
+      if (cats.some(c => !!this.detailSections['cfb_' + c.displayName])) return true;
+      const tree = this.cfBrowseCategoriesHierarchy(appType) || [];
+      return tree.some(par => !!this.cfBrowseSidebarExpanded[par.parent]);
+    },
+
+    // Flip every sidebar parent AND every category card open or closed
+    // in one go. If any is open → collapse all. Otherwise expand all.
+    // Single toggle covers both views so the user doesn't need to
+    // know which "expand" they're after.
+    toggleAllCFCategories(appType) {
+      const next = !this.anyCFCategoryExpanded(appType);
+      // Sidebar parents
+      const tree = this.cfBrowseCategoriesHierarchy(appType) || [];
+      const sideUpdate = { ...this.cfBrowseSidebarExpanded };
+      for (const par of tree) {
+        sideUpdate[par.parent] = next;
+      }
+      this.cfBrowseSidebarExpanded = sideUpdate;
+      try { localStorage.setItem('clonarr_cfBrowseExpanded', JSON.stringify(sideUpdate)); } catch (_) {}
+      // Main cards
+      const cats = this.getCFBrowseGroups(appType) || [];
+      const cardUpdate = { ...this.detailSections };
+      for (const c of cats) {
+        cardUpdate['cfb_' + c.displayName] = next;
+      }
+      this.detailSections = cardUpdate;
     },
 
     getCFBrowseGroups(appType) {
@@ -67,6 +311,8 @@ export default {
             name: cfEntry.name || cf?.name || cfEntry.trash_id,
             description: cf?.description || '',
             score: cf?.trash_scores?.default,
+            specifications: cf?.specifications || [],
+            category: categoryClass,
           });
         }
 
@@ -74,6 +320,11 @@ export default {
           categories.push({
             category: categoryClass,
             displayName,
+            // Short name (no prefix) — used in sidebar children where
+            // the parent header already conveys the prefix, so we don't
+            // want to repeat it. Falls back to displayName when there's
+            // no bracket-prefix (e.g. "Other" category).
+            shortName: shortName || displayName,
             // Carry group integer through for the new sort. Falsy / null when
             // the cf-group JSON has no `group` field set.
             groupNum: (group.group ?? null),
@@ -89,7 +340,14 @@ export default {
       const ungrouped = [];
       for (const cf of data.cfs) {
         if (!usedCFIds.has(cf.trash_id)) {
-          ungrouped.push({ trashId: cf.trash_id, name: cf.name, description: cf.description || '', score: cf.trash_scores?.default });
+          ungrouped.push({
+            trashId: cf.trash_id,
+            name: cf.name,
+            description: cf.description || '',
+            score: cf.trash_scores?.default,
+            specifications: cf.specifications || [],
+            category: 'Other',
+          });
         }
       }
       if (ungrouped.length > 0) {
@@ -97,12 +355,55 @@ export default {
         categories.push({ category: 'Other', displayName: 'Other', groupNum: null, isCustom: false, groups: [{ name: 'Other', shortName: 'Other', cfs: ungrouped }], totalCFs: ungrouped.length });
       }
 
-      // Inject custom CFs
+      // Inject custom CFs — grouped by their user-chosen category
+      // field. Each unique category becomes its own card on the page;
+      // they all nest under a "Custom" sidebar parent so user-defined
+      // buckets don't pollute the TRaSH category tree.
       const customCFs = data.customCFs || [];
       if (customCFs.length > 0) {
-        const allCustomCFs = customCFs.map(ccf => ({ trashId: ccf.id, name: ccf.name, description: '', score: undefined, isCustom: true }));
-        allCustomCFs.sort((a, b) => a.name.localeCompare(b.name));
-        categories.push({ category: 'Custom', displayName: 'Custom', groupNum: null, isCustom: true, groups: [{ name: 'Custom Formats', shortName: 'Custom Formats', cfs: allCustomCFs }], totalCFs: allCustomCFs.length });
+        const byCategory = new Map();
+        for (const ccf of customCFs) {
+          const cat = (ccf.category || '').trim() || 'Custom';
+          if (!byCategory.has(cat)) byCategory.set(cat, []);
+          byCategory.get(cat).push({
+            trashId: ccf.id,
+            name: ccf.name,
+            description: ccf.description || '',
+            score: ccf.trashScores?.default,
+            specifications: ccf.specifications || [],
+            // Pill-color tinting reads this for the row background
+            // hint. User-defined cats don't have an --cat-* token, so
+            // pills fall back to neutral; the orange "is-custom" badge
+            // on the row still signals custom-ness.
+            category: 'Custom',
+            isCustom: true,
+            rawCustom: ccf,
+          });
+        }
+        // Sort category names alphabetically with the default "Custom"
+        // pinned at the top so a brand-new user without any explicit
+        // categories sees a familiar starting point.
+        const catNames = [...byCategory.keys()].sort((a, b) => {
+          if (a === 'Custom') return -1;
+          if (b === 'Custom') return 1;
+          return a.localeCompare(b);
+        });
+        for (const catName of catNames) {
+          const cfs = byCategory.get(catName);
+          cfs.sort((a, b) => a.name.localeCompare(b.name));
+          categories.push({
+            // `category` is the SIDEBAR PARENT key — always 'Custom'
+            // so every user-category collapses under one Custom parent
+            // in the sidebar tree (see cfBrowseCategoriesHierarchy).
+            category: 'Custom',
+            displayName: catName,
+            shortName: catName,
+            groupNum: null,
+            isCustom: true,
+            groups: [{ name: catName, shortName: catName, cfs }],
+            totalCFs: cfs.length,
+          });
+        }
       }
 
       // Group-integer sort (see _compareCFGroups): cf-groups with explicit
@@ -111,6 +412,441 @@ export default {
       return categories.sort((a, b) =>
         this._compareCFGroups(a.displayName, a.groupNum, !!a.isCustom,
                               b.displayName, b.groupNum, !!b.isCustom));
+    },
+
+    // --- Row-level helpers (Profilarr-inspired condition pills + clone) ---
+
+    // Map Arr "<X>Specification" implementation names to compact labels
+    // the user can scan at a glance. Anything unmapped falls through as
+    // the raw type stripped of the "Specification" suffix.
+    _cfSpecShortName(impl) {
+      const m = {
+        ReleaseTitleSpecification: 'Title',
+        LanguageSpecification: 'Language',
+        SourceSpecification: 'Source',
+        ResolutionSpecification: 'Resolution',
+        SizeSpecification: 'Size',
+        ReleaseGroupSpecification: 'Group',
+        IndexerFlagSpecification: 'Flag',
+        QualityModifierSpecification: 'Modifier',
+        ReleaseTypeSpecification: 'Type',
+        EditionSpecification: 'Edition',
+      };
+      if (m[impl]) return m[impl];
+      return (impl || '').replace(/Specification$/, '') || 'Condition';
+    },
+
+    // Pull a human-readable value out of an Arr/TRaSH spec's `fields`
+    // payload. Fields is either a JSON-encoded array/object (from TRaSH
+    // CFSpecification.Fields json.RawMessage) or an already-parsed array
+    // (from custom CFs stored in clonarr.json). We normalise both and
+    // pick the first scalar `value` we find.
+    _cfSpecValue(spec) {
+      let fields = spec?.fields;
+      if (typeof fields === 'string') {
+        try { fields = JSON.parse(fields); } catch (_) { return ''; }
+      }
+      if (!fields) return '';
+      const arr = Array.isArray(fields) ? fields : [fields];
+      for (const f of arr) {
+        if (f && f.value !== undefined && f.value !== null) {
+          if (typeof f.value === 'object') {
+            // Resolution / Source / Language specs sometimes carry an
+            // object like { name: "...", value: <int> }. Surface name.
+            if (f.value.name) return String(f.value.name);
+            try { return JSON.stringify(f.value); } catch (_) { return ''; }
+          }
+          return String(f.value);
+        }
+      }
+      return '';
+    },
+
+    // Build the visible pill list for a CF row. Uses spec.name as the
+    // pill label — TRaSH (and the Arr UIs) already give every spec a
+    // human-readable name like "Mono", "Not 3.0ch", "1080p", or
+    // "Bluray", which is far more meaningful than regex or impl-type.
+    // For structured specs (Resolution / Source / Language) the value
+    // text gets appended when the name is generic enough to need it.
+    //
+    // Returns up to `max` pills + an "+N more" overflow chip; full
+    // regex / value breakdown is always available via the info popover.
+    cfConditionPills(cf, max) {
+      const specs = cf?.specifications || [];
+      if (!specs.length) return [];
+      const limit = Math.max(1, max || 3);
+
+      const pills = [];
+      for (const s of specs) {
+        const rawName = (s.name || '').trim();
+        const implLabel = this._cfSpecShortName(s.implementation);
+        const value = this._cfSpecValue(s);
+        const isStructured = !this._cfRegexImpls.has(s.implementation);
+
+        // Decide what reads best on the pill. Order of preference:
+        //  1. spec.name (the curated label TRaSH gives every spec)
+        //  2. structured value (Resolution: 1080p)
+        //  3. implementation fallback (Title)
+        let label, valueText = '';
+        if (rawName) {
+          label = rawName;
+          if (isStructured && value && !rawName.toLowerCase().includes(value.toLowerCase())) {
+            valueText = value;
+          }
+        } else if (isStructured && value) {
+          label = implLabel;
+          valueText = value;
+        } else {
+          label = implLabel;
+        }
+
+        pills.push({
+          label,
+          value: valueText,
+          required: !!s.required,
+          negate: !!s.negate,
+          full: label + (valueText ? ': ' + valueText : '') + (s.required ? ' (required)' : '') + (s.negate ? ' — exclude' : ''),
+        });
+      }
+
+      if (pills.length <= limit) return pills;
+      const shown = pills.slice(0, limit);
+      shown.push({ overflow: true, count: pills.length - limit, label: `+${pills.length - limit}`, full: `${pills.length - limit} more conditions` });
+      return shown;
+    },
+
+    // Implementations whose `value` is a free-form regex pattern.
+    // Used by cfConditionPills to decide which specs get a
+    // structured pill value vs a name-only pill.
+    _cfRegexImpls: new Set([
+      'ReleaseTitleSpecification',
+      'ReleaseGroupSpecification',
+      'EditionSpecification',
+    ]),
+
+    // Hover-tooltip for the +N overflow chip — shows the aggregated
+    // pill summary (same form the row would render if there was no
+    // limit) instead of the raw regex. Full regex detail is in the
+    // info popover for users who actually need it.
+    cfAllConditionsTooltip(cf) {
+      const pills = this.cfConditionPills(cf, 999) || [];
+      return pills.filter(p => !p.overflow).map(p => p.full).join('\n');
+    },
+
+
+    // Read/write helper for the editor's "default score" field on the
+    // General tab. The underlying storage is the trashScores array
+    // (one row per context). The General-tab field exposes only the
+    // "default" context so casual users don't have to touch the
+    // TRaSH-tab; power users can still set per-context scores there.
+    get cfEditorDefaultScore() {
+      const arr = this.cfEditorForm?.trashScores || [];
+      const def = arr.find(t => (t.context || 'default') === 'default');
+      return def ? (def.score ?? 0) : 0;
+    },
+    set cfEditorDefaultScore(val) {
+      const n = Number(val);
+      const score = isNaN(n) ? 0 : n;
+      const arr = this.cfEditorForm.trashScores || [];
+      const idx = arr.findIndex(t => (t.context || 'default') === 'default');
+      if (idx >= 0) {
+        arr[idx] = { ...arr[idx], score };
+      } else {
+        arr.push({ _key: ++this.cfEditorScoreCounter, context: 'default', score });
+      }
+      this.cfEditorForm = { ...this.cfEditorForm, trashScores: arr };
+    },
+
+    // Collect every category currently used by custom CFs for this
+    // app, merged with the preset starter list. Drives the editor's
+    // Category dropdown so once a user creates "My Audio Tweaks", it
+    // shows up in the picker the next time they create a CF.
+    cfEditorCategoryOptions() {
+      const preset = ['Custom', 'Audio', 'HDR Formats', 'HQ Release Groups', 'Resolution', 'Streaming Services', 'Miscellaneous', 'Optional', 'Unwanted', 'Movie Versions', 'Anime', 'Language Profiles'];
+      const appType = this.cfEditorForm?.appType;
+      const userCats = new Set();
+      const customs = this.cfBrowseData?.[appType]?.customCFs || [];
+      for (const ccf of customs) {
+        const c = (ccf.category || '').trim();
+        if (c) userCats.add(c);
+      }
+      // Always include the current form's category so the dropdown
+      // can select it on edit, even if the catalog hasn't loaded yet
+      // OR the user is editing the only CF in that category (catalog
+      // would still surface it, but be defensive — race conditions
+      // around openCFEditor showed the dropdown falling back to
+      // "New category" without this).
+      const formCat = (this.cfEditorForm?.category || '').trim();
+      if (formCat) userCats.add(formCat);
+      // Preserve preset order, then append user-cats that aren't
+      // already in the preset list.
+      const all = [...preset];
+      const seen = new Set(preset);
+      for (const c of [...userCats].sort((a, b) => a.localeCompare(b))) {
+        if (!seen.has(c)) { all.push(c); seen.add(c); }
+      }
+      return all;
+    },
+
+    // === Markdown editor helpers (reusable for cf-groups, profile
+    // editor, etc. later). Operate on a target <textarea> element so
+    // the same toolbar can drive any markdown input. No external
+    // library — basic wrap/prepend selection mutation. ===
+
+    // Wrap the textarea's selected text with leading + trailing
+    // strings (e.g. "**" + "**" for bold). When nothing is selected,
+    // inserts the wrap markers and places the cursor between them so
+    // the user can type immediately.
+    mdWrapSelection(textareaSelector, before, after) {
+      const ta = typeof textareaSelector === 'string'
+        ? document.querySelector(textareaSelector)
+        : textareaSelector;
+      if (!ta) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const sel = ta.value.slice(start, end);
+      const wrapped = before + sel + after;
+      ta.value = ta.value.slice(0, start) + wrapped + ta.value.slice(end);
+      // Dispatch input so x-model picks up the change
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      const caret = sel ? start + wrapped.length : start + before.length;
+      ta.setSelectionRange(caret, caret);
+    },
+
+    // Prepend a string ("- " / "1. ") to each line in the selection.
+    // Selection start gets snapped back to the line's first char and
+    // selection end gets extended forward to the next newline (or
+    // EOF) so the whole last line gets prefixed even when the user
+    // selected mid-line. Empty selection prefixes just the line under
+    // the caret.
+    mdPrependLines(textareaSelector, prefix) {
+      const ta = typeof textareaSelector === 'string'
+        ? document.querySelector(textareaSelector)
+        : textareaSelector;
+      if (!ta) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
+      const nextNewline = ta.value.indexOf('\n', end);
+      const lineEnd = nextNewline === -1 ? ta.value.length : nextNewline;
+      const block = ta.value.slice(lineStart, lineEnd);
+      const lines = block.split('\n').map(l => prefix + l).join('\n');
+      ta.value = ta.value.slice(0, lineStart) + lines + ta.value.slice(lineEnd);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      ta.setSelectionRange(lineStart, lineStart + lines.length);
+    },
+
+    // Open the inline link popover anchored to the markdown editor.
+    // Captures the current textarea selection so it survives the user
+    // focusing into the URL input. Commit / cancel handled by
+    // mdLinkConfirm / mdLinkCancel.
+    mdInsertLink(textareaSelector) {
+      const ta = typeof textareaSelector === 'string'
+        ? document.querySelector(textareaSelector)
+        : textareaSelector;
+      if (!ta) return;
+      this.cfMdLinkPopover = {
+        open: true,
+        target: textareaSelector,
+        url: 'https://',
+        selStart: ta.selectionStart,
+        selEnd: ta.selectionEnd,
+      };
+      this.$nextTick(() => {
+        const input = document.getElementById('cf-md-link-url');
+        if (input) { input.focus(); input.select(); }
+      });
+    },
+
+    mdLinkCancel() {
+      this.cfMdLinkPopover = { open: false, target: null, url: '', selStart: 0, selEnd: 0 };
+    },
+
+    mdLinkConfirm() {
+      const pop = this.cfMdLinkPopover;
+      if (!pop || !pop.open) return;
+      const url = (pop.url || '').trim();
+      if (!url) { this.mdLinkCancel(); return; }
+      const ta = typeof pop.target === 'string'
+        ? document.querySelector(pop.target)
+        : pop.target;
+      if (!ta) { this.mdLinkCancel(); return; }
+      const sel = ta.value.slice(pop.selStart, pop.selEnd) || 'link';
+      const replacement = `[${sel}](${url})`;
+      ta.value = ta.value.slice(0, pop.selStart) + replacement + ta.value.slice(pop.selEnd);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      this.mdLinkCancel();
+      ta.focus();
+      ta.setSelectionRange(pop.selStart + 1, pop.selStart + 1 + sel.length);
+    },
+
+    // Render a minimal markdown subset (bold, italic, code, links,
+    // bullet/numbered lists, paragraphs) plus TRaSH's ^^underline^^
+    // syntax. Output goes through sanitizeHTML so only safe tags
+    // survive (the allow-list in utils/csrf.js already covers
+    // a, b, em, i, strong, u, br, p, code, ul, ol, li).
+    renderMarkdownPreview(text) {
+      if (!text) return '<em style="color:var(--text-muted)">Nothing to preview.</em>';
+      let html = String(text);
+      // Code spans — do FIRST so the chars inside aren't re-processed
+      html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+      // TRaSH ^^underline^^
+      html = html.replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
+      // Bold + italic
+      html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+      // Links [text](url)
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Lists — split into blocks, detect "- " or "1. " prefix per line
+      const blocks = html.split(/\n\n+/).map(block => {
+        const lines = block.split('\n');
+        if (lines.every(l => /^\s*-\s+/.test(l))) {
+          return '<ul>' + lines.map(l => '<li>' + l.replace(/^\s*-\s+/, '') + '</li>').join('') + '</ul>';
+        }
+        if (lines.every(l => /^\s*\d+\.\s+/.test(l))) {
+          return '<ol>' + lines.map(l => '<li>' + l.replace(/^\s*\d+\.\s+/, '') + '</li>').join('') + '</ol>';
+        }
+        return '<p>' + lines.join('<br>') + '</p>';
+      });
+      const out = blocks.join('');
+      return this.sanitizeHTML ? this.sanitizeHTML(out) : out;
+    },
+
+    // Build the SAFE HTML payload for the row's hover tooltip.
+    // Description goes through sanitizeHTML at construction time so
+    // this function returns guaranteed-clean output — callers don't
+    // have to remember to sanitize again. TRaSH/JSON link URLs are
+    // constructed from helper-emitted strings (no user input), but we
+    // still escape via a quick attribute-safe encoder before
+    // concatenation to harden against future bugs in those helpers.
+    buildCFInfoHTML(cf, appType) {
+      const desc = (cf?.description || '').replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
+      const safeDesc = this.sanitizeHTML ? this.sanitizeHTML(desc) : '';
+      let html = safeDesc;
+      if (!cf?.isCustom) {
+        const guideUrl = this.trashCFGuideUrl ? this.trashCFGuideUrl(cf, appType) : '';
+        const jsonUrl = this.trashCFJsonUrl ? this.trashCFJsonUrl(cf, appType) : '';
+        const esc = (u) => String(u).replace(/[<>"'&]/g, c => ({ '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;', '&':'&amp;' }[c]));
+        const links = [];
+        if (guideUrl) links.push(`<a href="${esc(guideUrl)}" target="_blank" rel="noopener">TRaSH guide</a>`);
+        if (jsonUrl) links.push(`<a href="${esc(jsonUrl)}" target="_blank" rel="noopener">JSON</a>`);
+        if (links.length) html += (safeDesc ? '<br><br>' : '') + links.join(' &nbsp;·&nbsp; ');
+      }
+      return html;
+    },
+
+    // Step 1 of clone: open the name-prompt modal. User chooses the
+    // new name + clicks Save (commitCloneCF) or Cancel (cancelCloneCF
+    // / outside-click). Nothing is created server-side until commit.
+    cloneCFRow(cf, appType) {
+      const baseName = (cf?.name || 'Custom Format').replace(/\s+\(Copy(?:\s+\d+)?\)$/, '');
+      this.cloneModal = {
+        open: true,
+        sourceCF: cf,
+        sourceAppType: appType,
+        name: `${baseName} (Copy)`,
+        saving: false,
+        error: '',
+      };
+      // Focus the name input after Alpine has rendered the modal.
+      this.$nextTick(() => {
+        const el = document.getElementById('clone-cf-name-input');
+        if (el) { el.focus(); el.select(); }
+      });
+    },
+
+    cancelCloneCF() {
+      this.cloneModal = { open: false, sourceCF: null, sourceAppType: '', name: '', saving: false, error: '' };
+    },
+
+    // Step 2 of clone: actually POST the new CF using the user's
+    // chosen name. Endpoint + body shape mirror the create flow in
+    // saveCFEditor (POST /api/custom-cfs with { cfs: [payload] }).
+    // Specs need their `fields` normalised: the TRaSH catalog API
+    // returns `fields: { value: ... }` (TRaSH JSON shape) while the
+    // create handler expects `fields: [{ name, value }]` (Arr shape).
+    async commitCloneCF() {
+      const m = this.cloneModal;
+      if (!m || !m.sourceCF) return;
+      const newName = (m.name || '').trim();
+      if (!newName) {
+        this.cloneModal.error = 'Name is required';
+        return;
+      }
+      this.cloneModal.saving = true;
+      this.cloneModal.error = '';
+      const cf = m.sourceCF;
+      const appType = m.sourceAppType;
+
+      // Source specs: prefer cf.specifications (rich row), fall back
+      // to looking the CF up in the catalog by trash_id. Hold the
+      // looked-up record too so includeInRename can fall back when the
+      // source row is a TRaSH catalog entry (no .rawCustom).
+      let rawSpecs = cf?.specifications || [];
+      let trashSourceCF = null;
+      if (cf?.trashId && !cf?.isCustom) {
+        const cfs = this.cfBrowseData?.[appType]?.cfs || [];
+        trashSourceCF = cfs.find(c => c.trash_id === cf.trashId) || null;
+        if (!rawSpecs.length) rawSpecs = trashSourceCF?.specifications || [];
+      }
+
+      const specifications = rawSpecs.map(s => {
+        let fields = s.fields;
+        if (typeof fields === 'string') {
+          try { fields = JSON.parse(fields); } catch (_) { fields = []; }
+        }
+        // TRaSH catalog shape `{ value: X }` → Arr shape `[{name:"value", value:X}]`
+        if (fields && !Array.isArray(fields) && typeof fields === 'object') {
+          fields = Object.entries(fields).map(([name, value]) => ({ name, value }));
+        }
+        if (!Array.isArray(fields)) fields = [];
+        return {
+          name: s.name || '',
+          implementation: s.implementation,
+          negate: !!s.negate,
+          required: !!s.required,
+          fields,
+        };
+      });
+
+      // includeInRename: custom CFs have it on rawCustom; TRaSH catalog
+      // entries expose it as includeCustomFormatWhenRenaming. Honour
+      // whichever shape the source provides so a clone of a TRaSH CF
+      // that marks "include in rename" carries the flag forward.
+      const includeInRename = !!(cf?.rawCustom?.includeInRename
+        ?? trashSourceCF?.includeCustomFormatWhenRenaming
+        ?? cf?.includeCustomFormatWhenRenaming);
+      const payload = {
+        name: newName,
+        appType,
+        category: 'Custom',
+        includeInRename,
+        specifications,
+        trashId: '',
+      };
+
+      try {
+        const res = await fetch('/api/custom-cfs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cfs: [payload] }),
+        });
+        if (!res.ok) {
+          let errMsg = `Clone failed (HTTP ${res.status})`;
+          try { const err = await res.json(); errMsg = err.error || errMsg; } catch (_) {}
+          this.cloneModal.error = errMsg;
+          this.cloneModal.saving = false;
+          return;
+        }
+        this.showToast ? this.showToast(`Cloned as "${newName}"`, 'success', 4000) : null;
+        await this.loadCFBrowse(appType);
+        this.cancelCloneCF();
+      } catch (e) {
+        this.cloneModal.error = 'Clone failed: ' + (e?.message || e);
+        this.cloneModal.saving = false;
+      }
     },
 
     // --- CF Editor (Create/Edit) ---
@@ -132,8 +868,12 @@ export default {
       this.cfEditorMode = mode;
       this.cfEditorResult = null;
       this.cfEditorSaving = false;
-      this.cfEditorShowPreview = false;
       this.cfEditorSpecCounter = 0;
+      this.cfEditorScoreCounter = 0;
+      this.cfEditorActiveTab = 'general';
+      this.cfEditorDescriptionPreview = false;
+      this.cfMdLinkPopover = { open: false, target: null, url: '', selStart: 0, selEnd: 0 };
+      this._cfEditorBaseline = null;
 
       // Set appType first so loadCFEditorSchema can read it
       this.cfEditorForm.appType = appType;
@@ -163,7 +903,7 @@ export default {
           includeInRename: full.includeInRename || false,
           specifications: (full.specifications || []).map(s => this.arrSpecToEditorSpec(s)),
           trashId: full.trashId || '',
-          trashScores: Object.entries(full.trashScores || {}).map(([k,v]) => ({context:k, score:v})),
+          trashScores: Object.entries(full.trashScores || {}).map(([k,v]) => ({_key: ++this.cfEditorScoreCounter, context:k, score:v})),
           description: full.description || '',
         };
       } else {
@@ -184,6 +924,78 @@ export default {
       // Force Alpine reactivity on form object (needed for x-model on nested selects)
       this.cfEditorForm = { ...this.cfEditorForm };
       this.showCFEditor = true;
+      // Capture a baseline snapshot of the editable surface so
+      // cfEditorIsDirty() can detect when the user has changed
+      // anything. Used by closeCFEditor / ESC to decide whether to
+      // prompt before discarding work. Re-captured after every
+      // successful save so post-save "is dirty?" returns false.
+      this._cfEditorCaptureBaseline();
+    },
+
+    // Take a JSON snapshot of every editable field. Used as the
+    // dirty-tracking baseline. Includes specifications (with field
+    // values) + trashScores + name/category/etc.
+    _cfEditorCaptureBaseline() {
+      try {
+        this._cfEditorBaseline = JSON.stringify(this._cfEditorSnapshot());
+      } catch (_) {
+        this._cfEditorBaseline = null;
+      }
+    },
+
+    _cfEditorSnapshot() {
+      const f = this.cfEditorForm || {};
+      return {
+        name: f.name || '',
+        category: f.category || '',
+        newCategory: f.newCategory || '',
+        includeInRename: !!f.includeInRename,
+        description: f.description || '',
+        trashId: f.trashId || '',
+        // Specs: strip the internal `_key` field (volatile, not user data)
+        specs: (f.specifications || []).map(s => ({
+          name: s.name || '',
+          implementation: s.implementation || '',
+          negate: !!s.negate,
+          required: !!s.required,
+          fields: (s.fields || []).map(fd => ({ name: fd.name, value: fd.value })),
+        })),
+        scores: (f.trashScores || []).map(t => ({ context: t.context, score: t.score })),
+      };
+    },
+
+    // True when the editor's form differs from its baseline. Returns
+    // false when no baseline was ever captured (defensive — shouldn't
+    // block close in degraded mode).
+    cfEditorIsDirty() {
+      if (!this._cfEditorBaseline) return false;
+      try {
+        return JSON.stringify(this._cfEditorSnapshot()) !== this._cfEditorBaseline;
+      } catch (_) {
+        return false;
+      }
+    },
+
+    // Cancel path — prompts before closing when the editor has
+    // unsaved changes. Used by the Cancel button + ESC key.
+    closeCFEditor() {
+      if (!this.cfEditorIsDirty()) {
+        this.showCFEditor = false;
+        this._cfEditorBaseline = null;
+        return;
+      }
+      const name = (this.cfEditorForm?.name || '').trim() || 'this custom format';
+      this.confirmModal = {
+        show: true,
+        title: 'Discard unsaved changes?',
+        message: `You have unsaved edits to "${name}". Close the editor and discard them?\n\nThe saved copy on disk (if any) is unaffected.`,
+        confirmLabel: 'Discard changes',
+        onConfirm: () => {
+          this.showCFEditor = false;
+          this._cfEditorBaseline = null;
+        },
+        onCancel: () => {},
+      };
     },
 
     // Convert Arr API specification to editor format.
@@ -676,10 +1488,14 @@ export default {
         }
 
         this.cfEditorResult = { error: false, message: this.cfEditorMode === 'edit' ? 'Updated successfully' : 'Created successfully' };
+        // Re-capture baseline so the unsaved-changes guard doesn't
+        // fire on the post-save close. closeCFEditor is invoked
+        // implicitly via the setTimeout below.
+        this._cfEditorCaptureBaseline();
         // Refresh CF browse data
         this.loadCFBrowse(f.appType);
         // Close after brief delay to show success (keep saving state active)
-        setTimeout(() => { this.showCFEditor = false; this.cfEditorSaving = false; }, 800);
+        setTimeout(() => { this.showCFEditor = false; this._cfEditorBaseline = null; this.cfEditorSaving = false; }, 800);
         return; // skip finally's cfEditorSaving reset
       } catch (e) {
         this.cfEditorResult = { error: true, message: 'Network error: ' + e.message };
@@ -951,7 +1767,34 @@ export default {
       this.importCFJsonError = '';
       this.importCFResult = null;
       this.importCFImporting = false;
+      this.importCFFilter = '';
+      this.importCFHideGuide = false;
+      this.importCFHideExisting = true;
       this.showImportCFModal = true;
+    },
+
+    // Filtered view of importCFList — applies the modal's three filters
+    // (free-text name match, hide-guide, hide-already-imported) in one
+    // pass. Helpers consume this so the visible count + Select All only
+    // act on what the user can actually see.
+    importCFListFiltered() {
+      const q = (this.importCFFilter || '').trim().toLowerCase();
+      return (this.importCFList || []).filter(cf => {
+        if (this.importCFHideGuide && cf.trashMatch) return false;
+        if (this.importCFHideExisting && cf.exists) return false;
+        if (q && !(cf.name || '').toLowerCase().includes(q)) return false;
+        return true;
+      });
+    },
+
+    // Mass-select every importable (non-guide, non-existing) row that's
+    // currently visible after filters. Backs the "Select non-guide"
+    // shortcut so users can skip the chore of clicking each row.
+    importCFSelectNonGuide() {
+      for (const cf of this.importCFListFiltered()) {
+        if (!cf.exists && !cf.trashMatch) cf.selected = true;
+      }
+      this.importCFList = [...this.importCFList];
     },
 
     async fetchInstanceCFsForImport() {

@@ -1,0 +1,1074 @@
+package core
+
+import (
+	"bufio"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+// ProfileDescription is the full auto-derived description of a TRaSH quality
+// profile, computed from three data sources without any per-profile hand-curation:
+//
+//  1. Profile JSON (quality-profiles/X.json) — items[], cutoff, formatItems
+//  2. CF-group JSONs (cf-groups/*.json) — quality_profiles.include maps,
+//     default flag tells whether HDR/Audio scoring is enabled by default
+//     and which HDR variants (DV Boost, HDR10+ Boost) are available as
+//     opt-ins. The cf-group lists themselves aren't stored — only the
+//     boolean conclusions on Axes.HDR / Axes.Audio.
+//  3. Profile markdown section (docs/<App>/<app>-setup-quality-profiles.md) —
+//     tagline ("If you prefer ..."), size ("_Size: X-Y GB..._"), optional Note
+//
+// On top of those raw fields, two composed bullet-lists give the editorial
+// framing TRaSH itself doesn't ship: Highlights ("what you get") and
+// BestFor ("who it suits"). Both are derived from axes + formatItems
+// patterns + the profile-name prefix — no invented prose, every bullet
+// asserts a fact the data supports.
+//
+// New profiles TRaSH adds get described automatically on the next pull.
+type ProfileDescription struct {
+	TrashID    string      `json:"trashId"`
+	Name       string      `json:"name"`
+	App        string      `json:"app"` // "radarr" | "sonarr"
+	Tagline    string      `json:"tagline,omitempty"`
+	Axes       ProfileAxes `json:"axes"`
+	Highlights []string    `json:"highlights,omitempty"`
+	TrashNote  string      `json:"trashNote,omitempty"`
+	// Disclaimer is TRaSH's own prose disclaimer from the profile JSON's
+	// trash_description field, surfaced when it's not just the structural
+	// "Quality Profile that covers: ..." auto-text. Currently used for
+	// SQP profiles where TRaSH ships an explicit "join the Discord before
+	// using" disclaimer they want shown verbatim on every SQP card.
+	//
+	// Structured into Before / LinkText / LinkURL / After so the frontend
+	// can render the embedded <a href=...>...</a> as an actual clickable
+	// link inline in the prose, preserving TRaSH's exact wording for the
+	// link label (e.g. "TRaSH-Guide Discord") rather than stripping the
+	// HTML to plain text.
+	Disclaimer *DisclaimerNotice `json:"disclaimer,omitempty"`
+	TrashURL   string            `json:"trashUrl,omitempty"`
+}
+
+// DisclaimerNotice carries TRaSH's prose disclaimer split around a single
+// embedded link. Designed for trash_description fields like the SQP one:
+// "...please join the <a href='...'>TRaSH-Guide Discord</a> for more...".
+// Disclaimers without a link have only Before populated.
+type DisclaimerNotice struct {
+	Before   string `json:"before"`
+	LinkText string `json:"linkText,omitempty"`
+	LinkURL  string `json:"linkUrl,omitempty"`
+	After    string `json:"after,omitempty"`
+}
+
+// ProfileAxes is the 7-row quick-fact summary shown as pills on the profile card.
+type ProfileAxes struct {
+	Resolution string              `json:"resolution"`
+	Sources    []string            `json:"sources"`
+	Codec      string              `json:"codec"`
+	HDR        ProfileHDRSummary   `json:"hdr"`
+	Audio      ProfileAudioSummary `json:"audio"`
+	Cutoff     string              `json:"cutoff"`
+	AvgSize    string              `json:"avgSize,omitempty"`
+}
+
+// ProfileHDRSummary reports whether HDR is scored by default and what HDR
+// variant add-ons (DV Boost, HDR10+ Boost, etc.) are available as opt-ins.
+type ProfileHDRSummary struct {
+	Scored bool     `json:"scored"`
+	OptIns []string `json:"optIns,omitempty"` // e.g. ["DV Boost", "HDR10+ Boost"]
+}
+
+// ProfileAudioSummary reports whether lossless-audio scoring is enabled by
+// default (i.e. [Audio] Audio Formats cf-group has default=true for the profile).
+type ProfileAudioSummary struct {
+	Scored bool `json:"scored"`
+}
+
+// ProfileMarkdownSection is the parsed per-profile section of TRaSH's
+// docs/<App>/<app>-setup-quality-profiles.md file. All fields are optional —
+// not every profile has a Note.
+type ProfileMarkdownSection struct {
+	Tagline  string
+	SizeText string
+	Note     string
+}
+
+// DescribeProfiles returns ProfileDescription for every profile in the app's
+// loaded TRaSH data. Combines profile JSONs, cf-groups, and the per-app
+// setup-quality-profiles.md sections. Safe to call before data is loaded —
+// returns empty slice if no profiles are available yet.
+func (ts *TrashStore) DescribeProfiles(app string) ([]ProfileDescription, error) {
+	snap := ts.Snapshot()
+	if snap == nil {
+		return nil, nil
+	}
+	var appData *AppData
+	switch app {
+	case "radarr":
+		appData = &snap.Radarr
+	case "sonarr":
+		appData = &snap.Sonarr
+	default:
+		return nil, fmt.Errorf("unknown app: %s", app)
+	}
+	if len(appData.Profiles) == 0 {
+		return nil, nil
+	}
+	mdSections, err := LoadProfileMarkdown(ts.dataDir, app)
+	if err != nil {
+		// Markdown failure is non-fatal — describe what we can from JSON
+		mdSections = map[string]ProfileMarkdownSection{}
+	}
+	out := make([]ProfileDescription, 0, len(appData.Profiles))
+	for _, p := range appData.Profiles {
+		out = append(out, describeProfile(app, p, appData.CFGroups, mdSections[p.Name]))
+	}
+	return out, nil
+}
+
+// DescribeProfile returns the description for a single profile by trash_id.
+// Returns nil + nil error if the profile isn't found (caller should 404).
+func (ts *TrashStore) DescribeProfile(app, trashID string) (*ProfileDescription, error) {
+	all, err := ts.DescribeProfiles(app)
+	if err != nil {
+		return nil, err
+	}
+	for i := range all {
+		if all[i].TrashID == trashID {
+			return &all[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// LoadProfileMarkdown reads the per-app setup-quality-profiles.md once and
+// returns a map keyed by profile name (the ### header text). Returns an empty
+// map if the markdown file is missing (sparse-checkout not yet expanded on
+// an existing clone, or pre-pull state). Callers MUST tolerate empty results.
+func LoadProfileMarkdown(dataDir, app string) (map[string]ProfileMarkdownSection, error) {
+	var path string
+	switch app {
+	case "radarr":
+		path = filepath.Join(dataDir, "docs", "Radarr", "radarr-setup-quality-profiles.md")
+	case "sonarr":
+		path = filepath.Join(dataDir, "docs", "Sonarr", "sonarr-setup-quality-profiles.md")
+	default:
+		return nil, fmt.Errorf("unknown app: %s", app)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// sparse-checkout hasn't fetched the file yet — caller renders
+			// just the JSON-derived data and skips tagline/note/workflow
+			return map[string]ProfileMarkdownSection{}, nil
+		}
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	return parseProfileMarkdown(f), nil
+}
+
+// parseProfileMarkdown extracts per-profile sections from the
+// docs/<App>/<app>-setup-quality-profiles.md content.
+//
+// Section boundaries: ### <profile name> ... (next ### or ## or end of file)
+// Within a section:
+//   - Tagline = first non-blank prose line after the header (typically
+//     "If you prefer ...")
+//   - SizeText = the italic _Size: ..._ line, with surrounding markers stripped
+//   - Note = lines starting with "Note:" (single-line; if TRaSH adds
+//     multi-line notes later, this captures only the first line — defensible
+//     since all current notes are single-line)
+func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]ProfileMarkdownSection {
+	sections := map[string]ProfileMarkdownSection{}
+	scanner := bufio.NewScanner(r)
+	// markdown lines can be long when they have include-markdown directives;
+	// bump the buffer to be safe.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var (
+		currentProfile string
+		taglineSeen    bool
+	)
+	sizeRe := regexp.MustCompile(`^[-*]\s*_Size:\s*(.+?)\.?_\s*$`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		// New profile section (### Header)
+		if strings.HasPrefix(line, "### ") {
+			currentProfile = strings.TrimSpace(strings.TrimPrefix(line, "### "))
+			sections[currentProfile] = ProfileMarkdownSection{}
+			taglineSeen = false
+			continue
+		}
+		// New top-level section ends the current profile context
+		if strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "### ") {
+			currentProfile = ""
+			continue
+		}
+		if currentProfile == "" {
+			continue
+		}
+		sec := sections[currentProfile]
+
+		// Tagline — first non-blank prose line after header
+		trimmed := strings.TrimSpace(line)
+		if !taglineSeen && trimmed != "" && !strings.HasPrefix(trimmed, "{!") &&
+			!strings.HasPrefix(trimmed, "**") && !strings.HasPrefix(trimmed, "-") &&
+			!strings.HasPrefix(trimmed, "!!!") && !strings.HasPrefix(trimmed, "?") {
+			sec.Tagline = trimmed
+			taglineSeen = true
+			sections[currentProfile] = sec
+			continue
+		}
+
+		// Size — italic bullet "_Size: X-Y GB..._"
+		if m := sizeRe.FindStringSubmatch(line); m != nil {
+			sec.SizeText = strings.TrimSpace(m[1])
+			sections[currentProfile] = sec
+			continue
+		}
+
+		// Note — line starting with "Note:"
+		if strings.HasPrefix(trimmed, "Note:") {
+			note := strings.TrimSpace(strings.TrimPrefix(trimmed, "Note:"))
+			// Strip markdown backticks for cleaner display
+			note = strings.ReplaceAll(note, "`", "")
+			sec.Note = note
+			sections[currentProfile] = sec
+			continue
+		}
+	}
+	// Scanner errors (e.g. line > 1 MiB buffer, I/O failure) would otherwise
+	// leave us with a silently-truncated section map and zero signal in logs.
+	if err := scanner.Err(); err != nil {
+		log.Printf("parseProfileMarkdown: scanner error after %d sections: %v", len(sections), err)
+	}
+	return sections
+}
+
+// describeProfile builds a complete ProfileDescription for one profile by
+// combining its JSON, the cf-groups that include it, and (optionally) the
+// matching markdown section.
+//
+// Falls back to JSON-only data when markdown is missing or the section is
+// absent — UI gets empty Tagline/Note and still renders the axes + composed
+// Highlights / BestFor (which only need JSON-derivable facts).
+func describeProfile(
+	app string,
+	profile *TrashQualityProfile,
+	allGroups []*TrashCFGroup,
+	mdSec ProfileMarkdownSection,
+) ProfileDescription {
+	out := ProfileDescription{
+		TrashID:  profile.TrashID,
+		Name:     profile.Name,
+		App:      app,
+		TrashURL: sanitizeURL(profile.TrashURL),
+		Axes: ProfileAxes{
+			Resolution: deriveResolution(profile.Items),
+			Sources:    deriveSources(profile.Items),
+			Codec:      deriveCodec(profile.Items),
+			Cutoff:     profile.Cutoff,
+		},
+		TrashNote: mdSec.Note,
+	}
+	// Tagline + AvgSize are auto-generated uniformly for ALL profiles
+	// from the axes + profile metadata. Markdown taglines only existed
+	// for ~9 of 30+ profiles, leaving anime / SQP / foreign-language
+	// cards visually sparse. Generating both from profile data gives
+	// every card the same level of detail.
+	out.Tagline = composeTagline(profile, out.Axes)
+	out.Axes.AvgSize = typicalSize(app, profile, out.Axes)
+
+	// Walk cf-groups looking for HDR/Audio scoring inclusion. The cf-group
+	// LISTS themselves aren't stored — only the boolean conclusions on
+	// Axes.HDR.Scored / Axes.Audio.Scored / Axes.HDR.OptIns. That info
+	// drives the pills + the composer.
+	var hdrOptIns []string
+	for _, g := range allGroups {
+		if _, ok := g.QualityProfiles.Include[profile.Name]; !ok {
+			continue
+		}
+		isDefault := strings.ToLower(g.Default) == "true"
+		if isDefault {
+			if g.TrashID == audioFormatsTrashID(app) {
+				out.Axes.Audio.Scored = true
+			}
+			if g.TrashID == hdrFormatsTrashID(app) {
+				out.Axes.HDR.Scored = true
+			}
+		} else if label := hdrVariantOptInLabel(app, g.TrashID); label != "" {
+			// default=false HDR variant — surface as opt-in on the pill.
+			// Matched by trash_id (stable across TRaSH-Guides updates)
+			// rather than name prefix — TRaSH adjusts CF-group names
+			// occasionally but trash_ids never change once assigned.
+			hdrOptIns = append(hdrOptIns, label)
+		}
+	}
+	sort.Strings(hdrOptIns)
+	out.Axes.HDR.OptIns = hdrOptIns
+
+	// Compose Highlights from the now-populated axes + profile data.
+	// "Best for" was tried earlier but dropped — claiming "best for X TVs"
+	// is editorial interpretation we don't have authority to make. The
+	// pills + Highlights tell users what the profile DOES; who it suits
+	// is the user's own call.
+	out.Highlights = composeHighlights(profile, out.Axes)
+
+	// Some profiles ship an explicit prose disclaimer in
+	// profile.TrashDescription (vs the structural "Quality Profile that
+	// covers: WEBDL 1080p..." form that standard profiles use, which is
+	// redundant with our pills + axes).
+	//
+	// Surface the disclaimer as a prominent notice on the card. Currently
+	// applies to:
+	//   - SQP profiles — TRaSH ships an "advanced profile, join Discord"
+	//     disclaimer they want shown verbatim on every SQP card
+	//   - Base Profile — TRaSH's internal test profile ("This is a base
+	//     profile that we use for testing"); users shouldn't pick it
+	//     thinking it's a real profile
+	if profile.TrashDescription != "" && (isSQPProfile(profile.Name) || isBaseProfile(profile.Name)) {
+		notice := parseDisclaimerHTML(profile.TrashDescription)
+		notice.LinkURL = sanitizeURL(notice.LinkURL)
+		// Drop the link entirely when the URL fails the scheme gate — otherwise
+		// the frontend would render a click-able label pointing to "" which is
+		// either confusing (re-navigates the current page) or a vector if a
+		// future framework upgrade interprets the empty href differently.
+		if notice.LinkURL == "" {
+			notice.LinkText = ""
+		}
+		out.Disclaimer = &notice
+		if notice.LinkURL != "" {
+			out.TrashURL = notice.LinkURL
+		}
+	}
+	return out
+}
+
+// --- Derivation helpers (JSON → axes) ---
+
+// deriveResolution returns a human-readable "1080p (720p Bluray fallback)" style
+// summary from the allowed quality items in the profile.
+func deriveResolution(items []QualityItem) string {
+	// Walk allowed items in order; the first one is the cutoff target. We
+	// classify by resolution (extracted from names like "Bluray-1080p",
+	// "WEB 2160p"). Items appear top-down by preference, so the first
+	// resolution mentioned is the target; lower resolutions are fallbacks.
+	//
+	// "Merged QPs" profiles (typically German UHD variants) wrap resolution
+	// items inside a generic parent like {name: "Merged QPs", items:
+	// ["Bluray-2160p", "WEBDL-2160p"]}. Falling back to scan nested items
+	// when the parent name has no resolution token covers that case.
+	resOrder := []string{}
+	seen := map[string]bool{}
+	for _, it := range items {
+		if !it.Allowed {
+			continue
+		}
+		res := itemResolution(it)
+		if res == "" {
+			continue
+		}
+		if !seen[res] {
+			seen[res] = true
+			resOrder = append(resOrder, res)
+		}
+	}
+	if len(resOrder) == 0 {
+		return "unknown"
+	}
+	if len(resOrder) == 1 {
+		return resOrder[0]
+	}
+	// Multiple resolutions — main + fallback list
+	return resOrder[0] + " (" + strings.Join(resOrder[1:], ", ") + " fallback)"
+}
+
+// deriveSources returns the deduplicated list of release types accepted by the
+// profile (Bluray, Bluray Remux, WEB-DL, WEBRip, etc.).
+func deriveSources(items []QualityItem) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, it := range items {
+		if !it.Allowed {
+			continue
+		}
+		// Flatten nested items (WEB 1080p contains WEBRip-1080p + WEBDL-1080p)
+		names := []string{it.Name}
+		names = append(names, it.Items...)
+		for _, n := range names {
+			src := extractSource(n)
+			if src == "" || seen[src] {
+				continue
+			}
+			seen[src] = true
+			out = append(out, src)
+		}
+	}
+	return out
+}
+
+// itemResolution returns the resolution token for a quality item, falling
+// back to nested items[] when the parent name has no resolution (Merged
+// QPs profiles). Used by both deriveResolution and fallbackHighlight so
+// the single-level vs nested-children behavior stays consistent.
+func itemResolution(it QualityItem) string {
+	if res := extractResolution(it.Name); res != "" {
+		return res
+	}
+	for _, sub := range it.Items {
+		if res := extractResolution(sub); res != "" {
+			return res
+		}
+	}
+	return ""
+}
+
+// deriveCodec returns the dominant codec for the resolution range of the profile.
+// HD = x264 (industry standard for Bluray/WEB-DL HD). UHD = x265/HEVC (industry
+// standard for 4K Bluray/WEB-DL). Mixed profiles default to the highest-resolution
+// codec since that's what the cutoff drives toward.
+func deriveCodec(items []QualityItem) string {
+	hasUHD := false
+	for _, it := range items {
+		if !it.Allowed {
+			continue
+		}
+		// Check parent name + nested items[] (Merged QPs profiles wrap
+		// the resolution tokens one level deeper)
+		names := append([]string{it.Name}, it.Items...)
+		for _, n := range names {
+			if strings.Contains(n, "2160p") || strings.Contains(strings.ToLower(n), "uhd") {
+				hasUHD = true
+				break
+			}
+		}
+		if hasUHD {
+			break
+		}
+	}
+	if hasUHD {
+		return "x265"
+	}
+	return "x264"
+}
+
+// extractResolution pulls a normalized resolution token from a quality name.
+// "Bluray-1080p" → "1080p"; "WEB 2160p" → "2160p"; "Remux-1080p" → "1080p".
+// Returns "" for non-resolution items (Raw-HD, Unknown, etc.).
+func extractResolution(name string) string {
+	for _, res := range []string{"2160p", "1080p", "720p", "576p", "480p"} {
+		if strings.Contains(name, res) {
+			return res
+		}
+	}
+	return ""
+}
+
+// extractSource normalizes a quality-item or sub-item name to a canonical
+// source label. "Bluray-1080p" → "Bluray"; "WEBDL-1080p" → "WEB-DL";
+// "WEBRip-1080p" → "WEBRip"; "Remux-2160p" → "UHD Bluray Remux"; etc.
+// Returns "" for quality-grouping items (e.g. "WEB 1080p" itself, since its
+// children carry the actual source).
+func extractSource(name string) string {
+	switch {
+	case strings.Contains(name, "Bluray-2160p Remux"), strings.HasPrefix(name, "Remux-2160p"):
+		return "UHD Bluray Remux"
+	case strings.Contains(name, "Bluray-1080p Remux"), strings.HasPrefix(name, "Remux-1080p"):
+		return "Bluray Remux"
+	case strings.HasPrefix(name, "Bluray-2160p"):
+		return "UHD Bluray"
+	case strings.HasPrefix(name, "Bluray-"):
+		return "Bluray"
+	case strings.HasPrefix(name, "WEBDL-"):
+		return "WEB-DL"
+	case strings.HasPrefix(name, "WEBRip-"):
+		return "WEBRip"
+	case strings.HasPrefix(name, "HDTV-"):
+		return "HDTV"
+	case strings.HasPrefix(name, "DVD"):
+		return "DVD"
+	}
+	return ""
+}
+
+// cleanTagline strips redundant prefixes from TRaSH's markdown tagline.
+// Most start with "If you prefer " which adds no info on a profile card —
+// the user is on the profile's card, of course they're considering it.
+func cleanTagline(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	for _, prefix := range []string{
+		"If you prefer ",
+		"If you want ",
+	} {
+		if strings.HasPrefix(raw, prefix) {
+			rest := strings.TrimPrefix(raw, prefix)
+			// Capitalize first letter, keep rest verbatim
+			if rest == "" {
+				return raw
+			}
+			return strings.ToUpper(rest[:1]) + rest[1:]
+		}
+	}
+	return raw
+}
+
+// --- HDR / Audio cf-group ID lookup ---
+
+// audioFormatsTrashID returns the trash_id of the primary Audio Formats
+// cf-group for the given app. Used by describeProfile to flag the Audio axis
+// as "scored" when this group is included with default=true. IDs are stable
+// (set at CF-group creation, never changed by TRaSH).
+func audioFormatsTrashID(app string) string {
+	switch app {
+	case "radarr":
+		return "9d5acd8f1da78dfbae788182f7605200"
+	case "sonarr":
+		return "e9a1944a254e6f8a9da63083f7ae15cb"
+	}
+	return ""
+}
+
+// hdrFormatsTrashID returns the trash_id of the primary HDR Formats cf-group
+// for the given app. Same purpose as audioFormatsTrashID for HDR scoring.
+func hdrFormatsTrashID(app string) string {
+	switch app {
+	case "radarr":
+		return "ef20e67b95a381fb3bc6d1f06ea24f46"
+	case "sonarr":
+		return "7e1724c5da59e7474803ad25be98f6a3"
+	}
+	return ""
+}
+
+// hdrVariantOptInLabel returns a short pill-friendly label ("DV Boost",
+// "HDR10+ Boost", "DV (w/o HDR fallback)") for known HDR-variant cf-groups
+// matched by trash_id. Returns "" when the trash_id isn't a recognized
+// variant OR is the SDR group (too niche for the axis pill).
+//
+// Trash_id matching (not name prefix) is deliberate: TRaSH renames or
+// restructures cf-group names occasionally, but trash_ids never change
+// once assigned. The cost is a small per-app lookup table — manageable
+// for the ~5 HDR variants TRaSH ships, and adding new ones is a single
+// table entry when they appear.
+func hdrVariantOptInLabel(app, trashID string) string {
+	var table map[string]string
+	switch app {
+	case "radarr":
+		table = map[string]string{
+			"1616617ab3a14397a2b2321bcbda44d1": "DV Boost",
+			"7fc2751eef7e6bdc70b74136e5e35c76": "DV (w/o HDR fallback)",
+			"b29413a7487478fe98228ce79e5689e4": "HDR10+ Boost",
+			// "47f0d69750de9e16855915fa73bb7b08" (SDR) intentionally omitted —
+			// it's a negative-prefer "exclude SDR" toggle, not a user-facing
+			// HDR-format choice; cluttering the pill with it hurts more than
+			// helps.
+		}
+	case "sonarr":
+		table = map[string]string{
+			"e0b2774083df4265f25c9e5bc6c80940": "DV Boost",
+			"d776a1ea912a117d66d83b880ff2055d": "DV (w/o HDR fallback)",
+			"7d366c213e5c23a052b157356fac1921": "HDR10+ Boost",
+		}
+	}
+	return table[trashID]
+}
+
+// --- Editorial composers (auto-derived "what you get" + "best for") ---
+//
+// composeHighlights and composeBestFor turn the raw axes + formatItems +
+// profile name into bullet-list editorial framing TRaSH itself doesn't
+// ship. The rule is strict: each bullet must assert a FACT the data
+// supports. No invented use-cases, no aspirational marketing copy. If a
+// profile's data doesn't justify a bullet, we leave it out — sparse cards
+// are fine.
+
+// composeHighlights returns "What you get" bullets describing what the
+// profile picks for and what it prefers. Phrasing rule: speak to end
+// users, not to TRaSH-Guides power-users. No internal jargon — terms
+// like "BD Tier 1-8", "Repack/Proper", "DV Boost CF" mean nothing to
+// someone choosing a profile for the first time. We translate to
+// plain-English equivalents that describe outcomes.
+func composeHighlights(profile *TrashQualityProfile, axes ProfileAxes) []string {
+	var out []string
+
+	// 1) Source statement — most important fact, always first.
+	//    Note: SQP profiles get their warning via the Disclaimer field
+	//    (TRaSH's own verbatim text from profile.trash_description),
+	//    rendered as a separate notice block above Highlights — not
+	//    duplicated here.
+	if src := sourceHighlight(axes.Sources); src != "" {
+		out = append(out, src)
+	}
+
+	// 1b) Fallback behavior — critical for differentiating
+	//     "strict" vs "Alternative" vs "Combined" profile variants. Three
+	//     profiles can have the same cutoff + same sources but completely
+	//     different fallback chains (Remux + WEB 2160p = strict 2160p,
+	//     Remux 2160p Alternative = falls all the way down to SDTV,
+	//     Remux 2160p Combined = 2160p + 1080p). Without this bullet
+	//     they'd render identically.
+	if fb := fallbackHighlight(profile.Items); fb != "" {
+		out = append(out, fb)
+	}
+
+	// 2) HDR — describe what the user gets, not the toggle mechanism.
+	//    Inline format list with "etc." since the exact mix varies per
+	//    profile and the user just needs "this profile picks HDR".
+	if axes.HDR.Scored {
+		formats := normalizeHDROptInFormats(axes.HDR.OptIns)
+		if len(formats) > 0 {
+			out = append(out, "Picks HDR releases (HDR10, "+joinAnd(formats)+", etc.)")
+		} else {
+			out = append(out, "Picks HDR releases (HDR10, etc.)")
+		}
+	}
+
+	// 3) Audio — name the formats users recognise, drop "DTS-HD MA" tail
+	//    which non-cinephiles don't parse anyway.
+	if axes.Audio.Scored {
+		out = append(out, "Prefers releases with lossless audio (Atmos, DTS-X, TrueHD)")
+	}
+
+	// 4) Variant-specific tuning. No "Tier 1-8" detail — users don't know
+	//    what TRaSH tiers are.
+	//
+	//    Anime Dual Audio CF: previously triggered a "prefers multi-audio
+	//    releases" bullet. Dropped after verifying the CF has trash_scores
+	//    = null in TRaSH data — its presence in formatItems doesn't mean
+	//    scoring; could just be tracking. The German Anime variant has
+	//    German DL +11000 doing the multi-audio work, not Anime Dual Audio.
+	//    Generic claim about anime multi-audio isn't data-supported.
+	if hasAnimeTuning(profile) {
+		out = append(out, "Tuned for anime-specific release groups")
+	}
+	if vlabel := languageVariantHighlight(profile.Name); vlabel != "" {
+		out = append(out, vlabel)
+	}
+	// SQP profiles vary widely (SQP-1 = streaming 1080p, SQP-3 Audio = UHD
+	// audio-focused, etc.) — the generic "stricter streaming scoring"
+	// blurb doesn't fit them all. The Disclaimer already conveys "advanced
+	// profile, read the Discord guide" via TRaSH's own wording; no need
+	// for clonarr to add a separate guess about what SQP does.
+
+	// 5) Repack/Proper — say what it DOES, not what the CFs are called.
+	if hasRepackScoring(profile) {
+		out = append(out, "Automatically upgrades when an improved release of the same file is published")
+	}
+
+	// 6) Typical file size — last bullet, useful sanity-check before
+	//    committing storage. Skipped when markdown didn't ship a size for
+	//    this profile (anime / SQP / foreign variants).
+	if axes.AvgSize != "" {
+		out = append(out, "Typical size: "+axes.AvgSize)
+	}
+
+	return out
+}
+
+// normalizeHDROptInFormats maps TRaSH's HDR add-on cf-group names (which
+// describe SCORING BOOSTS, not formats) to the actual HDR formats the
+// user gains the ability to prefer. End-user vocabulary: "Dolby Vision"
+// and "HDR10+", not "DV Boost / DV (w/o HDR fallback) / HDR10+ Boost".
+func normalizeHDROptInFormats(optIns []string) []string {
+	var hasDV, hasHDR10Plus bool
+	for _, o := range optIns {
+		if strings.HasPrefix(o, "DV") {
+			hasDV = true
+		}
+		if strings.Contains(o, "HDR10+") {
+			hasHDR10Plus = true
+		}
+	}
+	var out []string
+	if hasDV {
+		out = append(out, "Dolby Vision")
+	}
+	if hasHDR10Plus {
+		out = append(out, "HDR10+")
+	}
+	return out
+}
+
+// joinAnd joins a list with "and" before the last element, comma
+// elsewhere. Reads naturally in prose: ["A","B","C"] → "A, B and C".
+func joinAnd(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " and " + items[1]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+// sourceHighlight returns the canonical primary-source-description bullet
+// derived from the normalised source list. Describes ONLY the cutoff-tier
+// source — the "+ WEB" / fallback wording lives elsewhere:
+//   - Source pill (e.g. "Bluray Remux + WEB") covers what other sources
+//     are accepted at the same resolution
+//   - fallbackHighlight covers the lower-resolution fallback chain
+//
+// Earlier versions appended "with WEB-DL fallback" here too, which
+// contradicted fallbackHighlight on permissive profiles ("(Alternative)"
+// variants that fall through to SDTV/DVD). Keeping primary-source-only
+// makes the three signals — pill, source bullet, fallback bullet —
+// non-overlapping and consistent.
+func sourceHighlight(sources []string) string {
+	set := map[string]bool{}
+	for _, s := range sources {
+		set[s] = true
+	}
+	switch {
+	case set["UHD Bluray Remux"]:
+		return "Uncompressed 4K Bluray Remux (disc-perfect picture)"
+	case set["Bluray Remux"]:
+		return "Uncompressed 1080p Bluray Remux (disc-perfect picture)"
+	case set["UHD Bluray"]:
+		return "4K Bluray encodes from approved release groups"
+	case set["Bluray"]:
+		return "1080p Bluray encodes from approved release groups"
+	case set["WEB-DL"] || set["WEBRip"]:
+		return "Streaming WEB-DL releases from approved release groups"
+	}
+	return ""
+}
+
+// hasAnimeTuning is true when the profile uses TRaSH's anime-specific
+// scoring system. Detected by either the [Anime] name prefix or the
+// presence of any Anime Tier CF in formatItems (covers both Sonarr and
+// Radarr anime profiles).
+func hasAnimeTuning(p *TrashQualityProfile) bool {
+	if strings.HasPrefix(p.Name, "[Anime]") {
+		return true
+	}
+	for name := range p.FormatItems {
+		if strings.HasPrefix(name, "Anime BD Tier") || strings.HasPrefix(name, "Anime Web Tier") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasRepackScoring is true when the profile scores TRaSH's Repack/Proper
+// CFs (the standard re-release auto-upgrade mechanism). Universal in
+// TRaSH profiles today; guarded so a future profile without it doesn't
+// claim the feature.
+func hasRepackScoring(p *TrashQualityProfile) bool {
+	for name := range p.FormatItems {
+		if name == "Repack/Proper" || name == "Repack2" || name == "Repack3" {
+			return true
+		}
+	}
+	return false
+}
+
+// languageVariantHighlight returns a one-line variant description for
+// recognised French/German naming prefixes. These prefixes encode well-
+// documented torrenting-community conventions, not editorial speculation:
+//
+//   [French MULTi.VF]  — multi-audio with French dub (Version Française)
+//   [French MULTi.VO]  — multi-audio with original audio (e.g. English)
+//   [French VOSTFR]    — original audio with French subtitles
+//   [German]           — German-audio variant of the same base profile
+//
+// Returns empty for unrecognised prefixes — caller skips the bullet.
+func languageVariantHighlight(name string) string {
+	switch {
+	case strings.HasPrefix(name, "[French MULTi.VF]"):
+		return "Multi-audio with French dub (VF) preferred"
+	case strings.HasPrefix(name, "[French MULTi.VO]"):
+		return "Multi-audio with original audio (VO) preferred over French dubs"
+	case strings.HasPrefix(name, "[French VOSTFR]"):
+		return "Original audio with French subtitles (VOSTFR)"
+	case strings.HasPrefix(name, "[German]"):
+		return "German audio preferred"
+	}
+	return ""
+}
+
+func isSQPProfile(name string) bool { return strings.HasPrefix(name, "[SQP]") }
+
+
+// fallbackHighlight describes how the profile behaves when its primary
+// (cutoff) resolution isn't available. Returns empty for strict
+// single-resolution profiles. Drives the distinction between standard
+// profiles, "(Alternative)" variants (accept anything down to SDTV),
+// and "(Combined)" variants (2160p + 1080p together).
+func fallbackHighlight(items []QualityItem) string {
+	var resOrder []string
+	seen := map[string]bool{}
+	for _, it := range items {
+		if !it.Allowed {
+			continue
+		}
+		res := itemResolution(it)
+		if res == "" || seen[res] {
+			continue
+		}
+		seen[res] = true
+		resOrder = append(resOrder, res)
+	}
+	if len(resOrder) <= 1 {
+		// Strict profile — no fallback to describe (saves a bullet
+		// that would just repeat the cutoff resolution).
+		return ""
+	}
+	primary := resOrder[0]
+	rest := resOrder[1:]
+	// Very permissive profiles (4+ fallback rungs) — describe as full
+	// fallback rather than enumerating "1080p, 720p, 576p, 480p" which
+	// reads like data noise.
+	if len(rest) >= 4 {
+		return "Falls back through all lower qualities (down to SDTV/DVD) when no " + primary + " release is available"
+	}
+	return "Falls back to " + joinAnd(rest) + " when no " + primary + " release is available"
+}
+
+// isBaseProfile is true for TRaSH's internal test profile "Base Profile",
+// which ships with a "this is a base profile we use for testing" disclaimer.
+// Surfacing it on the card warns users not to pick it as a real profile.
+func isBaseProfile(name string) bool { return name == "Base Profile" }
+
+// sanitizeURL returns the URL only if it has a safe http(s) scheme, else "".
+// Defends against malicious or compromised TRaSH upstream content embedding
+// javascript: / data: / vbscript: URLs in trash_url or anchor hrefs inside
+// trash_description. The frontend renders these via Alpine ':href' bindings
+// that bypass the classic sanitizeHTML() path (which already strips unsafe
+// schemes for x-html), so we gate at the JSON boundary instead.
+func sanitizeURL(u string) string {
+	u = strings.TrimSpace(u)
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		return u
+	}
+	return ""
+}
+
+// parseDisclaimerHTML splits TRaSH's trash_description HTML into a
+// DisclaimerNotice with the first <a href="...">label</a> preserved as
+// structured Before / LinkText / LinkURL / After fields. <br> tags become
+// spaces. Disclaimers without a link end up with only Before populated.
+// NOT a general-purpose sanitiser — assumes input is TRaSH-shipped JSON
+// content, not user input. Keeps to stdlib regex rather than pulling in
+// bluemonday for a single field.
+func parseDisclaimerHTML(s string) DisclaimerNotice {
+	// Convert <br> tags to spaces first so the disclaimer reads as prose
+	s = regexp.MustCompile(`(?i)<br\s*/?>`).ReplaceAllString(s, " ")
+
+	// Extract the first anchor: href + label + the surrounding before/after
+	// segments in one regex pass. Submatches: 1=href, 2=label.
+	anchorRe := regexp.MustCompile(`(?is)(.*?)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>(.*)`)
+	m := anchorRe.FindStringSubmatch(s)
+
+	clean := func(x string) string {
+		// Strip any leftover HTML tags + collapse whitespace
+		x = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(x, "")
+		return strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(x, " "))
+	}
+	if m == nil {
+		// No anchor found — whole string becomes Before
+		return DisclaimerNotice{Before: clean(s)}
+	}
+	return DisclaimerNotice{
+		Before:   strings.TrimRight(clean(m[1]), " ") + " ",
+		LinkURL:  m[2],
+		LinkText: clean(m[3]),
+		After:    " " + strings.TrimLeft(clean(m[4]), " "),
+	}
+}
+
+// --- Auto-generated tagline + size (uniform across all profiles) ---
+//
+// Replaces the markdown-derived Tagline + AvgSize that only existed
+// for ~9 of TRaSH's ~30 profiles (standard Radarr/Sonarr). Generating
+// both from JSON-derivable facts gives every profile card the same
+// level of detail: Anime, SQP, French, German all get a tagline + size
+// estimate without depending on TRaSH adding per-profile markdown.
+//
+// The composition is rule-based (not editorial): each leading
+// adjective and size range maps from observable profile properties.
+
+// composeTagline returns a short "what the profile prefers" descriptor
+// like "Prefers high-quality 1080p encodes" or "Prefers uncompressed 4K
+// UHD Remux". The "Prefers" verb is deliberate — without it the tagline
+// reads as a guarantee ("Uncompressed 4K UHD Remux") which is misleading
+// when the profile actually has fallback policies. "Prefers" signals
+// this is the target, not the outcome. Pills + What you get cover the
+// actual fallback behavior.
+//
+// Appends a variant suffix when the profile name signals it deviates
+// further from strict cutoff-only behavior:
+//   "Remux 2160p (Alternative)" → "...· with full fallback chain"
+//   "Remux 2160p (Combined)"    → "...· multi-resolution"
+func composeTagline(profile *TrashQualityProfile, axes ProfileAxes) string {
+	if isBaseProfile(profile.Name) {
+		return "Test profile (do not use)"
+	}
+	tier := lowercaseTierAdjective(pickTierAdjective(profile, axes))
+	res := pickResolutionLabel(axes)
+	sourceClass := pickSourceClass(axes)
+	parts := []string{tier, res, sourceClass}
+	body := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if body != "" {
+			body += " "
+		}
+		body += p
+	}
+	// "Prefers ... when available" — the verb signals goal, the "when
+	// available" suffix signals fallback exists (even strict profiles
+	// fall back from Remux to WEB-DL at the same resolution).
+	out := "Prefers " + body + " when available"
+	// Extra-honesty suffix for the permissive variants. Distinction:
+	//   (Combined)   — falls back on RESOLUTION only (2160p → 1080p),
+	//                  same quality tiers (Remux + Bluray + WEB) at both
+	//   (Alternative) — falls back on QUALITY too (accepts HDTV / DVD /
+	//                  SDTV that the strict + Combined profiles reject)
+	switch {
+	case strings.Contains(profile.Name, "(Alternative)"):
+		out += " · with fallback quality"
+	case strings.Contains(profile.Name, "(Combined)"):
+		out += " · with fallback resolution"
+	}
+	return out
+}
+
+// lowercaseTierAdjective lowercases the first letter of the tier
+// adjective so it reads naturally after the "Prefers" prefix
+// ("uncompressed", "high-quality") — UNLESS it starts with a proper
+// noun (French / German), which stays capitalized regardless of
+// sentence position ("Prefers French-dubbed", "Prefers German-language").
+func lowercaseTierAdjective(adj string) string {
+	if adj == "" {
+		return adj
+	}
+	if strings.HasPrefix(adj, "French") || strings.HasPrefix(adj, "German") {
+		return adj
+	}
+	return strings.ToLower(adj[:1]) + adj[1:]
+}
+
+// pickTierAdjective picks the leading word for the tagline. Each branch
+// maps from an observable profile property to a defensible label — no
+// invented descriptors. Standard fallthrough = "High-quality".
+func pickTierAdjective(profile *TrashQualityProfile, axes ProfileAxes) string {
+	switch {
+	case isSQPProfile(profile.Name):
+		return "Streaming-optimized"
+	case hasAnimeTuning(profile):
+		return "Anime-tuned"
+	case strings.HasPrefix(profile.Name, "[French MULTi.VF]"):
+		return "French-dubbed"
+	case strings.HasPrefix(profile.Name, "[French MULTi.VO]"):
+		return "French (original audio)"
+	case strings.HasPrefix(profile.Name, "[French VOSTFR]"):
+		return "French-subtitled"
+	case strings.HasPrefix(profile.Name, "[German]"):
+		return "German-language"
+	case hasRemuxSource(axes):
+		return "Uncompressed"
+	}
+	return "High-quality"
+}
+
+// pickResolutionLabel returns the user-facing resolution token for the
+// tagline. "4K UHD" is more recognisable than "2160p" for consumer
+// audience; "1080p" stays as-is.
+func pickResolutionLabel(axes ProfileAxes) string {
+	switch {
+	case strings.Contains(axes.Resolution, "2160p"):
+		return "4K UHD"
+	case strings.Contains(axes.Resolution, "1080p"):
+		return "1080p"
+	case strings.Contains(axes.Resolution, "720p"):
+		return "720p"
+	}
+	return axes.Resolution
+}
+
+// pickSourceClass returns the trailing word/phrase for the tagline,
+// chosen by what source class dominates the profile. "Remux" wins when
+// any Remux source is allowed; "WEB-DL" when the profile is WEB-only;
+// otherwise "encodes" (catch-all for Bluray + WEB mixes).
+func pickSourceClass(axes ProfileAxes) string {
+	if hasRemuxSource(axes) {
+		return "Remux"
+	}
+	if isWebOnlyProfile(axes) {
+		return "WEB-DL"
+	}
+	return "encodes"
+}
+
+// hasRemuxSource is true when any "Remux" variant appears in the
+// derived sources list (UHD Bluray Remux / Bluray Remux).
+func hasRemuxSource(axes ProfileAxes) bool {
+	for _, s := range axes.Sources {
+		if strings.Contains(s, "Remux") {
+			return true
+		}
+	}
+	return false
+}
+
+// isWebOnlyProfile is true when the profile only accepts WEB-DL /
+// WEBRip sources (no Bluray, Remux, HDTV, DVD). Sonarr WEB-1080p /
+// WEB-2160p are the canonical examples.
+func isWebOnlyProfile(axes ProfileAxes) bool {
+	web, nonWeb := false, false
+	for _, s := range axes.Sources {
+		switch s {
+		case "WEB-DL", "WEBRip":
+			web = true
+		default:
+			nonWeb = true
+		}
+	}
+	return web && !nonWeb
+}
+
+// typicalSize returns a size-range estimate ("6–15 GB / movie",
+// "1–3 GB / episode") chosen from a small lookup based on Remux/WEB
+// classification and resolution. NOT computed from TRaSH's
+// quality-size JSONs (which give bitrate caps, not real-world typical
+// sizes) — these ranges reflect typical observed sizes in practice
+// and align with what TRaSH's own setup-quality-profiles.md reports
+// for the standard profiles that have a documented _Size:_ line.
+func typicalSize(app string, profile *TrashQualityProfile, axes ProfileAxes) string {
+	is2160 := strings.Contains(axes.Resolution, "2160p")
+	isRemux := hasRemuxSource(axes)
+	isWeb := isWebOnlyProfile(axes)
+
+	var movieSize, episodeSize string
+	switch {
+	case isRemux && is2160:
+		movieSize, episodeSize = "40–100 GB", "10–25 GB"
+	case isRemux:
+		movieSize, episodeSize = "20–40 GB", "3–8 GB"
+	case is2160 && isWeb:
+		movieSize, episodeSize = "15–50 GB", "5–15 GB"
+	case is2160:
+		movieSize, episodeSize = "20–60 GB", "5–15 GB"
+	case isWeb:
+		movieSize, episodeSize = "4–12 GB", "1–3 GB"
+	default:
+		movieSize, episodeSize = "6–15 GB", "1–3 GB"
+	}
+
+	if app == "sonarr" {
+		return episodeSize + " / episode"
+	}
+	return movieSize + " / movie"
+}

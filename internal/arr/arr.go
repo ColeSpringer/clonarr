@@ -301,6 +301,121 @@ func (c *ArrClient) UpdateQualityDefinitions(defs []ArrQualityDefinition) error 
 	return nil
 }
 
+// DeleteProfile removes a quality profile. Arr returns HTTP 400 if the
+// profile is in use (assigned to any movie/series/import list/collection).
+// Caller is responsible for verifying 0 usage first via the Count* helpers.
+func (c *ArrClient) DeleteProfile(id int) error {
+	data, status, err := c.DoRequest("DELETE", fmt.Sprintf("/qualityprofile/%d", id), nil)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("HTTP %d: %s", status, truncate(string(data), 200))
+	}
+	return nil
+}
+
+// profileRef is the minimal shape we need from /movie, /series,
+// /importlist, /collection — just enough to count how many items
+// reference each quality profile.
+type profileRef struct {
+	QualityProfileID int `json:"qualityProfileId"`
+}
+
+// ListMovieProfileIDs returns the quality-profile ID of every movie
+// (Radarr only). Lightweight — minimal struct discards every field we
+// don't need so a 1000+ movie library deserializes fast.
+func (c *ArrClient) ListMovieProfileIDs() ([]int, error) {
+	data, status, err := c.DoRequest("GET", "/movie", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", status, truncate(string(data), 200))
+	}
+	var items []profileRef
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("parse movies: %w", err)
+	}
+	out := make([]int, 0, len(items))
+	for _, m := range items {
+		if m.QualityProfileID > 0 {
+			out = append(out, m.QualityProfileID)
+		}
+	}
+	return out, nil
+}
+
+// ListSeriesProfileIDs returns the quality-profile ID of every series
+// (Sonarr only). Symmetric counterpart to ListMovieProfileIDs.
+func (c *ArrClient) ListSeriesProfileIDs() ([]int, error) {
+	data, status, err := c.DoRequest("GET", "/series", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", status, truncate(string(data), 200))
+	}
+	var items []profileRef
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("parse series: %w", err)
+	}
+	out := make([]int, 0, len(items))
+	for _, s := range items {
+		if s.QualityProfileID > 0 {
+			out = append(out, s.QualityProfileID)
+		}
+	}
+	return out, nil
+}
+
+// ListImportListProfileIDs returns the quality-profile ID of every
+// import list (both Radarr and Sonarr).
+func (c *ArrClient) ListImportListProfileIDs() ([]int, error) {
+	data, status, err := c.DoRequest("GET", "/importlist", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", status, truncate(string(data), 200))
+	}
+	var items []profileRef
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("parse import lists: %w", err)
+	}
+	out := make([]int, 0, len(items))
+	for _, l := range items {
+		if l.QualityProfileID > 0 {
+			out = append(out, l.QualityProfileID)
+		}
+	}
+	return out, nil
+}
+
+// ListCollectionProfileIDs returns the quality-profile ID of every
+// collection (Radarr only — Sonarr has no equivalent). Each collection
+// carries a profile ID used for movies added from the collection.
+func (c *ArrClient) ListCollectionProfileIDs() ([]int, error) {
+	data, status, err := c.DoRequest("GET", "/collection", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", status, truncate(string(data), 200))
+	}
+	var items []profileRef
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("parse collections: %w", err)
+	}
+	out := make([]int, 0, len(items))
+	for _, c := range items {
+		if c.QualityProfileID > 0 {
+			out = append(out, c.QualityProfileID)
+		}
+	}
+	return out, nil
+}
+
 // CreateProfile creates a new quality profile.
 func (c *ArrClient) CreateProfile(profile *ArrQualityProfile) (*ArrQualityProfile, error) {
 	data, status, err := c.DoRequest("POST", "/qualityprofile", profile)

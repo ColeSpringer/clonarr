@@ -78,7 +78,6 @@ export default function baseState() {
     cfgbSavingMsg: '',                       // transient save/delete feedback
     cfgbSavingOk: false,                     // whether cfgbSavingMsg is success (green) or error (red)
     cfgbDeleting: false,                     // guard against double-fire on Delete → Confirm (modal's onConfirm could run twice under fast clicks)
-    profileTab: 'trash-sync',    // NEW — simple variable replacing per-app profileTabs: 'trash-sync', 'compare'
     config: { trashRepo: { url: '', branch: '' }, pullInterval: '24h', pullSchedule: { mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, syncSchedule: { enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, prowlarr: { url: '', apiKey: '', enabled: false, radarrCategories: [], sonarrCategories: [] }, authentication: 'forms', authenticationRequired: 'disabled_for_local_addresses', trustedNetworks: '', trustedProxies: '', sessionTtlDays: 30 },
     _syncScheduleSavedMode: 'daily',  // remembers the actual mode while UI dropdown shows 'disabled' sentinel; restored when user re-enables
     trashStatus: {},
@@ -89,7 +88,15 @@ export default function baseState() {
     expandedProfileGroups: {},
     pulling: false,
     trashResetting: false,
-    profileTabs: {},  // per app-type profile tab: { radarr: 'trash-sync', sonarr: 'trash-sync' }
+    profileTabs: {},  // per app-type profile tab: { radarr: 'trash-profiles', sonarr: 'sync-rules', ... }
+    // Per app-type Media Management sub-tab: { radarr: 'quality' | 'naming', sonarr: ... }.
+    // Section merges the former 'quality-size' + 'naming' top-level pages so
+    // *arr-savvy users find both under the same "Media Management" heading.
+    mediaTabs: {},
+    // Per app-type Maintenance sub-tab: { radarr: 'backup' | 'cleanup', sonarr: ... }.
+    // Splits the long Backup & Maintenance page into focused workflows —
+    // Backup & Restore (data preservation) vs Cleanup (data hygiene).
+    maintenanceTabs: {},
     compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
     syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
     syncRulesSort: { col: '', dir: 'asc' },
@@ -109,7 +116,7 @@ export default function baseState() {
     // where the browser tooltip would overflow the viewport (right-edge inputs,
     // long messages, etc.). Driven by showTooltip / hideTooltip helpers in
     // main.js. The global tooltip element lives in partials/modals/tooltip.html.
-    tt: { show: false, text: '', x: 0, y: 0, flip: false },
+    tt: { show: false, text: '', x: 0, y: 0, flip: false, placement: 'top' },
     selectedOptionalCFs: {},
     // Profile detail — single global toggle that gates all override editing affordances.
     // OFF (default): user sees a clean "All values follow profile defaults" summary;
@@ -119,6 +126,40 @@ export default function baseState() {
     // Auto-enabled by restoreFromSyncHistory when any saved override is detected, so the
     // toggle always reflects the actual persisted state of the rule (no silent "default" lie).
     pdOverridesEnabled: false,
+    // Free-form notes attached to the current sync rule. Edited via the
+    // Notes panel in Sync Preview; persisted to AutoSyncRule.Description.
+    // pdDescriptionPreview toggles between the markdown textarea and
+    // its rendered preview.
+    pdDescription: '',
+    pdDescriptionPreview: false,
+    // Profile overview's Notes card defaults to collapsed — keeps the
+    // overview compact since notes are optional. Header always shows;
+    // body (editor + preview) renders only when expanded.
+    pdNotesExpanded: false,
+    // Snapshot of profile-editor state at open time. Used by
+    // profileDetailIsDirty to detect unsaved changes — set in
+    // openProfileDetail after restoration completes, cleared on
+    // save-success + on explicit Discard. JSON string for cheap
+    // structural compare.
+    _profileBaseline: null,
+    spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
+    spActiveGroup: '__required', // '__required' | <trashGroup.name>
+    spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
+    spOverviewSort: 'default',   // 'default' | 'name-asc' | 'name-desc' | 'score-desc' | 'score-asc'
+    // Show CF section groupings on Overview (true) vs flat list (false).
+    // Persisted per-browser via localStorage so the user's choice
+    // survives reloads.
+    spOverviewGroupCFs: (() => {
+      try { return window.localStorage.getItem('sp-ov-group-cfs') === 'true'; } catch (e) { return false; }
+    })(),
+    // Quality editor modal target — drives which array the modal binds to:
+    //   'builder' → pb.qualityItems (Profile Builder flow)
+    //   'edit'    → qualityStructure (Profile Detail / Sync Preview flow)
+    // Set by the launcher button before flipping pb.qualityEditorOpen.
+    qualityEditorTarget: 'builder',
+    // Sync Preview's Customize state reads pdOverridesEnabled directly —
+    // no separate spCustomize field. A separate field could drift when
+    // user toggles Customize in one overlay then switches to the other.
     pdGeneralCollapsed: false,  // Profile-detail General card chevron collapse state (default expanded)
     pdQualityCollapsed: false,  // Profile-detail Quality card chevron collapse state (default expanded)
     pdCFScoresCollapsed: true,  // Profile-detail Overridden Scores card chevron collapse state (default collapsed — list-style sections opened on demand)
@@ -185,7 +226,6 @@ export default function baseState() {
     instCompareTrashId: {},     // instanceId → trashProfileId (selected)
     instCompareResult: {},      // instanceId → ProfileComparison
     instCompareLoading: {},     // instanceId → bool
-    showProfileInfo: false,
 
     // Sync history
     syncHistory: {},
@@ -199,8 +239,11 @@ export default function baseState() {
     importCFAppType: '',
     importCFSource: 'instance',
     importCFInstanceId: '',
-    importCFList: [],           // [{name, selected, exists}]
+    importCFList: [],           // [{name, selected, exists, trashMatch}]
     importCFLoading: false,
+    importCFFilter: '',         // free-text name filter for the picker
+    importCFHideGuide: false,   // hide CFs that also live in TRaSH guides
+    importCFHideExisting: true, // hide already-imported (un-selectable) entries
     importCFCategory: 'Custom',
     importCFNewCategory: '',
     importCFJsonText: '',
@@ -230,14 +273,24 @@ export default function baseState() {
     cfEditorSchema: {},          // cached per app type: [{implementation, fields:[{name,label,type,selectOptions}]}]
     cfEditorSchemaLoading: false,
     cfEditorSchemaError: '',     // populated when schema fetch fails (Arr unreachable, no instance, etc.)
-    cfEditorShowPreview: false,
-    cfEditorSpecCounter: 0,     // unique ID counter for x-for keys
+    cfEditorSpecCounter: 0,     // unique ID counter for x-for keys (specifications)
+    cfEditorScoreCounter: 0,    // unique ID counter for x-for keys (trashScores)
+    cfEditorActiveTab: 'general', // selected tab inside the editor modal (General / Conditions / TRaSH)
+    cfEditorDescriptionPreview: false, // toggle for the Description field's edit-vs-preview view
+    // Inline link-popover state for the markdown editor — replaces the
+    // native window.prompt that used to back the Link toolbar button.
+    cfMdLinkPopover: { open: false, target: null, url: '', selStart: 0, selEnd: 0 },
 
     // Quality sizes (cached per app type)
     qualitySizesPerApp: {},
     qsExpanded: {},
     selectedQSType: {},  // per app-type: index into quality sizes array
-    qsInstanceId: {},    // per app-type: selected instance ID for comparison
+    // Per app-type Media Management instance picker. Shared by both
+    // Quality Definitions and Movie/Episode Naming sub-tabs so the
+    // picker stays at the same position when the user switches
+    // sub-tabs — previously each sub-tab had its own picker that
+    // jittered between them.
+    mediaInstanceId: {},
     qsInstanceDefs: {},  // per app-type: current instance quality definitions
     qsOverrides: {},     // per app-type: { qualityName: { min, preferred, max } }
     qsSyncing: {},       // per app-type: boolean
@@ -330,6 +383,16 @@ export default function baseState() {
 
     // Sync
     showChangelog: false,
+    userMenuOpen: false,            // v3 banner: user-chip click toggles logout popover
+    // v3 sidebar: when collapsed, the section icons can't show their sub-nav
+    // (no room). Clicking an icon that owns sub-tabs (Profiles / Advanced)
+    // opens a flyout to the right with the same options. Value holds the
+    // section key whose popup is open, or '' for closed.
+    sidebarSubnavPopup: '',
+    // Top viewport coordinate where the popup should anchor — captured
+    // from the clicked icon's getBoundingClientRect on open so the popup
+    // sits aligned with whichever nav-item was clicked.
+    sidebarSubnavPopupTop: 0,
     sandboxCFBrowser: { open: false, appType: '', categories: [], customCFs: [], selected: {}, scores: {}, expanded: {}, filter: '' },
     showSyncModal: false,
     syncMode: 'create',
@@ -365,6 +428,22 @@ export default function baseState() {
     settingsSection: 'instances',
     uiScale: localStorage.getItem('clonarr-ui-scale') || '1',
     theme: localStorage.getItem('clonarr-theme') || 'system',
+    // v3 sidebar collapse state — persists per-browser. Default expanded.
+    sidebarCollapsed: localStorage.getItem('clonarr-sidebar-collapsed') === '1',
+    // v3 content alignment — 'center' (default, balanced) or 'left'
+    // (anchored next to the sidebar, shorter mouse travel on widescreen).
+    contentAlign: localStorage.getItem('clonarr-content-align') || 'center',
+    // v3 navigation style — 'sidebar' (default) or 'topnav'. Some beta
+    // testers prefer the classic horizontal navigation; the topnav variant
+    // is v3-styled (app-color underline, app pill, 4-sub-tab Profiles
+    // split) so it carries the same visual language as the sidebar.
+    navStyle: localStorage.getItem('clonarr-nav-style') || 'sidebar',
+    // v3 Sync Rules — per-rule customization-count cache. Keyed by rule
+    // ID, populated by loadRuleCustomizations() when the Sync Rules tab
+    // mounts. Each entry: { quality, extraCFs, customScores, general, total }.
+    // Empty {} = not yet loaded; missing keys = unknown rule (will render —).
+    ruleCustomizations: {},
+    ruleCustomizationsLoaded: false,
 
     // Scoring Sandbox (per app-type state)
     sandbox: {

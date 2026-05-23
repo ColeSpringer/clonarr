@@ -35,21 +35,22 @@ func autoSyncRuleEquivalent(a, b core.AutoSyncRule) bool {
 }
 
 // handleGetAutoSyncSettings returns the minimal auto-sync config (notification
-// agents are served by handleListNotificationAgents).
+// agents are served by handleListNotificationAgents). The legacy
+// `paused` field has moved to per-instance (Instance.AutoSyncPaused);
+// see PUT /api/instances/{id}/auto-sync-paused.
 func (s *Server) handleGetAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
 	writeJSON(w, map[string]any{
 		"enabled": cfg.AutoSync.Enabled,
-		"paused":  cfg.AutoSync.Paused,
 	})
 }
 
-// handleSaveAutoSyncSettings updates the top-level enabled and paused flags.
+// handleSaveAutoSyncSettings updates the top-level enabled flag.
 // Notification agents are managed via /api/auto-sync/notification-agents.
+// Pause is per-instance now — see handleSetInstanceAutoSyncPaused.
 func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeJSON[struct {
 		Enabled *bool `json:"enabled,omitempty"`
-		Paused  *bool `json:"paused,omitempty"`
 	}](w, r, 4096)
 	if !ok {
 		return
@@ -57,9 +58,6 @@ func (s *Server) handleSaveAutoSyncSettings(w http.ResponseWriter, r *http.Reque
 	if err := s.Core.Config.Update(func(cfg *core.Config) {
 		if req.Enabled != nil {
 			cfg.AutoSync.Enabled = *req.Enabled
-		}
-		if req.Paused != nil {
-			cfg.AutoSync.Paused = *req.Paused
 		}
 	}); err != nil {
 		log.Printf("Error saving auto-sync settings: %v", err)
@@ -557,3 +555,76 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+
+// handleRuleCustomizations returns a per-rule breakdown of how much each
+// sync rule deviates from its TRaSH profile defaults. Read-only — does
+// not touch sync state, never calls Arr, makes no writes. Used by the
+// v3 Sync Rules list to render a per-row customization-count pill that
+// matches what the detail view's "Override mode · N changes" header
+// shows when the user opens the rule.
+//
+// Response shape: { ruleId: RuleCustomizations }. Rules whose target
+// profile is missing from the current TRaSH snapshot return an empty
+// breakdown (all zeros) — the caller can still render "—" for those.
+func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Core.Config.Get()
+
+	// Per-appType caches so we don't re-lock TRaSH or re-list custom CFs
+	// for every rule. customCFIDs is the registry of `custom:<id>` trash
+	// IDs that ComputeRuleCustomizations uses to filter out dangling
+	// references (custom CFs deleted from the registry but still in a
+	// rule's scoreOverrides until CleanupDanglingCustomCFs runs).
+	snapByApp := map[string]*core.AppData{}
+	customByApp := map[string]map[string]bool{}
+	getAppData := func(appType string) *core.AppData {
+		if ad, ok := snapByApp[appType]; ok {
+			return ad
+		}
+		ad := s.Core.Trash.GetAppData(appType)
+		snapByApp[appType] = ad
+		return ad
+	}
+	getCustomCFIDs := func(appType string) map[string]bool {
+		if m, ok := customByApp[appType]; ok {
+			return m
+		}
+		m := make(map[string]bool)
+		// CustomCF.ID already carries the "custom:" prefix per its
+		// json schema, so we use it as-is to match ScoreOverrides keys.
+		for _, cf := range s.Core.CustomCFs.List(appType) {
+			m[cf.ID] = true
+		}
+		customByApp[appType] = m
+		return m
+	}
+
+	out := make(map[string]core.RuleCustomizations, len(cfg.AutoSync.Rules))
+	for i := range cfg.AutoSync.Rules {
+		rule := &cfg.AutoSync.Rules[i]
+		inst, ok := s.Core.Config.GetInstance(rule.InstanceID)
+		if !ok {
+			out[rule.ID] = core.RuleCustomizations{}
+			continue
+		}
+		ad := getAppData(inst.Type)
+		if ad == nil {
+			out[rule.ID] = core.RuleCustomizations{}
+			continue
+		}
+		// Look up the TRaSH profile by trash ID. Rules can also target
+		// imported profiles (ImportedProfileID set); those don't have
+		// TRaSH defaults to diff against, so we return zeros.
+		var profile *core.TrashQualityProfile
+		if rule.TrashProfileID != "" {
+			for _, p := range ad.Profiles {
+				if p.TrashID == rule.TrashProfileID {
+					profile = p
+					break
+				}
+			}
+		}
+		out[rule.ID] = core.ComputeRuleCustomizations(rule, profile, ad, getCustomCFIDs(inst.Type), inst.Type)
+	}
+
+	writeJSON(w, out)
+}

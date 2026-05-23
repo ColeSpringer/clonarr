@@ -1,0 +1,1660 @@
+{{define "overlays/profile-sync-preview"}}
+  <!-- ==================== SYNC PREVIEW (PRIMARY EDITOR) ====================
+       The single profile editor. Replaced the parallel Classic editor
+       at overlays/profile-detail.html on 2026-05-21 (Classic markup
+       kept on disk for emergency rollback, no longer included).
+
+       Layout (top-to-bottom):
+         1. Sticky action bar — profile name + meta + Cancel/Save/Save&Sync/Create new
+         2. Basics strip — Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities
+         3. Customizations summary — current state + Customize/Reset CTA
+         4. Tabs — Profile default (always) + Additional CF (Customize-gated) + Profile overview
+         5. Sub-nav + main content — Required CFs + each default-on group in left rail,
+            selected sub-nav item's CFs render compactly in the main area. -->
+  <div class="page sp-page" x-show="profileDetail && !['settings','about'].includes(currentSection)" x-cloak>
+
+    <!-- ===== Sync result + Dry-run banners =====
+         syncResult populates after applySync(), syncPlan after
+         fetchSyncPreview / dry-run. The Save & Sync modal pushes
+         results back here so the user sees confirmation inline. -->
+    <template x-if="syncResult">
+      <div class="result-banner" :class="syncResult.errors?.length ? 'error' : 'success'">
+        <div class="result-title" x-text="syncResult.errors?.length ? 'Sync completed with errors' : 'Sync completed successfully'"></div>
+        <div class="result-detail">
+          <template x-if="syncResult.profileCreated">
+            <span>Profile created: <strong x-text="syncResult.arrProfileName"></strong> — </span>
+          </template>
+          Created: <span x-text="syncResult.cfsCreated || 0"></span> CFs,
+          Updated: <span x-text="syncResult.cfsUpdated || 0"></span> CFs,
+          Scores: <span x-text="syncResult.scoresUpdated || 0"></span> updated,
+          Settings: <span x-text="Math.max((syncResult.settingsDetails || []).length, spOverviewDiffs().modifiedBasics.length)"></span> changed,
+          Quality: <span x-text="(syncResult.qualityDetails || []).length"></span> changes
+          <template x-if="syncResult.errors?.length">
+            <span> — <span x-text="syncResult.errors.length"></span> errors</span>
+          </template>
+        </div>
+        <template x-if="[...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])].length > 0">
+          <div style="margin-top:6px">
+            <a style="font-size:12px;color:var(--accent-blue);cursor:pointer;user-select:none" @click="syncResultDetailsOpen = !syncResultDetailsOpen"
+               x-text="syncResultDetailsOpen ? '▾ Hide details' : '▸ Show details (' + [...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])].length + ' changes)'"></a>
+            <div x-show="syncResultDetailsOpen" style="margin-top:4px;font-size:13px;color:var(--text-muted)">
+              <template x-for="(d, i) in [...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])]" :key="i">
+                <div style="padding:1px 0" x-text="d"></div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <template x-if="syncResult.errors?.length">
+          <div style="margin-top:8px;font-size:13px">
+            <template x-for="(err, i) in syncResult.errors" :key="i">
+              <div style="color:var(--accent-orange-bright);padding:2px 0" x-text="err"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <template x-if="syncPlan">
+      <div class="dryrun-bar">
+        <div class="text">
+          <strong>Dry-run results:</strong>
+          <template x-if="syncPlan.createProfile">
+            <span>New profile: <strong x-text="syncPlan.newProfileName"></strong> — </span>
+          </template>
+          <span x-text="syncPlan.summary.cfsToCreate"></span> to create,
+          <span x-text="syncPlan.summary.cfsToUpdate"></span> to update,
+          <span x-text="syncPlan.summary.cfsUnchanged"></span> unchanged
+          <template x-if="syncPlan.summary.scoresToSet > 0">
+            <span> — <span x-text="syncPlan.summary.scoresToSet"></span> scores to set</span>
+          </template>
+          <template x-if="syncPlan.summary.scoresToZero > 0">
+            <span style="color:var(--accent-orange)"> — <span x-text="syncPlan.summary.scoresToZero"></span> extra scores zeroed</span>
+          </template>
+          <!-- Basics customizations from pdOverrides. Always shown when
+               present — backend's settingsPreview only populates in
+               UPDATE-mode against a divergent Arr profile, so in CREATE
+               mode (fresh profile) or when Arr already matches the
+               overrides, this is the only place the user sees what
+               customized basics will be applied. -->
+          <template x-if="spOverviewDiffs().modifiedBasics.length > 0">
+            <span> — <span x-text="spOverviewDiffs().modifiedBasics.length"></span> customized settings</span>
+          </template>
+          <template x-if="(syncPlan.settingsPreview || []).length > 0 || (syncPlan.qualityPreview || []).length > 0 || (syncPlan.cfActions || []).some(a => a.action !== 'unchanged') || (syncPlan.scoreActions || []).some(a => a.action !== 'unchanged')">
+            <div style="margin-top:6px">
+              <a style="font-size:12px;color:var(--accent-blue);cursor:pointer;user-select:none" @click="dryrunDetailsOpen = !dryrunDetailsOpen"
+                 x-text="dryrunDetailsOpen ? '▾ Hide details' : '▸ Show details'"></a>
+              <div x-show="dryrunDetailsOpen" style="margin-top:4px;font-size:12px;color:var(--text-body);line-height:1.6">
+                <!-- Backend's settingsPreview first (will-change-in-Arr),
+                     then pdOverrides-derived customizations for the
+                     CREATE-mode / matched-state case. Skip the latter
+                     if settingsPreview already covered the same labels
+                     to avoid duplication. -->
+                <template x-for="s in (syncPlan.settingsPreview || [])" :key="s">
+                  <div><span style="color:var(--accent-blue)">General:</span> <span x-text="s"></span></div>
+                </template>
+                <template x-if="(syncPlan.settingsPreview || []).length === 0">
+                  <div>
+                    <template x-for="b in spOverviewDiffs().modifiedBasics" :key="'dry-mb-'+b.label">
+                      <div><span style="color:var(--accent-blue)">General:</span> <span x-text="b.label + ': ' + b.original + ' → ' + b.current"></span></div>
+                    </template>
+                  </div>
+                </template>
+                <template x-for="q in (syncPlan.qualityPreview || [])" :key="q">
+                  <div><span style="color:var(--accent-orange)">Quality:</span> <span x-text="q"></span></div>
+                </template>
+                <!-- spSortActions sorts by profile's natural order
+                     (formatItems → default-on groups → additional). -->
+                <template x-for="a in spSortActions((syncPlan.cfActions || []).filter(a => a.action === 'create'), 'name')" :key="'cf-'+a.name">
+                  <div><span style="color:var(--accent-green)">Create CF:</span> <span x-text="a.name"></span></div>
+                </template>
+                <template x-for="a in spSortActions((syncPlan.cfActions || []).filter(a => a.action === 'update'), 'name')" :key="'cfu-'+a.name">
+                  <div><span style="color:var(--accent-blue)">Update CF:</span> <span x-text="a.name"></span></div>
+                </template>
+                <template x-for="a in spSortActions((syncPlan.scoreActions || []).filter(a => a.action !== 'unchanged'), 'cfName')" :key="'sc-'+a.cfName">
+                  <div><span style="color:var(--accent-orange)">Score:</span> <span x-text="a.cfName + ': ' + a.oldScore + ' → ' + a.newScore"></span></div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+        <button class="btn btn-primary" @click="applySync()" :disabled="syncing">
+          <span x-show="syncing" class="spinner"></span>
+          <span x-show="!syncing">Apply to <span x-text="syncPlan?.instanceName || profileDetail?.instance?.name"></span></span>
+        </button>
+      </div>
+    </template>
+
+    <!-- ===== Action bar (sticky) ===== -->
+    <div class="sp-action-bar">
+      <!-- Title block — two layouts based on edit-vs-create context:
+           Edit (rule exists, _arrProfileName populated): the Arr-side
+             profile name is what the user manages day-to-day, so it
+             gets the big-font slot. TRaSH source goes in parentheses
+             after with a tooltip explaining it's the guide template
+             this profile was originally synced from.
+           Create / browse (no Arr profile bound yet): TRaSH guide
+             name is what the user is choosing FROM, so it stays big. -->
+      <div class="sp-action-title">
+        <template x-if="profileDetail?._arrProfileName">
+          <span class="sp-action-name"
+                x-tt="'Profile name in ' + (profileDetail?.instance?.name || 'Arr') + ' — what this rule manages.'"
+                x-text="profileDetail._arrProfileName"></span>
+        </template>
+        <template x-if="!profileDetail?._arrProfileName">
+          <span class="sp-action-name" x-text="profileDetail?.profile?.name"></span>
+        </template>
+        <template x-if="profileDetail?._arrProfileName">
+          <span class="sp-action-source"
+                x-tt="'TRaSH-Guides profile this rule syncs from.'">
+            (<span x-text="profileDetail?.profile?.name"></span>)
+          </span>
+        </template>
+        <span class="sqp-badge" x-show="profileDetail?.detail?.scoreCtx && profileDetail?.detail?.scoreCtx !== 'default'" x-text="profileDetail?.detail?.scoreCtx"></span>
+        <span class="sp-action-meta">
+          <template x-if="profileDetail?.instance?.name && !profileDetail?._browseMode">
+            <span>
+              <span x-text="profileDetail.instance.name"></span>
+              <template x-if="profileDetail._editLockedArrProfileId">
+                <span> &middot; ID #<span x-text="profileDetail._editLockedArrProfileId"></span></span>
+              </template>
+              &middot;
+            </span>
+          </template>
+          <span x-text="(profileDetail?.detail?.totalCoreCFs || 0) + ' Required CFs'"></span>
+          <template x-if="countAllCategoryCFs() > 0">
+            <span> + <span x-text="countAllCategoryCFs()"></span> from groups</span>
+          </template>
+        </span>
+      </div>
+      <!-- Two action-button branches mirror Classic editor exactly:
+           - Imported profiles (Recyclarr-import / custom-built) route
+             through openImportedSyncModal + AsNew, plus Edit/Export
+             affordances that only make sense for imported sources.
+           - Native TRaSH profiles use openSyncModal + AsNew.
+           Cancel resets the full state surface the Classic Back-link
+           clears, so closing Sync Preview can't leak selectedOptionalCFs
+           / groupExpanded / pdOverrides into the next overlay open. -->
+      <div class="sp-action-buttons">
+        <button class="btn btn-sm" @click="closeProfileEditor()">Cancel</button>
+        <template x-if="profileDetail?.detail?.imported">
+          <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
+            <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
+            <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openImportedSyncModalAsNew()" x-tt="'Create a new Arr profile with these settings'">Create New</button>
+          </span>
+        </template>
+        <template x-if="!profileDetail?.detail?.imported">
+          <span class="sp-action-buttons-native" style="display:flex;gap:8px">
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
+          </span>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== Basics strip =====
+         pdOverrides shape (per pdInitOverrides):
+           { minFormatScore: { enabled: bool, value: number }, ... }
+         where .enabled === FALSE means an override is active (legacy
+         naming — "enabled: true" means "follows TRaSH default"). The
+         template reads .value and tags the field as overridden when
+         .enabled === false. -->
+    <!-- Basics strip — values are static text when Customize is off,
+         inline editors (select / number input / toggle) when on. Each
+         field gets a small red reset-icon when the value differs from
+         the profile's TRaSH default. Reset-icon is the sole "modified"
+         affordance — drop the orange .overridden color treatment in
+         favour of action-affording iconography. -->
+    <div class="sp-basics">
+      <!-- Language — radarr only. Sonarr has no profile-level language
+           field, so the whole item + its trailing divider are hidden
+           when the active instance is Sonarr (matches profile-detail.html
+           pattern: `x-show="activeAppType === 'radarr'"`). -->
+      <div class="sp-basics-item"
+           x-show="activeAppType === 'radarr'"
+           x-data="{ get _def() { return profileDetail?.detail?.profile?.language?.name || profileDetail?.detail?.profile?.language || 'Original'; },
+                     get _val() { return pdOverrides?.language?.value || this._def; },
+                     get _mod() { return this._val !== this._def; } }">
+        <span class="sp-basics-lbl">Language</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <select class="sp-basics-input"
+                  aria-label="Language"
+                  x-effect="populateSelectField($el, (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}]).map(l => ({value: l.name, name: l.name})), pdOverrides.language.value)"
+                  @change="pdOverrides.language.value = $el.value"></select>
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.language.value = _def"
+                  :aria-label="'Reset Language to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
+        </template>
+      </div>
+      <div class="sp-basics-divider" x-show="activeAppType === 'radarr'"></div>
+
+      <!-- Min score -->
+      <div class="sp-basics-item"
+           x-data="{ get _def() { return profileDetail?.detail?.profile?.minFormatScore ?? 0; },
+                     get _val() { return pdOverrides?.minFormatScore?.value ?? this._def; },
+                     get _mod() { return Number(this._val) !== Number(this._def); } }">
+        <span class="sp-basics-lbl">Min score</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <input type="number" class="sp-basics-input sp-basics-input-num"
+                 :value="_val"
+                 aria-label="Min score"
+                 @change="pdOverrides.minFormatScore.value = Number($el.value)">
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.minFormatScore.value = _def"
+                  :aria-label="'Reset Min score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
+        </template>
+      </div>
+
+      <!-- Min upgrade -->
+      <div class="sp-basics-item"
+           x-data="{ get _def() { return profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1; },
+                     get _val() { return pdOverrides?.minUpgradeFormatScore?.value ?? this._def; },
+                     get _mod() { return Number(this._val) !== Number(this._def); } }">
+        <span class="sp-basics-lbl">Min upgrade</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <input type="number" class="sp-basics-input sp-basics-input-num"
+                 :value="_val"
+                 aria-label="Min upgrade score"
+                 @change="pdOverrides.minUpgradeFormatScore.value = Number($el.value)">
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.minUpgradeFormatScore.value = _def"
+                  :aria-label="'Reset Min upgrade score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
+        </template>
+      </div>
+
+      <!-- Cutoff score -->
+      <div class="sp-basics-item"
+           x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000; },
+                     get _val() { return pdOverrides?.cutoffFormatScore?.value ?? this._def; },
+                     get _mod() { return Number(this._val) !== Number(this._def); } }">
+        <span class="sp-basics-lbl">Cutoff score</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <input type="number" class="sp-basics-input sp-basics-input-num"
+                 :value="_val"
+                 aria-label="Cutoff score"
+                 @change="pdOverrides.cutoffFormatScore.value = Number($el.value)">
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.cutoffFormatScore.value = _def"
+                  :aria-label="'Reset Cutoff score to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
+        </template>
+      </div>
+
+      <!-- Upgrades allowed -->
+      <div class="sp-basics-item"
+           x-data="{ get _def() { return !!(profileDetail?.detail?.profile?.upgradeAllowed); },
+                     get _val() { return pdOverrides?.upgradeAllowed?.value ?? this._def; },
+                     get _mod() { return !!this._val !== !!this._def; } }">
+        <span class="sp-basics-lbl">Upgrades</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val ? 'On' : 'Off'"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <label class="toggle toggle-sm sp-basics-toggle" @click.stop>
+            <input type="checkbox" :checked="_val" aria-label="Upgrades allowed" @change="pdOverrides.upgradeAllowed.value = $el.checked">
+            <span class="slider"></span>
+          </label>
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.upgradeAllowed.value = _def"
+                  :aria-label="'Reset Upgrades to ' + (_def ? 'On' : 'Off')"
+                  x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
+        </template>
+      </div>
+      <div class="sp-basics-divider"></div>
+
+      <!-- Cutoff quality (dropdown of allowed qualities) -->
+      <div class="sp-basics-item"
+           x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoff || ''; },
+                     get _val() { return pdOverrides?.cutoffQuality || this._def; },
+                     get _mod() { return this._val !== this._def && this._val !== ''; },
+                     get _opts() { const items = qualityStructure?.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []); return items.filter(i => i.allowed).map(i => i.name || i.quality?.name || '').filter(n => n); } }">
+        <span class="sp-basics-lbl">Cutoff quality</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val" x-text="_val || '—'"></span>
+        </template>
+        <template x-if="pdOverridesEnabled">
+          <select class="sp-basics-input" aria-label="Cutoff quality" @change="pdOverrides.cutoffQuality = $el.value">
+            <template x-for="opt in _opts" :key="opt">
+              <option :value="opt" :selected="opt === _val" x-text="opt"></option>
+            </template>
+          </select>
+        </template>
+        <template x-if="_mod">
+          <button class="sp-basics-reset"
+                  @click="pdOverrides.cutoffQuality = _def"
+                  :aria-label="'Reset Cutoff quality to ' + _def"
+                  x-tt="'Reset to ' + _def">&#8634;</button>
+        </template>
+      </div>
+
+      <!-- Qualities — matches Radarr's terminology. Read-only shows
+           "Profile default" so the user instantly knows nothing has
+           been touched; customize mode shows "Profile default" + an
+           edit icon when untouched, or "N changes" (clickable, opens
+           editor) when modified. Reuses Profile Builder's existing
+           Quality Items editor (the same modal Classic uses).
+           -->
+      <div class="sp-basics-item"
+           x-data="{ get _changes() { return pdOverrideSummary().quality; } }">
+        <span class="sp-basics-lbl">Qualities</span>
+        <template x-if="!pdOverridesEnabled">
+          <span class="sp-basics-val">Profile default</span>
+        </template>
+        <template x-if="pdOverridesEnabled && _changes === 0">
+          <span class="sp-basics-val sp-basics-val-clean">
+            <span>Profile default</span>
+            <button class="sp-basics-edit-icon"
+                    @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
+                    x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                    aria-label="Edit qualities">&#9998;</button>
+          </span>
+        </template>
+        <template x-if="pdOverridesEnabled && _changes > 0">
+          <button class="sp-basics-val sp-basics-quality-launcher"
+                  @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
+                  x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                  x-text="_changes + ' change' + (_changes === 1 ? '' : 's')"></button>
+        </template>
+        <template x-if="pdOverridesEnabled && _changes > 0">
+          <button class="sp-basics-reset"
+                  @click="qualityStructure = []; qualityOverrides = {};"
+                  aria-label="Reset Qualities to profile default"
+                  x-tt="'Reset every quality change back to the profile default.'">&#8634;</button>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== Customizations summary strip =====
+         Mirrors Classic editor's "Override mode · N changes" header
+         (profile-detail.html:181-200). Two states share the same row
+         so the layout stays stable when the user toggles Customize:
+           OFF: "All values follow profile defaults" + Customize CTA
+           ON:  "N customizations" + per-bucket badges + Reset CTA
+         The summary text itself is clickable when ON — jumps to
+         Profile overview → Diffs so the user can see exactly what
+         deviates from the profile defaults. Wording is "Customizations"
+         everywhere; we don't say "Override mode" elsewhere in the UI
+         and the inconsistency was confusing. -->
+    <div class="sp-summary"
+         x-data="{ get _s() { return pdOverrideSummary(); } }">
+      <template x-if="!pdOverridesEnabled">
+        <span class="sp-summary-status sp-summary-clean">&#10003; All values follow profile defaults</span>
+      </template>
+      <template x-if="pdOverridesEnabled">
+        <button class="sp-summary-status sp-summary-active"
+                @click="spActiveTab = 'overview'; spOverviewSection = 'diffs';"
+                x-tt="'Open Profile overview &rarr; Diffs to see exactly what deviates from the profile defaults.'">
+          <span class="sp-summary-lead" x-text="_s.total + ' customization' + (_s.total === 1 ? '' : 's')"></span>
+          <template x-if="_s.general > 0">
+            <span class="sp-summary-badge" x-text="'General: ' + _s.general"></span>
+          </template>
+          <template x-if="_s.quality > 0">
+            <span class="sp-summary-badge" x-text="'Quality: ' + _s.quality"></span>
+          </template>
+          <template x-if="_s.added > 0">
+            <span class="sp-summary-badge" x-text="'Extra CFs: ' + _s.added"></span>
+          </template>
+          <template x-if="_s.overridden > 0">
+            <span class="sp-summary-badge" x-text="'Custom scores: ' + _s.overridden"></span>
+          </template>
+          <template x-if="_s.excludedCFs > 0">
+            <span class="sp-summary-badge" x-text="'Excluded CFs: ' + _s.excludedCFs"></span>
+          </template>
+        </button>
+      </template>
+      <button class="btn btn-sm sp-summary-action"
+              style="border-color:var(--accent-red);color:var(--accent-red)"
+              @click="pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
+              x-tt="pdOverridesEnabled ? 'Clear all customizations and revert this profile to TRaSH defaults' : 'Override profile defaults for language, scores, quality, and custom formats'"
+              x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize this profile'"></button>
+    </div>
+
+    <!-- ===== Tabs =====
+         Profile default — group/CF browsing & toggle
+         Additional CF — Customize-gated opt-in groups outside the profile
+                         (badge counts CFs the user has actually opted into,
+                         not the total catalogue size). Loaded lazily when
+                         the tab body x-effect kicks in.
+         Profile overview — read-only summary of what's currently on -->
+    <div class="sp-tabs">
+      <button class="sp-tab" :class="{ active: spActiveTab === 'default' }" @click="spActiveTab = 'default'">Profile default</button>
+      <button class="sp-tab" :class="{ active: spActiveTab === 'additional' }" x-show="pdOverridesEnabled" @click="spActiveTab = 'additional'">
+        Additional CF
+        <template x-if="Object.keys(extraCFs || {}).length > 0">
+          <span class="sp-tab-count" x-text="Object.keys(extraCFs || {}).length"></span>
+        </template>
+      </button>
+      <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
+    </div>
+
+    <!-- ===== Profile default tab ===== -->
+    <div class="sp-body" x-show="spActiveTab === 'default'">
+      <!-- Sub-nav: Required CFs (top) + each default-on TRaSH group,
+           grouped by the [Category] prefix of the group name so users
+           with many groups can scan by section ("STREAMING SERVICES"
+           → General / Premium / ...) instead of by truncated full names. -->
+      <nav class="sp-sub-nav">
+        <!-- Required CFs sits outside any category section, so it carries
+             its own colored left-border via the cat-required class. -->
+        <button class="sp-sub-nav-item sp-sub-nav-standalone cat-required"
+                :class="{ active: spActiveGroup === '__required' }"
+                @click="spActiveGroup = '__required'">
+          <span class="sp-sub-nav-label">Required CFs</span>
+          <span class="sp-sub-nav-count" x-text="(profileDetail?.detail?.formatItemNames || []).length"></span>
+        </button>
+        <!-- All TRaSH cf-groups that are PART of this profile (in the
+             profile's quality_profiles.include map). Includes both
+             default-on (synced automatically) and default-off (you can
+             opt into). Same set Classic editor renders in its Groups
+             section — no filter. Additional CF tab handles groups OUTSIDE
+             the profile (via extraCFGroups).
+             Category colour now lives on the section header alone; the
+             individual items inherit visual grouping from their position
+             under the colored header rather than carrying redundant dots. -->
+        <template x-for="section in spGroupBySection(profileDetail?.detail?.trashGroups || [])" :key="'def-'+section.section">
+          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
+            <div class="sp-sub-nav-section" x-text="section.section"></div>
+            <template x-for="g in section.items" :key="g.name">
+              <button class="sp-sub-nav-item"
+                      :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
+                      @click="spActiveGroup = g.name">
+                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                <span class="sp-sub-nav-count" x-text="(g.cfs || []).length"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </nav>
+
+      <!-- Main content: selected sub-nav item's CFs -->
+      <main class="sp-content">
+        <!-- Required CFs view. Profile-info panel intentionally NOT shown
+             here — users already see the full description on the TRaSH
+             Profile card before clicking through, so re-rendering it inside
+             the editor wastes screen space and pushes the actual CF list
+             below the fold. The editor stays focused on configuration. -->
+        <template x-if="spActiveGroup === '__required'">
+          <div>
+            <h2 class="sp-content-title">Required CFs</h2>
+            <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup — always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
+            <div class="sp-cf-list">
+              <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
+                <div class="sp-cf-row sp-cf-locked"
+                     :class="(selectedOptionalCFs[fi.trashId] === false) ? 'sp-cf-req-excluded' : ''"
+                     x-data="{
+                       get _def() { return fi.score; },
+                       get _eff() { const o = cfScoreOverrides[fi.trashId]; return o !== undefined ? o : this._def; },
+                       get _mod() { return cfScoreOverrides[fi.trashId] !== undefined && cfScoreOverrides[fi.trashId] !== this._def; },
+                       get _excluded() { return selectedOptionalCFs[fi.trashId] === false; }
+                     }">
+                  <!-- Lock-icon: static when Customize is off; clickable
+                       button when Customize is on so the user can opt out
+                       of a required CF. State swap: red ✕-style on hover
+                       when excluded reads as "click to re-include". -->
+                  <template x-if="!pdOverridesEnabled">
+                    <span class="sp-cf-icon" x-tt="'Required by the profile — always synced.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <!-- Customize ON: render the unlock glyph (Lucide
+                         "unlock") so the affordance reads as "this
+                         required CF is now editable — click to opt
+                         out". The lock pose returns when the CF is
+                         excluded (sp-cf-icon-excluded class also tints
+                         it red) — closed-lock there reinforces "this
+                         is locked out". -->
+                    <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
+                            :class="{ 'sp-cf-icon-excluded': _excluded }"
+                            :aria-label="(_excluded ? 'Re-include ' : 'Exclude ') + fi.name"
+                            :aria-pressed="_excluded ? 'true' : 'false'"
+                            x-tt="_excluded ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
+                            @click="spToggleRequiredCF(fi.trashId)">
+                      <template x-if="!_excluded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                      </template>
+                      <template x-if="_excluded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      </template>
+                    </button>
+                  </template>
+                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': _excluded }" x-text="fi.name"></div>
+                  <template x-if="!pdOverridesEnabled">
+                    <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit">
+                      <template x-if="_mod">
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(fi.trashId)"
+                                :aria-label="'Reset ' + fi.name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                                x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input"
+                             :value="_eff"
+                             :aria-label="'Score for ' + fi.name"
+                             @change="spApplyCFScore(fi.trashId, $el.value, _def)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Each TRaSH group view. Mirrors Classic editor semantics:
+             - Group toggle uses pdToggleGroup (which auto-checks/clears
+               recommended CFs based on group's exclusive flag).
+             - CF toggle uses toggleExclusiveCF for exclusive groups,
+               toggleOptionalCF otherwise.
+             - CF "checked" state: explicit selectedOptionalCFs entry
+               wins; otherwise falls back to TRaSH's cf.default.
+             - Required CFs (cf.required) show lock icon, can't toggle.
+             - Greying (opacity 0.35): required CF when group off, or
+               optional CF when group off OR cf explicitly off.
+             Category prefix stripped from h2 — sub-nav section header
+             already conveys it. -->
+        <!-- Lazy-mount the active group only. Previously this was
+             x-show, which mounted every group's entire CF list (~30
+             groups × ~10 CFs = 300 Alpine x-data rows + nested
+             getters) into the DOM at once, blocking initial render
+             for ~3s. With x-if Alpine only mounts the matching group;
+             switching groups re-mounts on demand (small per-switch
+             cost, big initial-load win). -->
+        <template x-for="g in (profileDetail?.detail?.trashGroups || [])" :key="g.name">
+        <template x-if="spActiveGroup === g.name">
+          <div x-data="{
+                 get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
+                 get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
+                 get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; },
+                 /* _hasToggle: does the group toggle actually do anything?
+                    pdToggleGroup auto-enables CFs that are cf.required or
+                    (non-exclusive) cf.default=true. If neither exists, the
+                    toggle just flips __grp_<name> with no functional impact
+                    — getSelectedCFIds only uses __grp_ to include REQUIRED
+                    CFs from active groups. So for opt-in-only groups (e.g.
+                    Movie Versions exclusive, HDR Formats SDR), hiding the
+                    toggle removes a meaningless click. */
+                 get _hasToggle() {
+                   return g.cfs.some(cf => cf.required)
+                       || (!g.exclusive && g.cfs.some(cf => cf.default));
+                 },
+                 /* Single-CF group: action row + CF row collapse to one
+                    combined row. 'Enable the group' is functionally the
+                    same as 'enable that single CF', so showing the CF
+                    name twice (in the action label + below in the list)
+                    is pure noise. */
+                 get _singleCF() { return (g.cfs || []).length === 1; }
+               }">
+            <h2 class="sp-content-title">
+              <div class="sp-content-title-name">
+                <template x-if="_section">
+                  <span class="sp-content-section" x-text="_section + ' › '"></span>
+                </template>
+                <span x-text="_shortName"></span>
+                <span class="sp-group-badges">
+                  <span class="sp-badge" x-show="g.exclusive">pick one</span>
+                </span>
+              </div>
+            </h2>
+            <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
+            <!-- Single-CF group: collapse action row + CF row into one.
+                 'Enable group' = 'enable that CF' when there's only one,
+                 so the toggle drives the single CF directly (lock if
+                 required so the structural semantic stays visible).
+                 Score lives on the row since there's no separate CF
+                 list to put it on. -->
+            <template x-if="_singleCF">
+              <label class="sp-action-row sp-action-row-combined toggle-row">
+                <span class="toggle toggle-sm"
+                      x-tt="'On = sync this CF. Off = skip it.'"
+                      @click.stop>
+                  <input type="checkbox"
+                         :checked="g.cfs[0].required ? _groupOn : (selectedOptionalCFs[g.cfs[0].trashId] === undefined ? !!g.cfs[0].default : !!selectedOptionalCFs[g.cfs[0].trashId])"
+                         @change="g.cfs[0].required ? pdToggleGroup(g, $event.target.checked) : toggleOptionalCF(g.cfs[0].trashId)">
+                  <span class="slider"></span>
+                </span>
+                <template x-if="g.cfs[0].required">
+                  <span class="sp-cf-icon" x-tt="'Required CF — synced as a unit when on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                </template>
+                <span class="sp-action-label">
+                  <span x-text="g.cfs[0].name"></span>
+                  <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
+                </span>
+                <!-- _defScore: prefer pre-resolved cf.score (always set
+                     for profile.trashGroups); fall back to
+                     resolveCFDefaultScore so the row keeps working if
+                     the combined-row template is ever reused for
+                     extraCFGroups (cf.score is undefined there — see
+                     spOverviewEnabledCFs scoreInfo). -->
+                <template x-if="!pdOverridesEnabled">
+                  <span class="sp-cf-score"
+                        x-data="{ get _defScore() { return g.cfs[0].score ?? resolveCFDefaultScore(g.cfs[0].trashId); }, get _eff() { return cfScoreOverrides[g.cfs[0].trashId] ?? this._defScore; } }"
+                        :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')"
+                        x-text="_eff != null && _eff !== '?' ? ((_eff > 0 ? '+' : '') + _eff) : ''"></span>
+                </template>
+                <template x-if="pdOverridesEnabled">
+                  <span class="sp-cf-score-edit"
+                        x-data="{ get _def() { const s = g.cfs[0].score ?? resolveCFDefaultScore(g.cfs[0].trashId); return s === '?' ? null : s; }, get _eff() { const o = cfScoreOverrides[g.cfs[0].trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[g.cfs[0].trashId] !== undefined && cfScoreOverrides[g.cfs[0].trashId] !== this._def; } }">
+                    <template x-if="_mod">
+                      <button class="sp-basics-reset sp-cf-score-reset"
+                              @click.stop="pdResetCFScore(g.cfs[0].trashId)"
+                              :aria-label="'Reset ' + g.cfs[0].name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                              x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                    </template>
+                    <input type="number" class="sp-cf-score-input"
+                           :value="_eff"
+                           :aria-label="'Score for ' + g.cfs[0].name"
+                           @change="spApplyCFScore(g.cfs[0].trashId, $el.value, _def)" @click.stop>
+                  </span>
+                </template>
+              </label>
+            </template>
+            <!-- Multi-CF group: standard layout — action rows above,
+                 CF list below. -->
+            <div class="sp-action-rows" x-show="!_singleCF">
+              <template x-if="_hasToggle">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'On = sync this group. Off = none of its CFs sync, regardless of individual CF state.'"
+                        @click.stop>
+                    <input type="checkbox" :checked="_groupOn"
+                           @change="pdToggleGroup(g, $event.target.checked)">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">
+                    <span x-text="_shortName"></span>
+                    <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
+                  </span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const total = g.cfs.length;
+                          const on = g.cfs.filter(cf => {
+                            // Phase 2c: required CF excluded via lock icon
+                            // doesn't sync — don't count it as included.
+                            if (cf.required) return _groupOn && selectedOptionalCFs[cf.trashId] !== false;
+                            return _groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]);
+                          }).length;
+                          return on + ' of ' + total + ' included';
+                        })()"></span>
+                </label>
+              </template>
+              <template x-if="!g.cfs.every(cf => cf.required) && !g.exclusive && g.cfs.length >= 3 && (_groupOn || !_hasToggle)">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'Toggle every optional CF in this group on or off. Required CFs (locked) stay on regardless.'"
+                        @click.stop>
+                    <input type="checkbox"
+                           :checked="g.cfs.filter(cf => !cf.required).every(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId])"
+                           @change="(() => {
+                             /* Route through toggleOptionalCF so cross-group
+                                conflicts (conflicts.json) deactivate when a CF
+                                flips on. Raw selectedOptionalCFs[id] = true
+                                would skip that and let conflicting CFs co-
+                                exist, diverging from Classic's sync result. */
+                             const enabling = $event.target.checked;
+                             for (const cf of g.cfs) {
+                               if (cf.required) continue;
+                               const currentlyOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                               if (enabling !== currentlyOn) toggleOptionalCF(cf.trashId);
+                             }
+                           })()">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">All optional CFs</span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const opt = g.cfs.filter(cf => !cf.required);
+                          const optOn = opt.filter(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]).length;
+                          return optOn + ' of ' + opt.length + ' optional on';
+                        })()"></span>
+                </label>
+              </template>
+            </div>
+            <div class="sp-cf-list" x-show="!_singleCF">
+              <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
+                <div class="sp-cf-row"
+                     :class="{
+                       'sp-cf-locked': cf.required,
+                       'sp-cf-req-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false,
+                     }"
+                     :style="{
+                       /* Object-form :style so any future inline static
+                          style attribute survives — string-form would wipe
+                          the row's other inline styles. The dimming logic:
+                          - hidden group toggle (opt-in only): dim purely on
+                            per-CF off (no group state to express).
+                          - required CF: dim when group is off OR Phase 2c
+                            user-excluded.
+                          - optional CF: dim when group is off OR cf is off. */
+                       opacity: (() => {
+                         const cfOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                         if (!_hasToggle) return cfOn ? 1 : 0.35;
+                         if (cf.required) return (_groupOn && selectedOptionalCFs[cf.trashId] !== false) ? 1 : 0.35;
+                         return (_groupOn && cfOn) ? 1 : 0.35;
+                       })()
+                     }">
+                  <template x-if="cf.required && !pdOverridesEnabled">
+                    <span class="sp-cf-icon" x-tt="'Required by the group — included when the group is on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  </template>
+                  <template x-if="cf.required && pdOverridesEnabled">
+                    <!-- Customize ON: unlock glyph signals "editable"; the
+                         closed-lock returns + tints red when the CF is
+                         excluded (sp-cf-icon-excluded class). -->
+                    <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
+                            :class="{ 'sp-cf-icon-excluded': selectedOptionalCFs[cf.trashId] === false }"
+                            :aria-label="(selectedOptionalCFs[cf.trashId] === false ? 'Re-include ' : 'Exclude ') + cf.name"
+                            :aria-pressed="selectedOptionalCFs[cf.trashId] === false ? 'true' : 'false'"
+                            x-tt="selectedOptionalCFs[cf.trashId] === false ? 'Click to re-include this required CF.' : 'Click to exclude this required CF from sync.'"
+                            @click="spToggleRequiredCF(cf.trashId)">
+                      <template x-if="selectedOptionalCFs[cf.trashId] !== false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                      </template>
+                      <template x-if="selectedOptionalCFs[cf.trashId] === false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      </template>
+                    </button>
+                  </template>
+                  <template x-if="!cf.required">
+                    <label class="toggle toggle-sm" x-tt="'Include this Custom Format when the group is on.'" @click.stop>
+                      <input type="checkbox"
+                             :checked="selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]"
+                             @change="g.exclusive ? toggleExclusiveCF(cf.trashId, g.cfs) : toggleOptionalCF(cf.trashId)">
+                      <span class="slider"></span>
+                    </label>
+                  </template>
+                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false }">
+                    <span x-text="cf.name"></span>
+                    <span class="sp-cf-recommended" x-show="cf.default && !cf.required" x-tt="'TRaSH recommends keeping this on'">recommended</span>
+                  </div>
+                  <template x-if="!pdOverridesEnabled">
+                    <div class="sp-cf-score"
+                         :class="((cfScoreOverrides[cf.trashId] ?? cf.score) > 0 ? 'positive' : (cfScoreOverrides[cf.trashId] ?? cf.score) < 0 ? 'negative' : 'zero')"
+                         x-text="(() => { const s = cfScoreOverrides[cf.trashId] ?? cf.score; return s != null ? ((s > 0 ? '+' : '') + s) : ''; })()"></div>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit"
+                         x-data="{ get _def() { return cf.score; }, get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; } }">
+                      <template x-if="_mod">
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
+                                x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input"
+                             :value="_eff"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, _def)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        </template>
+      </main>
+    </div>
+
+    <!-- ===== Profile overview tab (read-only, phase 1) =====
+         Sub-nav on the left rail with filter views (matches Profile
+         default tab's layout pattern). "All" stacks every section;
+         the others show one slice so the user can quickly answer
+         "what optionals did I activate?" / "what's outside the
+         profile defaults?". Customizations show INLINE on the row
+         they apply to: score override = strikethrough original +
+         new score + small "customized" tag. Modified basics show
+         the same way on the General section. Excluded default-on
+         CFs aren't surfaced here (they're not enabled — the
+         Profile default tab visualizes them via dimmed rows). -->
+    <div class="sp-body" x-show="spActiveTab === 'overview'">
+      <!-- Flat sub-nav with a subtle divider between summary-views
+           (Overview / Diffs) and filter-views (General / Quality /
+           All CF / Optional CF / Additional CF). No category coloring
+           because none of these items are "categories" — they're
+           orthogonal views of the same data. The scoped .sp-overview-nav
+           class neutralizes the border-left + cat-color rules the
+           .sp-sub-nav-* selectors apply by default. -->
+      <nav class="sp-sub-nav sp-overview-nav">
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'all' }"
+                @click="spOverviewSection = 'all'">
+          <span class="sp-sub-nav-label">Overview</span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'notes', inactive: !(pdDescription || '').trim() }"
+                @click="spOverviewSection = 'notes'; pdNotesExpanded = true"
+                x-tt="'Your free-form notes about this sync rule — what it\'s used for, why specific customizations were made. Persisted with the rule.'">
+          <span class="sp-sub-nav-label">Notes</span>
+          <span class="sp-sub-nav-count" x-show="(pdDescription || '').trim()">●</span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'diffs', inactive: spOverviewDiffCount() === 0 }"
+                @click="spOverviewSection = 'diffs'"
+                x-tt="'Items that deviate from the TRaSH default for this profile — modified basics, score overrides, added Additional CFs, and excluded default-on CFs.'">
+          <span class="sp-sub-nav-label">Diffs</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewDiffCount() || ''"></span>
+        </button>
+        <div class="sp-overview-nav-divider" aria-hidden="true"></div>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'general' }"
+                @click="spOverviewSection = 'general'">
+          <span class="sp-sub-nav-label">General</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewBasics().filter(b => b.modified).length || ''"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'quality' }"
+                @click="spOverviewSection = 'quality'">
+          <span class="sp-sub-nav-label">Quality items</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewQualities().length"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'all-cf' }"
+                @click="spOverviewSection = 'all-cf'">
+          <span class="sp-sub-nav-label">All active CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().reduce((n, s) => n + s.cfs.length, 0)"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'optional-cf' }"
+                @click="spOverviewSection = 'optional-cf'">
+          <span class="sp-sub-nav-label">Optional CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().filter(s => s.kind === 'in-profile').reduce((n, s) => n + s.cfs.filter(cf => !cf._isRequired).length, 0)"></span>
+        </button>
+        <button class="sp-sub-nav-item"
+                :class="{ active: spOverviewSection === 'additional-cf' }"
+                @click="spOverviewSection = 'additional-cf'">
+          <span class="sp-sub-nav-label">Additional CF</span>
+          <span class="sp-sub-nav-count" x-text="spOverviewEnabledCFs().filter(s => s.kind === 'additional').reduce((n, s) => n + s.cfs.length, 0)"></span>
+        </button>
+      </nav>
+
+      <main class="sp-content sp-overview-content">
+        <!-- ===== Notes — collapsible compact card =====
+             Defaults to collapsed so the overview stays scannable.
+             Header always shows: chevron + label + char-count when set,
+             or "+ Add notes" CTA when empty. Body (editor + preview)
+             renders only when expanded.
+             Persisted to AutoSyncRule.Description; surfaced as hover-
+             info icon next to the Arr profile name in Sync Rules table. -->
+        <section class="sp-ov-card sp-ov-notes-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'notes'">
+          <button type="button" class="sp-ov-notes-header"
+                  @click="pdNotesExpanded = !pdNotesExpanded"
+                  :aria-expanded="pdNotesExpanded">
+            <span class="detail-section-chevron" :class="{ open: pdNotesExpanded }">&#9654;</span>
+            <span class="sp-ov-notes-label">Notes</span>
+            <template x-if="(pdDescription || '').trim().length > 0">
+              <span class="sp-ov-notes-snippet" x-text="(pdDescription || '').trim().replace(/\s+/g, ' ').slice(0, 100) + ((pdDescription || '').trim().length > 100 ? '…' : '')"></span>
+            </template>
+            <template x-if="!(pdDescription || '').trim()">
+              <span class="sp-ov-notes-empty">+ Add notes about this rule</span>
+            </template>
+            <span class="sp-ov-notes-count" x-show="(pdDescription || '').trim().length > 0"
+                  x-text="(pdDescription || '').trim().length + ' chars'"></span>
+          </button>
+
+          <div x-show="pdNotesExpanded" x-cloak class="sp-ov-notes-body">
+            <div class="sp-ov-notes-toolbar-row">
+              <p class="sp-ov-notes-help">
+                Free-form notes about this sync rule — what it's for, why you customised anything. Visible as a hover tooltip on the Sync Rules table. Markdown supported.
+              </p>
+              <button class="cf-md-preview-toggle"
+                      @click="pdDescriptionPreview = !pdDescriptionPreview"
+                      x-tt="'Toggle between the editor and a rendered markdown preview. Doesn\'t save — use the Save / Save &amp; Sync button at the bottom of the overlay to persist your notes.'"
+                      x-text="pdDescriptionPreview ? 'Show editor' : 'Show preview'"></button>
+            </div>
+
+            <div class="cf-md-toolbar" x-show="!pdDescriptionPreview">
+              <button type="button" class="cf-md-btn" x-tt="'Bold (**text**)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '**', '**')"><strong>B</strong></button>
+              <button type="button" class="cf-md-btn" x-tt="'Italic (*text*)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '*', '*')"><em>I</em></button>
+              <button type="button" class="cf-md-btn" x-tt="'Inline code (`text`)'"
+                      @click="mdWrapSelection('#sp-notes-textarea', '`', '`')" style="font-family:monospace">&lt;/&gt;</button>
+              <button type="button" class="cf-md-btn" x-tt="'Bullet list (- item)'"
+                      @click="mdPrependLines('#sp-notes-textarea', '- ')">• List</button>
+              <button type="button" class="cf-md-btn" x-tt="'Numbered list (1. item)'"
+                      @click="mdPrependLines('#sp-notes-textarea', '1. ')">1. List</button>
+              <button type="button" class="cf-md-btn" x-tt="'Link [text](url)'"
+                      @click="mdInsertLink('#sp-notes-textarea')">🔗 Link</button>
+            </div>
+
+            <textarea id="sp-notes-textarea"
+                      x-show="!pdDescriptionPreview"
+                      class="input cf-md-textarea"
+                      x-model="pdDescription"
+                      rows="6"
+                      placeholder="e.g. Used for 4K HDR Plex library. Bumped DV score because I prefer profile-grade DV over HDR10+ fallback."></textarea>
+
+            <div x-show="pdDescriptionPreview"
+                 class="cf-md-preview"
+                 x-html="renderMarkdownPreview(pdDescription)"></div>
+          </div>
+        </section>
+
+        <!-- ===== Diffs view — only deviations from TRaSH default =====
+             Surfaces things the user changed: modified basics, score
+             overrides, Additional CFs they added (groups outside the
+             profile), and default-on CFs they explicitly turned off.
+             Optional CFs activated within in-profile groups are NOT
+             listed here — they're inside the profile's own structure
+             and visible via the "Optional CF" sub-nav view instead. -->
+        <section class="sp-ov-card sp-ov-card-diffs" x-show="spOverviewSection === 'diffs'"
+                 x-data="{ get _d() { return spOverviewDiffs(); } }">
+          <h3 class="sp-ov-card-title">
+            Diffs from profile default
+            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) + ')'"></span>
+          </h3>
+
+          <!-- Modified general — same naming as the "General" sub-nav
+               item + the General card title. "Basics" was a holdover
+               from an earlier label that nothing else in the UI uses. -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.modifiedBasics.length > 0">
+            <div class="sp-ov-cf-section-title">Modified general</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="b in _d.modifiedBasics" :key="'diff-mb-'+b.label">
+                <div class="sp-ov-cf-row sp-ov-diff-row">
+                  <span class="sp-ov-cf-name" x-text="b.label"></span>
+                  <span class="sp-ov-diff-old" x-text="b.original"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new" x-text="b.current"></span>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="pdResetBasic(b.field)"
+                          :aria-label="'Reset ' + b.label + ' to ' + b.original"
+                          x-tt="'Reset to ' + b.original">&#8634;</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Score overrides -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.scoreOverrides.length > 0">
+            <div class="sp-ov-cf-section-title">Score overrides</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="o in _d.scoreOverrides" :key="'diff-so-'+o.name">
+                <div class="sp-ov-cf-row sp-ov-diff-row">
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="o.name"></span>
+                    <span class="sp-ov-cf-source" x-text="'· ' + o.fromGroup"></span>
+                  </span>
+                  <span class="sp-ov-diff-old" x-text="(o.original > 0 ? '+' : '') + o.original"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new" :class="(o.current > 0 ? 'positive' : o.current < 0 ? 'negative' : 'zero')"
+                        x-text="(o.current > 0 ? '+' : '') + o.current"></span>
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="pdResetCFScore(o.trashId)"
+                          :aria-label="'Reset ' + o.name + ' score to ' + ((o.original > 0 ? '+' : '') + o.original)"
+                          x-tt="'Reset score to ' + ((o.original > 0 ? '+' : '') + o.original)">&#8634;</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Additional CFs added — CFs outside profile's default scope -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.additionalCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Added Additional CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="a in _d.additionalCFs" :key="'diff-add-'+a.name+a.fromGroup">
+                <div class="sp-ov-cf-row sp-ov-diff-row">
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spRemoveAdditionalCF(a.trashId)"
+                          :aria-label="'Remove Additional CF ' + a.name"
+                          x-tt="'Remove this Additional CF from the profile'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="a.name"></span>
+                    <span class="sp-ov-cf-source" x-text="'· ' + a.fromGroup"></span>
+                  </span>
+                  <!-- "—" everywhere not in the profile by default — both
+                       custom CFs and opted-in Additional CFs land here.
+                       Single uniform marker; section title carries the
+                       "not in profile default" semantics. -->
+                  <span class="sp-ov-diff-old sp-ov-diff-na">&mdash;</span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new" :class="(a.score > 0 ? 'positive' : a.score < 0 ? 'negative' : 'zero')"
+                        x-text="a.score != null ? ((a.score > 0 ? '+' : '') + a.score) : ''"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Excluded default-on CFs — would normally be on but user turned off -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Excluded default-on CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="e in _d.excludedCFs" :key="'diff-ex-'+e.name+e.fromGroup">
+                <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spReincludeExcludedCF(e.trashId)"
+                          :aria-label="'Re-include ' + e.name + ' in the profile'"
+                          x-tt="'Re-include this CF in the profile'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="e.name"></span>
+                    <span class="sp-ov-cf-source" x-text="'· ' + e.fromGroup"></span>
+                  </span>
+                  <span class="sp-ov-diff-old" x-text="e.score != null ? ((e.score > 0 ? '+' : '') + e.score) : ''"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new sp-ov-diff-excluded-tag">excluded</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Excluded required CFs — Phase 2c. Required CFs the user
+               explicitly opted out of via the lock-icon click. -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedRequiredCFs.length > 0">
+            <div class="sp-ov-cf-section-title">Excluded required CFs</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="r in _d.excludedRequiredCFs" :key="'diff-exreq-'+r.name+r.fromGroup">
+                <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="spToggleRequiredCF(r.trashId)"
+                          :aria-label="'Re-include required CF ' + r.name"
+                          x-tt="'Re-include this required CF'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="r.name"></span>
+                    <span class="sp-ov-cf-source" x-text="'· ' + r.fromGroup"></span>
+                  </span>
+                  <span class="sp-ov-diff-old" x-text="r.score != null ? ((r.score > 0 ? '+' : '') + r.score) : ''"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new sp-ov-diff-excluded-tag">excluded</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) === 0">
+            Nothing customized — this profile matches the TRaSH default exactly.
+          </div>
+        </section>
+
+        <!-- ===== General (basics) — modifications shown inline ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'general'">
+          <h3 class="sp-ov-card-title">General</h3>
+          <!-- Read-only mode: simple label/value grid. -->
+          <template x-if="!pdOverridesEnabled">
+            <div class="sp-ov-basics-grid">
+              <template x-for="b in spOverviewBasics()" :key="b.label">
+                <div class="sp-ov-basics-row" :class="b.modified ? 'sp-ov-modified' : ''">
+                  <span class="sp-ov-basics-lbl" x-text="b.label"></span>
+                  <span class="sp-ov-basics-val"
+                        x-text="b.value"
+                        x-tt="b.modified ? ('Profile default: ' + b.defaultValue) : ''"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <!-- Customize mode: inline editors per field, matches the
+               basics-strip controls at the top so the user can edit
+               here without scrolling. Mirrors basics-strip x-data
+               getters (_def/_val/_mod) but rendered as a card grid. -->
+          <template x-if="pdOverridesEnabled">
+            <div class="sp-ov-basics-grid">
+              <!-- Language (Radarr only) -->
+              <div class="sp-ov-basics-row" x-show="activeAppType === 'radarr'"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.language?.name || profileDetail?.detail?.profile?.language || 'Original'; },
+                             get _val() { return pdOverrides?.language?.value || this._def; },
+                             get _mod() { return this._val !== this._def; } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Language</span>
+                <select class="sp-basics-input"
+                        aria-label="Language"
+                        x-effect="populateSelectField($el, (instanceLanguages[profileDetail?.instance?.id] || [{name:'Original'},{name:'Any'}]).map(l => ({value: l.name, name: l.name})), pdOverrides.language.value)"
+                        @change="pdOverrides.language.value = $el.value"></select>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.language.value = _def"
+                        :aria-label="'Reset Language to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Min score -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.minFormatScore ?? 0; },
+                             get _val() { return pdOverrides?.minFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Min score</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Min score"
+                       @change="pdOverrides.minFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.minFormatScore.value = _def"
+                        :aria-label="'Reset Min score to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Min upgrade -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1; },
+                             get _val() { return pdOverrides?.minUpgradeFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Min upgrade</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Min upgrade score"
+                       @change="pdOverrides.minUpgradeFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.minUpgradeFormatScore.value = _def"
+                        :aria-label="'Reset Min upgrade to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Cutoff score -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000; },
+                             get _val() { return pdOverrides?.cutoffFormatScore?.value ?? this._def; },
+                             get _mod() { return Number(this._val) !== Number(this._def); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Cutoff score</span>
+                <input type="number" class="sp-basics-input sp-basics-input-num"
+                       :value="_val"
+                       aria-label="Cutoff score"
+                       @change="pdOverrides.cutoffFormatScore.value = Number($el.value)">
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.cutoffFormatScore.value = _def"
+                        :aria-label="'Reset Cutoff score to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+              <!-- Upgrades -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return !!(profileDetail?.detail?.profile?.upgradeAllowed); },
+                             get _val() { return pdOverrides?.upgradeAllowed?.value ?? this._def; },
+                             get _mod() { return !!this._val !== !!this._def; } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Upgrades</span>
+                <label class="toggle toggle-sm sp-basics-toggle" @click.stop>
+                  <input type="checkbox" :checked="_val" aria-label="Upgrades allowed" @change="pdOverrides.upgradeAllowed.value = $el.checked">
+                  <span class="slider"></span>
+                </label>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.upgradeAllowed.value = _def"
+                        :aria-label="'Reset Upgrades to ' + (_def ? 'On' : 'Off')"
+                        x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
+              </div>
+              <!-- Cutoff quality -->
+              <div class="sp-ov-basics-row"
+                   x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoff || ''; },
+                             get _val() { return pdOverrides?.cutoffQuality || this._def; },
+                             get _mod() { return this._val !== this._def && this._val !== ''; },
+                             get _opts() { const items = qualityStructure?.length ? qualityStructure : (profileDetail?.detail?.profile?.items || []); return items.filter(i => i.allowed).map(i => i.name || i.quality?.name || '').filter(n => n); } }"
+                   :class="_mod ? 'sp-ov-modified' : ''">
+                <span class="sp-ov-basics-lbl">Cutoff quality</span>
+                <select class="sp-basics-input" aria-label="Cutoff quality" @change="pdOverrides.cutoffQuality = $el.value">
+                  <template x-for="opt in _opts" :key="opt">
+                    <option :value="opt" :selected="opt === _val" x-text="opt"></option>
+                  </template>
+                </select>
+                <button class="sp-basics-reset" x-show="_mod"
+                        @click="pdOverrides.cutoffQuality = _def"
+                        :aria-label="'Reset Cutoff quality to ' + _def"
+                        x-tt="'Reset to ' + _def">&#8634;</button>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <!-- ===== Quality items =====
+             Two-level rendering: top-level entries are either single
+             qualities (just a chip) or groups (chip + nested member
+             chips). Lets the user see at a glance which qualities are
+             grouped together (e.g. WEB-2160p containing WEBDL-2160p +
+             WEBRip-2160p) without having to open the Quality items
+             editor. -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'quality'"
+                 x-data="{ get _qChanges() { return pdOverrideSummary().quality; } }">
+          <h3 class="sp-ov-card-title">
+            Quality items
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewQualities().length + ')'"></span>
+            <template x-if="pdOverridesEnabled">
+              <button class="sp-basics-edit-icon" style="margin-left:8px"
+                      @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
+                      x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                      aria-label="Edit quality items">&#9998; Edit</button>
+            </template>
+            <template x-if="pdOverridesEnabled && _qChanges > 0">
+              <button class="sp-basics-reset" style="margin-left:6px"
+                      @click="qualityStructure = []; qualityOverrides = {};"
+                      :aria-label="'Reset ' + _qChanges + ' quality change' + (_qChanges === 1 ? '' : 's') + ' to profile default'"
+                      x-tt="'Reset every quality change (' + _qChanges + ') back to the profile default.'">&#8634;</button>
+            </template>
+            <template x-if="pdOverridesEnabled && _qChanges > 0">
+              <span class="sp-ov-card-count" style="color:var(--accent-orange);margin-left:6px"
+                    x-text="_qChanges + ' change' + (_qChanges === 1 ? '' : 's')"></span>
+            </template>
+          </h3>
+          <!-- Chip list — click anywhere on the area opens the editor
+               when Customize is on, so users can change qualities
+               without finding the small pencil button. -->
+          <div class="sp-ov-quality-list"
+               :class="pdOverridesEnabled ? 'sp-ov-quality-list-editable' : ''"
+               @click="pdOverridesEnabled ? (qualityEditorTarget = 'edit', !qualityStructure.length && qsInitFromProfile(), pbEnsureQualityIds(), pb.qualityEditorOpen = true) : null"
+               x-tt="pdOverridesEnabled ? 'Click to open the Quality Items editor.' : ''">
+            <template x-for="q in spOverviewQualities()" :key="q.name">
+              <span class="sp-ov-quality-chip"
+                    :class="q.isGroup ? 'is-group' : ''"
+                    x-tt="q.isGroup ? ('Group · contains ' + q.members.join(', ')) : ''">
+                <span x-text="q.name"></span>
+                <template x-if="q.isGroup">
+                  <span class="sp-ov-quality-group-marker" aria-hidden="true">▾</span>
+                </template>
+              </span>
+            </template>
+          </div>
+        </section>
+
+        <!-- ===== All active CF — every CF that will sync =====
+             Flat list by default — single sortable table with clickable
+             column headers. "Show CF Groups" toggle (persisted via
+             localStorage) restores the section-grouped rendering. -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'all-cf'">
+          <h3 class="sp-ov-card-title">
+            All active Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewEnabledCFs().reduce((n, s) => n + s.cfs.length, 0) + ' total)'"></span>
+            <label class="sp-ov-group-toggle">
+              <input type="checkbox" :checked="spOverviewGroupCFs" @change="spSetOverviewGroup($event.target.checked)">
+              Show CF Groups
+            </label>
+          </h3>
+          {{template "_sp-overview-cf-header" .}}
+          <template x-if="!spOverviewGroupCFs">
+            <div class="sp-ov-cf-list">
+              <template x-for="cf in spOverviewFlatCFs(null)" :key="'flat-all-'+cf.trashId">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <template x-if="!pdOverridesEnabled">
+                    <span class="sp-ov-cf-score"
+                          :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
+                          x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''"
+                          x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit">
+                      <template x-if="cf._score.isOverridden">
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="spOverviewGroupCFs">
+            <div>
+              <template x-for="section in spOverviewEnabledCFs()" :key="'ov-all-'+section.source">
+                <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+                  <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+                  <div class="sp-ov-cf-list">
+                    <template x-for="cf in section.cfs" :key="'grp-all-'+cf.trashId">
+                      <div class="sp-ov-cf-row">
+                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <template x-if="!pdOverridesEnabled">
+                          <span class="sp-ov-cf-score"
+                                :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
+                                x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''"
+                                x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                        </template>
+                        <template x-if="pdOverridesEnabled">
+                          <div class="sp-cf-score-edit">
+                            <template x-if="cf._score.isOverridden">
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                            </template>
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewEnabledCFs().length === 0">No CFs enabled.</div>
+        </section>
+
+        <!-- ===== Optional CF — only non-required CFs from in-profile groups ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'optional-cf'">
+          <h3 class="sp-ov-card-title">
+            Optional Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewFlatCFs('optional-in-profile').length + ' enabled)'"></span>
+            <label class="sp-ov-group-toggle">
+              <input type="checkbox" :checked="spOverviewGroupCFs" @change="spSetOverviewGroup($event.target.checked)">
+              Show CF Groups
+            </label>
+          </h3>
+          <p class="sp-ov-section-hint">Non-required CFs you've activated within in-profile groups. Required CFs sync as a unit with their group — see "All active CF" for the full picture.</p>
+          {{template "_sp-overview-cf-header" .}}
+          <template x-if="!spOverviewGroupCFs">
+            <div class="sp-ov-cf-list">
+              <template x-for="cf in spOverviewFlatCFs('optional-in-profile')" :key="'flat-opt-'+cf.trashId">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <template x-if="!pdOverridesEnabled">
+                    <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit">
+                      <template x-if="cf._score.isOverridden">
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="spOverviewGroupCFs">
+            <div>
+              <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'in-profile' && s.cfs.some(cf => !cf._isRequired))" :key="'ov-opt-'+section.source">
+                <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+                  <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+                  <div class="sp-ov-cf-list">
+                    <template x-for="cf in section.cfs.filter(c => !c._isRequired)" :key="cf.trashId">
+                      <div class="sp-ov-cf-row">
+                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <template x-if="!pdOverridesEnabled">
+                          <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                        </template>
+                        <template x-if="pdOverridesEnabled">
+                          <div class="sp-cf-score-edit">
+                            <template x-if="cf._score.isOverridden">
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                            </template>
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewFlatCFs('optional-in-profile').length === 0">No optional CFs activated.</div>
+        </section>
+
+        <!-- ===== Additional CF — opt-in groups outside the profile ===== -->
+        <section class="sp-ov-card" x-show="spOverviewSection === 'additional-cf'">
+          <h3 class="sp-ov-card-title">
+            Additional Custom Formats
+            <span class="sp-ov-card-count" x-text="'(' + spOverviewFlatCFs('additional').length + ' enabled)'"></span>
+            <label class="sp-ov-group-toggle">
+              <input type="checkbox" :checked="spOverviewGroupCFs" @change="spSetOverviewGroup($event.target.checked)">
+              Show CF Groups
+            </label>
+          </h3>
+          <p class="sp-ov-section-hint">Groups you've opted into that aren't part of this profile's defaults. Available via the "Additional CF" tab when Customize is on.</p>
+          {{template "_sp-overview-cf-header" .}}
+          <template x-if="!spOverviewGroupCFs">
+            <div class="sp-ov-cf-list">
+              <template x-for="cf in spOverviewFlatCFs('additional')" :key="'flat-add-'+cf.trashId">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <template x-if="!pdOverridesEnabled">
+                    <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit">
+                      <template x-if="cf._score.isOverridden">
+                        <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="spOverviewGroupCFs">
+            <div>
+              <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'additional')" :key="'ov-add-'+section.source">
+                <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
+                  <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+                  <div class="sp-ov-cf-list">
+                    <template x-for="cf in section.cfs" :key="cf.trashId">
+                      <div class="sp-ov-cf-row">
+                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <template x-if="!pdOverridesEnabled">
+                          <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
+                        </template>
+                        <template x-if="pdOverridesEnabled">
+                          <div class="sp-cf-score-edit">
+                            <template x-if="cf._score.isOverridden">
+                              <button class="sp-basics-reset sp-cf-score-reset"
+                                @click="pdResetCFScore(cf.trashId)"
+                                :aria-label="'Reset ' + cf.name + ' score to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)"
+                                x-tt="'Reset to ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)">&#8634;</button>
+                            </template>
+                            <input type="number" class="sp-cf-score-input"
+                             :value="cf._score.effective"
+                             :aria-label="'Score for ' + cf.name"
+                             @change="spApplyCFScore(cf.trashId, $el.value, cf._score.original)">
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div class="sp-ov-empty" x-show="spOverviewFlatCFs('additional').length === 0">No additional CFs activated.</div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ===== Additional CF tab (gated behind Customize) =====
+         Driven by extraCFGroups — TRaSH cf-groups that are NOT part of
+         this profile's quality_profiles.include map, i.e. add-on groups
+         users can opt into beyond what the profile pulls in by default.
+         Section grouping ("STREAMING SERVICES", "HDR FORMATS") makes the
+         long list scannable. -->
+    <div class="sp-body" x-show="spActiveTab === 'additional' && pdOverridesEnabled"
+         x-effect="if (spActiveTab === 'additional' && pdOverridesEnabled && (extraCFGroups || []).length === 0 && profileDetail?.instance?.type) loadExtraCFList()">
+      <nav class="sp-sub-nav">
+        <!-- Pre-filter the sub-nav to groups with at least one unique CF
+             (a CF whose trashId isn't already in any profile-default
+             group). Hides Golden Rule HD when UHD is active (identical
+             CFs). Filter logic in spAdditionalGroupCFs walks
+             profileDetail.detail.trashGroups + formatItemNames once
+             per render — structural overlap is the only criterion,
+             active/inactive state of the profile-default group is
+             irrelevant to whether an Additional group's CFs are
+             "already in the profile". -->
+        <template x-for="section in spGroupBySection(spAdditionalCFGroups().filter(g => spAdditionalGroupCFs(g).length > 0))" :key="'add-'+section.section">
+          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
+            <div class="sp-sub-nav-section" x-text="section.section"></div>
+            <template x-for="g in section.items" :key="g.name">
+              <!-- Additional CF tab uses spAdditionalGroupActiveCount
+                   so the "inactive" dim only lifts when the user has
+                   opted into one of THIS group's UNIQUE CFs (not CFs
+                   already active via a profile-default group). -->
+              <button class="sp-sub-nav-item"
+                      :class="{ active: spActiveGroup === g.name, inactive: spAdditionalGroupActiveCount(g) === 0 }"
+                      @click="spActiveGroup = g.name">
+                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                <span class="sp-sub-nav-count" x-text="spAdditionalGroupCFs(g).length"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </nav>
+      <main class="sp-content">
+        <!-- Lazy-mount: same x-if pattern as the Profile default
+             group panes above. Without this Alpine mounts every
+             Additional CF group's content into DOM up front. -->
+        <template x-for="g in spAdditionalCFGroups()" :key="g.name">
+        <template x-if="spActiveGroup === g.name && spAdditionalGroupCFs(g).length > 0">
+          <div x-data="{
+                 get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
+                 get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }
+               }">
+            <h2 class="sp-content-title">
+              <div class="sp-content-title-name">
+                <template x-if="_section">
+                  <span class="sp-content-section" x-text="_section + ' › '"></span>
+                </template>
+                <span x-text="_shortName"></span>
+                <span class="sp-group-badges">
+                  <span class="sp-badge" x-show="g.exclusive">pick one</span>
+                </span>
+              </div>
+            </h2>
+            <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
+            <p class="sp-content-sub" x-show="!g.trashDescription">Optional CFs you can add to this profile. Toggle individual entries below.</p>
+
+            <!-- Mass-toggle for the whole group — mirrors the Profile
+                 default tab's "All optional CFs" action row. Renders
+                 only when the group has 2+ CFs so it doesn't add noise
+                 for single-CF groups (those have their own row toggle). -->
+            <template x-if="spAdditionalGroupCFs(g).length >= 2">
+              <div class="sp-action-rows">
+                <label class="sp-action-row toggle-row">
+                  <span class="toggle toggle-sm"
+                        x-tt="'Toggle every CF in this group on or off at once.'"
+                        @click.stop>
+                    <input type="checkbox"
+                           :checked="spAdditionalGroupCFs(g).every(cf => !!selectedOptionalCFs[cf.trashId])"
+                           @change="(() => {
+                             const enabling = $event.target.checked;
+                             for (const cf of spAdditionalGroupCFs(g)) {
+                               const on = !!selectedOptionalCFs[cf.trashId];
+                               if (enabling !== on) toggleOptionalCF(cf.trashId);
+                             }
+                           })()">
+                    <span class="slider"></span>
+                  </span>
+                  <span class="sp-action-label">All CFs in this group</span>
+                  <span class="sp-action-count"
+                        x-text="(() => {
+                          const cfs = spAdditionalGroupCFs(g);
+                          const on = cfs.filter(cf => !!selectedOptionalCFs[cf.trashId]).length;
+                          return on + ' of ' + cfs.length + ' enabled';
+                        })()"></span>
+                </label>
+              </div>
+            </template>
+
+            <div class="sp-cf-list">
+              <!-- Use spAdditionalGroupCFs(g) so CFs that are already
+                   active via another group don't appear here (Unwanted
+                   French shows only the CFs not already in Default
+                   Unwanted's active set). -->
+              <!-- CFs in extraCFGroups carry `trashScores` (the full
+                   profile-context map) rather than a resolved cf.score.
+                   resolveCFDefaultScore() picks the right value via
+                   profile's scoreCtx, with a formatItems / trashGroups
+                   fast-path for CFs that also appear in this profile. -->
+              <template x-for="cf in spAdditionalGroupCFs(g)" :key="cf.trashId">
+                <div class="sp-cf-row"
+                     x-data="{
+                       get _def() { const r = resolveCFDefaultScore(cf.trashId); return (typeof r === 'number') ? r : 0; },
+                       get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; },
+                       get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; }
+                     }">
+                  <label class="toggle toggle-sm" @click.stop>
+                    <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]" @change="selectedOptionalCFs = { ...selectedOptionalCFs, [cf.trashId]: $event.target.checked }">
+                    <span class="slider"></span>
+                  </label>
+                  <div class="sp-cf-name" x-text="cf.name"></div>
+                  <template x-if="!pdOverridesEnabled">
+                    <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
+                  </template>
+                  <template x-if="pdOverridesEnabled">
+                    <div class="sp-cf-score-edit">
+                      <template x-if="_mod">
+                        <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
+                      </template>
+                      <input type="number" class="sp-cf-score-input" :value="_eff" @change="spApplyCFScore(cf.trashId, $el.value, _def)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        </template>
+      </main>
+    </div>
+
+  </div>
+{{end}}
+
+{{/*
+  Shared sortable column-header for the Overview CF lists.
+  Used by All active CF / Optional CF / Additional CF — all three
+  show the same two columns (Custom Format + Score) and bind to the
+  same spOverviewSort state, so the markup is identical. Reading
+  the active-class / arrow expressions from spOverviewSort keeps
+  the partial self-contained.
+*/}}
+{{define "_sp-overview-cf-header"}}
+  <div class="sp-ov-cf-row sp-ov-cf-header" role="row">
+    <button class="sp-ov-cf-header-cell"
+            :class="(spOverviewSort === 'name-asc' || spOverviewSort === 'name-desc') ? 'active' : ''"
+            :aria-sort="spOverviewSort === 'name-asc' ? 'ascending' : spOverviewSort === 'name-desc' ? 'descending' : 'none'"
+            @click="spToggleOverviewSort('name')">
+      Custom Format <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'name-asc' ? '▲' : spOverviewSort === 'name-desc' ? '▼' : ''"></span>
+    </button>
+    <button class="sp-ov-cf-header-cell sp-ov-cf-header-score"
+            :class="(spOverviewSort === 'score-desc' || spOverviewSort === 'score-asc') ? 'active' : ''"
+            :aria-sort="spOverviewSort === 'score-asc' ? 'ascending' : spOverviewSort === 'score-desc' ? 'descending' : 'none'"
+            @click="spToggleOverviewSort('score')">
+      Score <span class="sp-ov-cf-header-arrow" x-text="spOverviewSort === 'score-desc' ? '▼' : spOverviewSort === 'score-asc' ? '▲' : ''"></span>
+    </button>
+  </div>
+{{end}}

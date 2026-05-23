@@ -1,54 +1,290 @@
-  /* Top nav */
-  .topnav { display: flex; align-items: center; background: var(--bg-card); border-bottom: 1px solid var(--border-subtle); padding: 0 24px; height: 56px; }
-  .topnav .logo { font-size: 18px; font-weight: 700; color: var(--accent-blue); margin-right: 32px; letter-spacing: -0.5px; }
-  .topnav .tabs { display: flex; gap: 0; height: 100%; }
-  .topnav .tab { padding: 0 20px; height: 100%; display: flex; align-items: center; color: var(--text-soft); cursor: pointer; border-bottom: 2px solid transparent; font-size: 15px; font-weight: 500; transition: all 0.15s; user-select: none; text-decoration: none; }
-  .topnav .tab:hover { color: var(--text-primary); }
-  .topnav .tab.active { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
-  /* Inset focus ring so it sits inside the 56px topnav cell (default
-     outline-offset would clip against the bottom border). */
-  .topnav .tab:focus-visible { outline-offset: -2px; }
-  .topnav .badge { background: var(--border-subtle); color: var(--text-muted); font-size:13px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
-  .topnav .tab.active .badge { background: var(--accent-blue-muted); color: var(--accent-blue); }
-  .topnav .spacer { flex: 1; }
-  .topnav .sync-status { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-  .topnav .sync-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
-  .topnav .sync-status .dot.stale { background: var(--accent-orange); }
-  .topnav .sync-status .dot.none { background: var(--text-secondary); }
-  .topnav .trash-sync-button { gap: 4px; }
+  /* ========================================================================
+     v3 Top Navigation — opt-in alternative to the sidebar via
+     Settings → Display → Navigation style. Uses the same --app-color and
+     --app-glow cascade as the sidebar so Radarr/Sonarr theming is
+     identical. Sticky at viewport top; horizontal bar with logo, app
+     switcher, main tabs, TRaSH sync, and user chip. Sub-tab strip below
+     the bar carries the Profiles 4-way split (TRaSH Profiles | Sync
+     Rules | History | Compare).
+     ======================================================================== */
+  .topnav {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky; top: 0; z-index: 50;
+  }
+  /* Top accent stripe — color fades from --app-color across to transparent,
+     same gesture as the sidebar accent strip. */
+  .topnav-strip {
+    height: 3px;
+    background: linear-gradient(90deg, var(--app-color), transparent 70%);
+  }
+  /* Two rows + optional sub-tab row. Splits utility shell (brand, TRaSH,
+     admin) from navigation (app switcher, section tabs) so each gets full
+     horizontal room — matches *arr layout. */
+  .topnav-row-utility {
+    display: flex; align-items: center;
+    padding: 0 16px;
+    min-height: 40px;
+    gap: 12px;
+    border-bottom: 1px solid var(--border-muted);
+    /* Allow wrap on narrow viewports so admin chip + TRaSH status don't
+       clip past the right edge. Each child still flex-shrink: 0 so they
+       stay readable; wrap moves them onto a second line instead of
+       hiding them. */
+    flex-wrap: wrap;
+  }
+  /* Make the TRaSH label string able to ellipsis if needed (full text
+     stays available in the dropdown). */
+  .topnav-trash { min-width: 0; }
+  .topnav-row-nav {
+    display: flex; align-items: stretch;
+    padding: 0 16px;
+    height: 44px;
+    gap: 14px;
+  }
+  .topnav-row-spacer { flex: 1; min-width: 8px; }
 
-  /* Changelog dropdown */
-  .changelog-dropdown { position: absolute; top: calc(100% + 6px); right: 0; width: 500px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: 0 8px 24px var(--alpha-shadow); z-index: 200; max-height: 420px; overflow-y: auto; }
+  /* Brand block */
+  .topnav-logo {
+    display: flex; align-items: center; gap: 8px;
+    text-decoration: none;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+  .topnav-logo-img { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; object-fit: cover; }
+  .topnav-logo-name { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .topnav-logo-version { font-size: 11.5px; color: var(--text-muted); font-weight: 400; }
+
+  /* App switcher pill — same idea as the sidebar pill but laid out
+     horizontally. Active state uses --app-color background + glow ring. */
+  .topnav-app-pill {
+    display: inline-flex; align-items: stretch;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-muted);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .topnav-app-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+    transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  }
+  .topnav-app-btn:hover { color: var(--text-primary); }
+  .topnav-app-btn.active {
+    color: var(--app-color);
+    background: var(--app-glow);
+    box-shadow: 0 0 0 1px var(--app-color), 0 0 8px var(--app-glow);
+  }
+  .topnav-app-logo { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; }
+  .topnav-app-num {
+    background: var(--bg-muted); color: var(--text-muted);
+    font-size: 10.5px; font-weight: 500;
+    padding: 0 5px; border-radius: 8px; line-height: 1.5;
+  }
+  .topnav-app-btn.active .topnav-app-num {
+    background: var(--app-color); color: var(--bg-card);
+  }
+
+  /* Main section tabs */
+  .topnav-tabs { display: flex; align-items: stretch; height: 100%; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+  .topnav-tab {
+    padding: 0 14px;
+    display: flex; align-items: center;
+    color: var(--text-soft);
+    border-bottom: 2px solid transparent;
+    font-size: 14px; font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .topnav-tab:hover { color: var(--text-primary); }
+  .topnav-tab.active {
+    color: var(--app-color);
+    border-bottom-color: var(--app-color);
+  }
+  /* Focus ring sits outside the cell so the 2px app-color underline on
+     active tabs isn't covered by the ring's bottom segment. */
+  .topnav-tab:focus-visible { outline-offset: 0; }
+
+  /* TRaSH sync block — compact: dot + relative time + Pull. Full info
+     (commit, next pull, changelog) lives in the dropdown opened by
+     clicking the time button. */
+  .topnav-trash {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .topnav-trash-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent-green); flex-shrink: 0;
+  }
+  .topnav-trash-dot.stale { background: var(--accent-orange); }
+  /* "No data" indicator dot uses --text-muted instead of
+     --text-secondary so the dot stays visible against light bg after
+     the light-mode secondary darkening (--text-secondary went to a
+     less-prominent #57606a). --text-muted is solid grey in both themes. */
+  .topnav-trash-dot.none { background: var(--text-muted); }
+  .topnav-trash-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 0; padding: 0;
+    color: var(--text-secondary);
+    font-size: 12px; font-family: inherit;
+    cursor: pointer;
+  }
+  .topnav-trash-btn:hover { color: var(--app-color); }
+  .topnav-trash-label { color: var(--text-secondary); }
+  .topnav-trash-commit { color: var(--text-muted); font-size: 11.5px; margin-left: 4px; }
+  .topnav-trash-chev { color: var(--text-muted); font-size: 11px; margin-left: 2px; transition: transform 0.2s; display: inline-block; }
+  .topnav-trash-empty { font-size: 12px; color: var(--text-muted); }
+  .topnav-trash-next { color: var(--text-muted); font-size: 11.5px; margin-left: 4px; }
+  .topnav-trash-pull { margin-left: 6px; padding: 2px 10px; font-size: 11px; }
+
+  /* User chip — dropdown trigger + popover. Mirrors the app-banner
+     pattern so both nav modes carry the same shape: icon + username +
+     chevron in the bar, Logout button revealed in a popover on click. */
+  .topnav-user { display: inline-flex; align-items: center; font-size: 12px; flex-shrink: 0; position: relative; }
+  .topnav-user-wrap { position: relative; display: inline-flex; align-items: center; }
+  .topnav-user-trigger {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-muted);
+    border-radius: 16px;
+    color: var(--text-secondary);
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .topnav-user-trigger:hover,
+  .topnav-user-wrap.open .topnav-user-trigger {
+    border-color: var(--app-color);
+    color: var(--text-primary);
+  }
+  .topnav-user-icon { color: var(--text-muted); transition: color 0.12s; }
+  .topnav-user-trigger:hover .topnav-user-icon,
+  .topnav-user-wrap.open .topnav-user-icon { color: var(--app-color); }
+  .topnav-user-name {
+    color: inherit;
+    max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .topnav-user-chev { color: var(--text-muted); font-size: 10px; transition: transform 0.18s; display: inline-block; }
+  .topnav-user-chev.flip { transform: rotate(180deg); }
+  .topnav-user-menu {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    min-width: 140px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px var(--alpha-shadow);
+    /* Stays below modal overlay (z-index 100) so an open modal isn't
+       partially obscured by a leftover dropdown. Sits above sticky
+       topnav (z-index 50). */
+    z-index: 80; padding: 4px;
+  }
+  .topnav-user-logout-form { margin: 0; }
+  .topnav-user-logout {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent; border: 0; border-radius: 4px;
+    color: var(--text-body);
+    font: inherit; font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .topnav-user-logout:hover { background: var(--bg-elevated); color: var(--accent-red); }
+  .topnav-user-logout svg { color: var(--text-muted); flex-shrink: 0; }
+  .topnav-user-logout:hover svg { color: var(--accent-red); }
+  .topnav-user-local {
+    background: var(--fill-blue-dark); color: var(--accent-blue);
+    padding: 3px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 500; letter-spacing: 0.3px;
+    border: 1px solid var(--fill-blue-dark);
+  }
+
+  /* Sub-tab strip — only on Profiles. Below the main bar, full-width
+     border-bottom so tabs visually anchor under the parent section. */
+  .topnav-subnav {
+    display: flex; align-items: stretch;
+    padding: 0 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+    height: 38px;
+    overflow-x: auto; scrollbar-width: thin;
+  }
+  .topnav-subtab {
+    padding: 0 14px;
+    display: flex; align-items: center;
+    color: var(--text-soft);
+    border-bottom: 2px solid transparent;
+    font-size: 13px; font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .topnav-subtab:hover { color: var(--text-primary); }
+  .topnav-subtab.active {
+    color: var(--app-color);
+    border-bottom-color: var(--app-color);
+  }
+  .topnav-subtab:focus-visible { outline-offset: -2px; }
+
+  /* Changelog dropdown — shared across modes; anchored to its trigger
+     via position:relative on .topnav-trash. */
+  .changelog-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    width: 500px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--alpha-shadow);
+    /* Same layering as topnav-user-menu — below modal overlay (100),
+       above sticky topnav (50). */
+    z-index: 80; max-height: 420px; overflow-y: auto;
+  }
+
+  /* App switcher pill sits inside the nav row (44px) but should stay
+     compact — center it instead of stretching to the row height. */
+  .topnav-row-nav .topnav-app-pill { align-self: center; }
 
   /* Responsive topnav */
   @media (max-width: 1200px) {
-    .topnav .tab { padding: 0 12px; font-size: 14px; }
-    .topnav .logo { margin-right: 16px; }
+    .topnav-tab { padding: 0 10px; font-size: 13px; }
+    .topnav-row-utility { gap: 10px; padding: 0 12px; }
+    .topnav-row-nav { gap: 10px; padding: 0 12px; }
   }
   @media (max-width: 1000px) {
-    .topnav .tab { padding: 0 8px; font-size: 13px; }
-    .topnav .sync-label { display: none; }
-    .topnav .sync-status { font-size: 11px; }
+    .topnav-tab { padding: 0 8px; font-size: 12.5px; }
+    .topnav-logo-version { display: none; }
     .changelog-dropdown { width: 400px; }
   }
   @media (max-width: 850px) {
-    .topnav { height: auto; flex-wrap: wrap; padding: 10px 16px; }
-    .topnav .tabs { order: 3; width: 100%; height: 44px; margin-top: 8px; border-top: 1px solid var(--border-subtle); overflow-x: auto; justify-content: flex-start; }
-    .topnav .tab { flex-shrink: 0; }
-    .topnav .spacer { display: none; }
-    .topnav .sync-status { order: 2; margin-left: auto; }
-    .changelog-dropdown { position: fixed; top: 120px; left: 16px; right: 16px; max-height: 60vh; }
-    .sync-commit, .sync-next { display: none; }
+    .topnav-app-name { display: none; }
+    .changelog-dropdown { position: fixed; top: 120px; left: 16px; right: 16px; width: auto; max-height: 60vh; }
   }
   @media (max-width: 600px) {
-    .topnav .logo { font-size: 16px; }
-    .topnav .logo img { width: 24px !important; height: 24px !important; }
+    .topnav-logo-name { font-size: 14px; }
+    .topnav-logo-img { width: 24px; height: 24px; }
+    .topnav-user-name { display: none; }
   }
 
   /* Page layout — global default. Scoring Sandbox overrides this inline with
      style="max-width:none" because it has wide tabular results that benefit
      from the full viewport. */
-  .page { padding: 24px; max-width: 1250px; margin: 0 auto; }
+  /* v3 page container. Default: centered with 1500px max-width — gives
+     8-column tables enough room without stretching card-based sections.
+     User can switch to left-anchored via Settings → Display; the
+     [data-content-align="left"] override below drops the auto-margin. */
+  .page { padding: 24px; max-width: 1500px; margin: 0 auto; }
+  [data-content-align="left"] .page { margin: 0; }
 
   /* Section header */
   .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

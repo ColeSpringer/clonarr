@@ -35,28 +35,59 @@
             <span class="spinner"></span> Loading custom formats...
           </div>
 
-          <!-- CF list with checkboxes -->
+          <!-- CF list with filters + checkboxes -->
           <div x-show="importCFList.length > 0 && !importCFLoading">
+            <!-- Filter + selection strip. "Hide guide CFs" is the
+                 only filter beyond search — already-imported entries
+                 stay visible (greyed + un-selectable) so the user can
+                 see what's already been brought over. Select all /
+                 Deselect all operate on what's currently visible. -->
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:8px;padding:8px 10px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:4px">
+              <input type="search" class="input" style="flex:1;min-width:160px;font-size:12px;padding:4px 8px"
+                     x-model="importCFFilter"
+                     placeholder="Search by name…"
+                     aria-label="Filter CFs by name">
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-secondary);white-space:nowrap">
+                <input type="checkbox" x-model="importCFHideGuide">
+                Hide guide CFs
+              </label>
+            </div>
+
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
               <div style="font-size:12px;color:var(--text-muted)">
-                <span x-text="importCFList.length"></span> CFs found
+                <span x-text="importCFListFiltered().length"></span>
+                <span x-show="importCFListFiltered().length !== importCFList.length"
+                      x-text="' of ' + importCFList.length"></span>
+                CFs shown
                 (<span x-text="importCFList.filter(c => c.selected).length"></span> selected)
               </div>
-              <div style="display:flex;gap:8px">
-                <button class="btn btn-sm" @click="importCFList.forEach(c => { if (!c.exists) c.selected = true })">Select All</button>
-                <button class="btn btn-sm" @click="importCFList.forEach(c => c.selected = false)">Deselect All</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-sm"
+                        @click="importCFListFiltered().forEach(c => { if (!c.exists) c.selected = true }); importCFList = [...importCFList]"
+                        x-tt="'Select every visible CF that hasn\'t already been imported.'">Select all</button>
+                <button class="btn btn-sm"
+                        @click="importCFListFiltered().forEach(c => c.selected = false); importCFList = [...importCFList]"
+                        x-tt="'Clear selections on every visible CF.'">Deselect all</button>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;max-height:300px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:6px;padding:8px 12px">
-              <template x-for="cf in importCFList" :key="cf.name">
-                <label style="display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;font-size:13px;min-width:0"
-                       :style="cf.exists ? 'opacity:0.4' : ''">
+            <template x-if="importCFListFiltered().length === 0">
+              <div style="font-size:12px;color:var(--text-muted);padding:16px;text-align:center;border:1px dashed var(--border-subtle);border-radius:6px">
+                No CFs match the current filters. Try clearing the search or unchecking <strong>Hide guide CFs</strong>.
+              </div>
+            </template>
+            <div x-show="importCFListFiltered().length > 0"
+                 style="display:flex;flex-direction:column;max-height:340px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:6px">
+              <template x-for="cf in importCFListFiltered()" :key="cf.name">
+                <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:13px;min-width:0;border-bottom:1px solid var(--border-subtle)"
+                       :style="{ opacity: cf.exists ? '0.45' : '1' }">
                   <input type="checkbox" x-model="cf.selected" :disabled="cf.exists" style="flex-shrink:0">
                   <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" x-text="cf.name"
                         x-tt="cf.exists ? cf.name + ' (already imported)' : cf.name"></span>
+                  <span x-show="cf.exists"
+                        style="color:var(--text-muted);font-size:11px;flex-shrink:0">already imported</span>
                   <span x-show="cf.trashMatch && !cf.exists"
-                        x-tt="'Also in TRaSH guide — you can still import.'"
-                        style="background:var(--accent-orange-bg);color:var(--cat-hq-release-groups);border:1px solid var(--accent-orange);border-radius:3px;padding:0 5px;font-size:10px;font-weight:600;flex-shrink:0;cursor:help">
+                        x-tt="'This CF name matches one in the TRaSH guide. Likely managed by TRaSH already — importing creates a separate user-owned copy.'"
+                        style="background:var(--accent-orange-bg);color:var(--cat-hq-release-groups);border:1px solid var(--accent-orange);border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;flex-shrink:0;cursor:help">
                     ⚠ guide
                   </span>
                 </label>
@@ -106,7 +137,7 @@
 
       <!-- Result message -->
       <div x-show="importCFResult" style="margin-top:12px;font-size:12px;padding:8px 12px;border-radius:6px"
-           :style="importCFResult?.error ? 'background:var(--accent-red-bg);color:var(--accent-red)' : 'background:var(--accent-green-bg);color:var(--accent-green)'"
+           :style="{ background: importCFResult?.error ? 'var(--accent-red-bg)' : 'var(--accent-green-bg)', color: importCFResult?.error ? 'var(--accent-red)' : 'var(--accent-green)' }"
            x-text="importCFResult?.message"></div>
 
       <div class="modal-actions">

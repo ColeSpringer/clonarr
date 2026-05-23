@@ -1,0 +1,55 @@
+{{define "instance-edit-form"}}
+  <!-- Shared inline-edit form for Radarr / Sonarr instances (v3 Instances page).
+       Same form drives both "edit existing" and "add new" — distinguished only
+       by the editingInstance state (null = add). Form reads from instanceForm,
+       errors from instanceFormErrors, test result from modalTestResult. Single
+       root element so it can sit inside <template x-if> blocks. App-color
+       cascade comes from the wrapping v3-inst-card's inline-style. -->
+  <div class="inst-edit-form" style="padding:14px 16px 16px 16px;border-top:1px solid var(--border-muted)">
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-value">
+        <input class="input" style="width:260px" x-model="instanceForm.name" placeholder="e.g. Radarr HD"
+               :aria-invalid="!!instanceFormErrors.name">
+        <div class="field-error" x-show="instanceFormErrors.name" x-text="instanceFormErrors.name"></div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">URL</div>
+      <div class="setting-value">
+        <input class="input" style="width:340px" x-model="instanceForm.url" placeholder="http://radarr:7878" autocomplete="one-time-code"
+               :aria-invalid="!!instanceFormErrors.url">
+        <div class="field-error" x-show="instanceFormErrors.url" x-text="instanceFormErrors.url"></div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">API Key</div>
+      <div class="setting-value">
+        <input class="input" style="width:340px" x-model="instanceForm.apiKey"
+               :placeholder="editingInstance ? 'Leave empty to keep current key' : 'API key from Settings → General in the Arr UI'"
+               :type="editingInstance && !instanceForm.apiKey ? 'text' : 'password'" autocomplete="one-time-code"
+               :aria-invalid="!!instanceFormErrors.apiKey">
+        <div class="field-error" x-show="instanceFormErrors.apiKey" x-text="instanceFormErrors.apiKey"></div>
+        <div x-show="editingInstance && !instanceForm.apiKey" style="font-size:13px;color:var(--text-muted);margin-top:4px">API key is saved — leave empty to keep it, or enter a new one to replace it.</div>
+      </div>
+    </div>
+    <!-- Test result -->
+    <div x-show="modalTestResult !== null" style="margin-top:8px">
+      <template x-if="modalTestResult === 'testing'">
+        <div class="test-result" style="color:var(--accent-orange)"><span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span> Testing...</div>
+      </template>
+      <template x-if="modalTestResult && modalTestResult !== 'testing' && modalTestResult.connected">
+        <div class="test-result ok" x-text="'Connected — ' + modalTestResult.appName + ' v' + modalTestResult.version"></div>
+      </template>
+      <template x-if="modalTestResult && modalTestResult !== 'testing' && modalTestResult.connected === false">
+        <div class="test-result fail" x-text="'Failed: ' + (modalTestResult.error || 'Connection refused')"></div>
+      </template>
+    </div>
+    <div style="display:flex;gap:8px;padding-top:12px;margin-top:8px;border-top:1px solid var(--border-muted)">
+      <button class="btn btn-sm" @click="testConnectionInModal()" :disabled="!(instanceForm.url || '').trim() || (!editingInstance && !(instanceForm.apiKey || '').trim()) || modalTestResult === 'testing'">Test</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-sm" @click="cancelInlineEdit()">Cancel</button>
+      <button class="btn btn-sm btn-primary" @click="saveInstance()" x-text="editingInstance ? 'Save' : 'Add'"></button>
+    </div>
+  </div>
+{{end}}

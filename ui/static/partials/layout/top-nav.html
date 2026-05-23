@@ -1,141 +1,229 @@
 {{define "layout/top-nav"}}
-  <!-- Top Navigation -->
-  <div class="topnav">
-    <div class="logo"><img src="icons/clonarr.png?v={{.Version}}" alt="" style="width:28px;height:28px;border-radius:6px;vertical-align:middle;margin-right:8px">Clonarr</div>
-    <nav class="tabs" aria-label="Main">
-      <a class="tab" :class="{ active: currentSection === 'profiles' }" :href="navHref('profiles')" :aria-current="currentSection === 'profiles' ? 'page' : null">Profiles</a>
-      <a class="tab" :class="{ active: currentSection === 'custom-formats' }" :href="navHref('custom-formats')" :aria-current="currentSection === 'custom-formats' ? 'page' : null">Custom Formats</a>
-      <a class="tab" :class="{ active: currentSection === 'quality-size' }" :href="navHref('quality-size')" :aria-current="currentSection === 'quality-size' ? 'page' : null">Quality Definitions</a>
-      <a class="tab" :class="{ active: currentSection === 'naming' }" :href="navHref('naming')" :aria-current="currentSection === 'naming' ? 'page' : null">File Naming</a>
-      <a class="tab" :class="{ active: currentSection === 'maintenance' }" :href="navHref('maintenance')" :aria-current="currentSection === 'maintenance' ? 'page' : null">Maintenance</a>
-      <a class="tab" x-show="config.devMode" :class="{ active: currentSection === 'advanced' }" :href="navHref('advanced')" :aria-current="currentSection === 'advanced' ? 'page' : null">Advanced</a>
-      <a class="tab" :class="{ active: currentSection === 'settings' }" :href="navHref('settings')" :aria-current="currentSection === 'settings' ? 'page' : null">Settings</a>
-      <a class="tab" :class="{ active: currentSection === 'about' }" :href="navHref('about')" :aria-current="currentSection === 'about' ? 'page' : null">About</a>
-    </nav>
-    <div class="spacer"></div>
-    <div class="sync-status" style="position:relative"
-         @keydown.escape.window="if (showChangelog) { showChangelog = false; $nextTick(() => $refs.trashChangelogButton?.focus()) }">
-      <span class="dot" :class="{ stale: !trashStatus.cloned, none: !trashStatus.commitHash }"></span>
-      <template x-if="trashStatus.cloned">
-        <button type="button" class="inline-action trash-sync-button" @click="showChangelog = !showChangelog"
-                x-ref="trashChangelogButton"
-                :aria-expanded="showChangelog"
-                aria-controls="trash-changelog-dropdown"
-                style="color:inherit" x-tt="'Click for changelog'">
-          <span class="sync-label">TRaSH synced</span> <span x-text="formatSyncTime(trashStatus.lastPull)"></span>
-          <span class="sync-commit" x-show="trashStatus.commitHash" style="color:var(--text-muted);font-size:12px;margin-left:4px" x-text="trashStatus.commitHash"></span>
-          <span class="sync-next" x-show="trashStatus.nextPull"
-                style="color:var(--text-muted);font-size:12px;margin-left:6px"
-                x-text="'· ' + nextPullLabel()"></span>
-          <span style="color:var(--text-muted);font-size:12px;margin-left:2px;transition:transform 0.2s;display:inline-block"
-                :style="showChangelog ? 'transform:rotate(180deg)' : ''">&#9662;</span>
+  <!-- v3 Top Navigation — opt-in alternative to the sidebar (Settings →
+       Display → Navigation style). Two-row shell + optional sub-tab row,
+       matching Radarr/Sonarr layout: utility (brand + TRaSH + admin) on
+       top, navigation (app switcher + section tabs) on the second row,
+       and a sub-tab strip on the third row for Profiles / Media
+       Management. Picks up the same --app-color cascade as the sidebar
+       so Radarr/Sonarr theming is identical. -->
+  <div class="topnav" x-show="navStyle === 'topnav'" x-cloak>
+
+    <!-- Top accent stripe — color fades from --app-color across to
+         transparent, same gesture as the sidebar accent strip. -->
+    <div class="topnav-strip"></div>
+
+    <!-- Row 1: utility — brand, TRaSH status (compact), admin chip. -->
+    <div class="topnav-row-utility">
+      <a class="topnav-logo" :href="navHref('profiles')">
+        <img src="icons/clonarr.png?v={{.Version}}" alt="" class="topnav-logo-img">
+        <span class="topnav-logo-name">Clonarr</span>
+        <span class="topnav-logo-version" x-text="config.version ? 'v' + config.version : ''"></span>
+      </a>
+
+      <div class="topnav-row-spacer"></div>
+
+      <!-- TRaSH sync status — full label + relative time + commit hash,
+           same shape as the sidebar foot. Click anywhere in the button
+           opens the changelog dropdown. -->
+      <div class="topnav-trash" style="position:relative"
+           @keydown.escape.window="if (showChangelog) { showChangelog = false; $nextTick(() => $refs.trashChangelogButton?.focus()) }">
+        <span class="topnav-trash-dot" :class="{ stale: !trashStatus.cloned, none: !trashStatus.commitHash }"></span>
+        <template x-if="trashStatus.cloned">
+          <button type="button" class="topnav-trash-btn"
+                  @click="showChangelog = !showChangelog"
+                  x-ref="trashChangelogButton"
+                  :aria-expanded="showChangelog"
+                  aria-controls="trash-changelog-dropdown"
+                  x-tt="'Click for changelog'">
+            <span class="topnav-trash-label">TRaSH pulled</span>
+            <span x-text="formatSyncTime(trashStatus.lastPull)"></span>
+            <span class="topnav-trash-commit" x-show="trashStatus.commitHash" x-text="trashStatus.commitHash"></span>
+            <span class="topnav-trash-chev" :style="showChangelog ? 'transform:rotate(180deg)' : ''">&#9662;</span>
+          </button>
+        </template>
+        <template x-if="!trashStatus.cloned">
+          <span class="topnav-trash-empty">
+            TRaSH not pulled yet
+            <span x-show="trashStatus.nextPull" class="topnav-trash-next"
+                  x-text="'· ' + nextPullLabel()"></span>
+          </span>
+        </template>
+        <button class="btn btn-sm topnav-trash-pull" @click="pullTrash()" :disabled="pulling">
+          <span x-show="pulling" class="spinner"></span>
+          <span x-show="!pulling">Pull</span>
         </button>
-      </template>
-      <template x-if="!trashStatus.cloned">
-        <span>
-          TRaSH not synced
-          <span class="sync-next" x-show="trashStatus.nextPull"
-                style="color:var(--text-muted);font-size:12px;margin-left:6px"
-                x-text="'· ' + nextPullLabel()"></span>
-        </span>
-      </template>
-      <button class="btn btn-sm" @click="pullTrash()" :disabled="pulling" style="margin-left:8px">
-        <span x-show="pulling" class="spinner"></span>
-        <span x-show="!pulling">Pull</span>
-      </button>
 
-      <!-- Changelog dropdown -->
-      <div id="trash-changelog-dropdown" x-show="showChangelog" @click.outside="showChangelog = false" x-cloak class="changelog-dropdown">
-
-        <!-- Last pull diff -->
-        <template x-if="trashStatus.lastDiff">
-          <div>
-            <div style="padding:10px 16px 8px;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--bg-muted);display:flex;justify-content:space-between;align-items:center">
-              <span>Latest Update <span style="font-size:12px;color:var(--text-muted);font-weight:400" x-text="trashStatus.lastDiff.time ? formatSyncTime(trashStatus.lastDiff.time) : ''"></span></span>
-              <span style="font-size:12px;color:var(--text-muted);font-weight:400">
-                <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.prevCommit"
-                   target="_blank" rel="noopener"
-                   style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor"
-                   x-tt="'View commit on GitHub'"
-                   x-text="trashStatus.lastDiff.prevCommit"></a>
-                <span style="margin:0 4px">→</span>
-                <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.newCommit"
-                   target="_blank" rel="noopener"
-                   style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor"
-                   x-tt="'View commit on GitHub'"
-                   x-text="trashStatus.lastDiff.newCommit"></a>
-              </span>
-            </div>
-            <div style="padding:10px 16px;border-bottom:1px solid var(--border-subtle);font-size:12px;color:var(--text-body);white-space:pre-line;line-height:1.6"
-                 x-text="trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '')"></div>
-          </div>
-        </template>
-
-        <!-- TRaSH Changelog (updates.txt) -->
-        <div style="padding:10px 16px 8px;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--bg-muted);display:flex;justify-content:space-between;align-items:center">
-          TRaSH Changelog
-          <span style="font-size:12px;color:var(--text-muted);font-weight:400">from updates.txt</span>
-        </div>
-        <template x-if="!trashStatus.changelog || trashStatus.changelog.length === 0">
-          <div style="padding:16px;font-size:12px;color:var(--text-muted);text-align:center">No changelog available</div>
-        </template>
-        <template x-for="section in (trashStatus.changelog || [])" :key="section.date">
-          <div style="padding:10px 16px;border-bottom:1px solid var(--bg-muted)">
-            <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between">
-              <span x-text="formatChangelogDate(section.date)"></span>
-              <span style="color:var(--text-muted);font-weight:400" x-text="section.entries.length + (section.entries.length === 1 ? ' change' : ' changes')"></span>
-            </div>
-            <template x-for="entry in section.entries" :key="entry.pr || entry.msg">
-              <div style="display:flex;align-items:flex-start;gap:8px;padding:3px 0;font-size:12px;line-height:1.4">
-                <span style="font-size:12px;font-weight:600;padding:1px 6px;border-radius:3px;flex-shrink:0;margin-top:1px"
-                      :style="entry.type === 'feat' ? 'background:var(--badge-feat-bg);color:var(--accent-green)' : entry.type === 'fix' ? 'background:var(--accent-orange-bg);color:var(--accent-orange)' : 'background:var(--bg-panel);color:var(--accent-blue)'"
-                      x-text="entry.type"></span>
-                <span>
-                  <span style="color:var(--text-muted)" x-text="entry.scope + ':'"></span>
-                  <span style="color:var(--text-body)" x-text="entry.msg"></span>
-                  <a x-show="entry.pr" :href="'https://github.com/TRaSH-Guides/Guides/pull/' + entry.pr"
-                     target="_blank" rel="noopener" style="color:var(--text-muted);font-size:12px;text-decoration:none;margin-left:4px"
-                     @mouseenter="$el.style.color='var(--accent-blue)'" @mouseleave="$el.style.color='var(--text-muted)'"
-                     x-text="'#' + entry.pr"></a>
+        <!-- Changelog dropdown -->
+        <div id="trash-changelog-dropdown" x-show="showChangelog" @click.outside="showChangelog = false" x-cloak class="changelog-dropdown">
+          <template x-if="trashStatus.lastDiff">
+            <div>
+              <div style="padding:10px 16px 8px;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--bg-muted);display:flex;justify-content:space-between;align-items:center">
+                <span>Latest Update <span style="font-size:12px;color:var(--text-muted);font-weight:400" x-text="trashStatus.lastDiff.time ? formatSyncTime(trashStatus.lastDiff.time) : ''"></span></span>
+                <span style="font-size:12px;color:var(--text-muted);font-weight:400">
+                  <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.prevCommit"
+                     target="_blank" rel="noopener"
+                     style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor"
+                     x-tt="'View commit on GitHub'"
+                     x-text="trashStatus.lastDiff.prevCommit"></a>
+                  <span style="margin:0 4px">→</span>
+                  <a :href="'https://github.com/TRaSH-Guides/Guides/commit/' + trashStatus.lastDiff.newCommit"
+                     target="_blank" rel="noopener"
+                     style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor"
+                     x-tt="'View commit on GitHub'"
+                     x-text="trashStatus.lastDiff.newCommit"></a>
                 </span>
               </div>
-            </template>
-          </div>
-        </template>
-      </div>
-    </div>
-    <!-- User menu: username + logout when authenticated, "Local" badge when
-         reaching via Trusted-Networks bypass, nothing when auth=none. -->
-    <div x-show="authStatus.authenticated || authStatus.localBypass" x-cloak
-         style="margin-left:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary)">
-      <template x-if="authStatus.authenticated">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span x-text="authStatus.username" x-tt="'Logged in as ' + authStatus.username"
-                style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-          <form method="POST" action="logout" style="margin:0">
-            <input type="hidden" name="csrf_token" :value="csrfToken()">
-            <button type="submit" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" x-tt="'Log out'">Logout</button>
-          </form>
-        </div>
-      </template>
-      <template x-if="!authStatus.authenticated && authStatus.localBypass">
-        <span style="background:var(--fill-blue-dark);color:var(--accent-blue);padding:3px 8px;border-radius:10px;font-size:10px;font-weight:500;letter-spacing:0.3px;border:1px solid var(--fill-blue-dark)"
-              x-tt="'Local network — authentication bypassed for this network'">Local</span>
-      </template>
-    </div>
-  </div>
+              <div style="padding:10px 16px;border-bottom:1px solid var(--border-subtle);font-size:12px;color:var(--text-body);white-space:pre-line;line-height:1.6"
+                   x-text="trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '')"></div>
+            </div>
+          </template>
 
-  <!-- No-auth warning banner — dismissible per-browser via localStorage.
-       Server logs a warning every 60s regardless of dismissal. -->
-  <div x-show="authStatus.authentication === 'none' && !noAuthBannerDismissed" x-cloak
-       style="background:var(--banner-warn-bg);border-bottom:2px solid var(--banner-warn-border);color:var(--banner-warn-text);padding:10px 16px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:500">
-    <span style="flex:1;text-align:center">
-      ⚠️ Authentication is disabled — anyone who reaches this URL is admin. Set Authentication to Forms or Basic in <strong>Settings → Security</strong>, or make sure another auth layer (reverse proxy, firewall) is in front.
-    </span>
-    <button @click="dismissNoAuthBanner()" x-tt="'Hide on this device'"
-            style="background:color-mix(in srgb, var(--banner-warn-text) 12%, transparent);color:var(--banner-warn-text);border:1px solid color-mix(in srgb, var(--banner-warn-text) 30%, transparent);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer">
-      Dismiss
-    </button>
+          <div style="padding:10px 16px 8px;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--bg-muted);display:flex;justify-content:space-between;align-items:center">
+            TRaSH Changelog
+            <span style="font-size:12px;color:var(--text-muted);font-weight:400">from updates.txt</span>
+          </div>
+          <template x-if="!trashStatus.changelog || trashStatus.changelog.length === 0">
+            <div style="padding:16px;font-size:12px;color:var(--text-muted);text-align:center">No changelog available</div>
+          </template>
+          <template x-for="section in (trashStatus.changelog || [])" :key="section.date">
+            <div style="padding:10px 16px;border-bottom:1px solid var(--bg-muted)">
+              <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between">
+                <span x-text="formatChangelogDate(section.date)"></span>
+                <span style="color:var(--text-muted);font-weight:400" x-text="section.entries.length + (section.entries.length === 1 ? ' change' : ' changes')"></span>
+              </div>
+              <template x-for="entry in section.entries" :key="entry.pr || entry.msg">
+                <div style="display:flex;align-items:flex-start;gap:8px;padding:3px 0;font-size:12px;line-height:1.4">
+                  <span style="font-size:12px;font-weight:600;padding:1px 6px;border-radius:3px;flex-shrink:0;margin-top:1px"
+                        :style="entry.type === 'feat' ? 'background:var(--badge-feat-bg);color:var(--accent-green)' : entry.type === 'fix' ? 'background:var(--accent-orange-bg);color:var(--accent-orange)' : 'background:var(--bg-panel);color:var(--accent-blue)'"
+                        x-text="entry.type"></span>
+                  <span>
+                    <span style="color:var(--text-muted)" x-text="entry.scope + ':'"></span>
+                    <span style="color:var(--text-body)" x-text="entry.msg"></span>
+                    <a x-show="entry.pr" :href="'https://github.com/TRaSH-Guides/Guides/pull/' + entry.pr"
+                       target="_blank" rel="noopener" style="color:var(--text-muted);font-size:12px;text-decoration:none;margin-left:4px"
+                       @mouseenter="$el.style.color='var(--accent-blue)'" @mouseleave="$el.style.color='var(--text-muted)'"
+                       x-text="'#' + entry.pr"></a>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- User chip — icon + username + chevron, click opens Logout
+           popover. Mirrors the app-banner pattern. Trusted-network
+           bypass users see a non-interactive "Local" badge. -->
+      <span x-show="authStatus.authenticated || authStatus.localBypass" x-cloak class="topnav-user"
+            @keydown.escape.window="if (userMenuOpen) { userMenuOpen = false; $nextTick(() => $refs.topnavUserTrigger?.focus()) }">
+        <template x-if="authStatus.authenticated">
+          <span class="topnav-user-wrap" :class="{ open: userMenuOpen }">
+            <button type="button" class="topnav-user-trigger"
+                    x-ref="topnavUserTrigger"
+                    @click="userMenuOpen = !userMenuOpen"
+                    :aria-expanded="userMenuOpen"
+                    aria-haspopup="true">
+              <svg class="topnav-user-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span class="topnav-user-name" x-text="authStatus.username"></span>
+              <span class="topnav-user-chev" :class="{ flip: userMenuOpen }">&#9662;</span>
+            </button>
+            <div class="topnav-user-menu"
+                 x-show="userMenuOpen" x-cloak
+                 @click.outside="if (!$refs.topnavUserTrigger?.contains($event.target)) userMenuOpen = false"
+                 role="dialog"
+                 aria-label="Account">
+              <form method="POST" action="logout" class="topnav-user-logout-form">
+                <input type="hidden" name="csrf_token" :value="csrfToken()">
+                <button type="submit" class="topnav-user-logout">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                  <span>Log out</span>
+                </button>
+              </form>
+            </div>
+          </span>
+        </template>
+        <template x-if="!authStatus.authenticated && authStatus.localBypass">
+          <span class="topnav-user-local"
+                x-tt="'Local network — authentication bypassed for this network'">Local</span>
+        </template>
+      </span>
+    </div>
+
+    <!-- Row 2: navigation — app switcher + section tabs. -->
+    <div class="topnav-row-nav">
+      <!-- App switcher — mirrors the sidebar pill. Hidden on Settings/About
+           since those are app-agnostic global sections. -->
+      <div class="topnav-app-pill" x-show="!isGlobalSection()">
+        <button type="button" class="topnav-app-btn"
+                :class="{ active: activeAppType !== 'sonarr' }"
+                @click="switchAppType('radarr')"
+                x-tt="'Switch to Radarr'">
+          <img class="topnav-app-logo" src="icons/radarrNew.png?v={{.Version}}" alt="">
+          <span class="topnav-app-name">Radarr</span>
+          <span class="topnav-app-num" x-text="instancesOfType('radarr').length"></span>
+        </button>
+        <button type="button" class="topnav-app-btn"
+                :class="{ active: activeAppType === 'sonarr' }"
+                @click="switchAppType('sonarr')"
+                x-tt="'Switch to Sonarr'">
+          <img class="topnav-app-logo" src="icons/sonarr.png?v={{.Version}}" alt="">
+          <span class="topnav-app-name">Sonarr</span>
+          <span class="topnav-app-num" x-text="instancesOfType('sonarr').length"></span>
+        </button>
+      </div>
+
+      <nav class="topnav-tabs" aria-label="Main">
+        <a class="topnav-tab" :class="{ active: currentSection === 'profiles' }"
+           :href="navHref('profiles')"
+           :aria-current="currentSection === 'profiles' ? 'page' : null">Profiles</a>
+        <a class="topnav-tab" :class="{ active: currentSection === 'custom-formats' }"
+           :href="navHref('custom-formats')"
+           :aria-current="currentSection === 'custom-formats' ? 'page' : null">Custom Formats</a>
+        <a class="topnav-tab" :class="{ active: currentSection === 'media-management' }"
+           :href="navHref('media-management')"
+           :aria-current="currentSection === 'media-management' ? 'page' : null">Media Management</a>
+        <a class="topnav-tab" :class="{ active: currentSection === 'maintenance' }"
+           :href="navHref('maintenance')"
+           :aria-current="currentSection === 'maintenance' ? 'page' : null">Maintenance</a>
+        <a class="topnav-tab" x-show="config.devMode" :class="{ active: currentSection === 'advanced' }"
+           :href="navHref('advanced')"
+           :aria-current="currentSection === 'advanced' ? 'page' : null">Advanced</a>
+        <a class="topnav-tab" :class="{ active: currentSection === 'settings' }"
+           :href="navHref('settings')"
+           :aria-current="currentSection === 'settings' ? 'page' : null">Settings</a>
+        <a class="topnav-tab" :class="{ active: currentSection === 'about' }"
+           :href="navHref('about')"
+           :aria-current="currentSection === 'about' ? 'page' : null">About</a>
+      </nav>
+    </div>
+
+    <!-- Row 3 (optional): sub-tab strip. Mirrors the sidebar sub-nav.
+         Profiles has 4-way split (TRaSH Profiles | Sync Rules | History
+         | Compare); Media Management has 2-way split (Quality |
+         Movie/Episode Naming). -->
+    <div class="topnav-subnav" x-show="currentSection === 'profiles'">
+      <a class="topnav-subtab" :class="{ active: getProfileTab(activeAppType) === 'trash-profiles' }"
+         :href="navHref('profiles', { profileTab: 'trash-profiles' })">TRaSH Profiles</a>
+      <a class="topnav-subtab" :class="{ active: getProfileTab(activeAppType) === 'sync-rules' }"
+         :href="navHref('profiles', { profileTab: 'sync-rules' })">Sync Rules</a>
+      <a class="topnav-subtab" :class="{ active: getProfileTab(activeAppType) === 'history' }"
+         :href="navHref('profiles', { profileTab: 'history' })">History</a>
+      <a class="topnav-subtab" :class="{ active: getProfileTab(activeAppType) === 'compare' }"
+         :href="navHref('profiles', { profileTab: 'compare' })">Compare</a>
+    </div>
+    <div class="topnav-subnav" x-show="currentSection === 'media-management'">
+      <a class="topnav-subtab" :class="{ active: getMediaTab(activeAppType) === 'quality' }"
+         :href="navHref('media-management', { mediaTab: 'quality' })">Quality Definitions</a>
+      <a class="topnav-subtab" :class="{ active: getMediaTab(activeAppType) === 'naming' }"
+         :href="navHref('media-management', { mediaTab: 'naming' })"
+         x-text="activeAppType === 'sonarr' ? 'Episode Naming' : 'Movie Naming'"></a>
+    </div>
+    <div class="topnav-subnav" x-show="currentSection === 'maintenance'">
+      <a class="topnav-subtab" :class="{ active: getMaintenanceTab(activeAppType) === 'backup' }"
+         :href="navHref('maintenance', { maintenanceTab: 'backup' })">Backup &amp; Restore</a>
+      <a class="topnav-subtab" :class="{ active: getMaintenanceTab(activeAppType) === 'cleanup' }"
+         :href="navHref('maintenance', { maintenanceTab: 'cleanup' })">Cleanup</a>
+    </div>
   </div>
 
 {{end}}

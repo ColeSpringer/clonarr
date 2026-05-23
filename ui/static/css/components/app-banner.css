@@ -1,0 +1,270 @@
+/* First-run hint banner — sits UNDER the app-banner when no instance
+   of the active app type has been configured. Subtle theme-coloured
+   strip with a call-to-action link to Settings → Instances. Inherits
+   --app-color from the same cascade so it auto-themes to Radarr /
+   Sonarr without per-class colour overrides. Sticks below the app
+   banner (48px min-height + 1px border) so both stay visible on scroll. */
+.app-noinstance-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  background: linear-gradient(90deg, var(--app-glow) 0%, transparent 75%), color-mix(in srgb, var(--app-color) 8%, var(--bg-elevated));
+  border-bottom: 1px solid color-mix(in srgb, var(--app-color) 30%, var(--border-subtle));
+  position: sticky;
+  top: 49px; /* sits flush under the .app-banner (min-height 48px + 1px border) */
+  z-index: 51; /* under the .app-banner's 52 so it scrolls naturally beneath */
+}
+.app-noinstance-banner-text { flex: 1; min-width: 0; }
+.app-noinstance-banner-text strong { color: var(--app-color); font-weight: 600; }
+.app-noinstance-banner-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--app-color);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.app-noinstance-banner-action:hover { filter: brightness(1.1); }
+
+/* v3 app banner — persistent app-context strip at the top of the main
+   pane. Always shows where you are. Sticky so it survives long-page
+   scrolling. Color cascades from --app-color set on the x-data wrapper
+   (Radarr yellow / Sonarr blue), so swatch + APP_NAME repaint when
+   user clicks the app switcher pill. */
+
+.app-banner {
+  position: sticky;
+  top: 0;
+  /* z-index above the sidebar foot (51) so any future floating element
+     in main can't accidentally slip between banner and foot. Modals are
+     z-index 100+ so they still cover the banner. */
+  z-index: 52;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  min-height: 48px;
+  /* Color fades from --app-glow on the left across to transparent at
+     ~60% width so the right side (chips) stays on plain page color. */
+  background: linear-gradient(90deg, var(--app-glow) 0%, transparent 60%), var(--bg-app);
+  /* Border-bottom uses an image so the line itself fades — strong
+     app-color on the left, normal subtle border on the right. */
+  border-bottom: 1px solid var(--border-subtle);
+  border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-subtle) 60%, var(--border-subtle) 100%) 1;
+  font-size: 13px;
+  color: var(--text-body);
+}
+
+/* Left block — app logo + APP_NAME. Brand icon (same asset as the
+   sidebar pill) anchors the banner visually; the uppercase text
+   alongside reinforces context for accessibility / screen readers. */
+.app-banner-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.app-banner-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: block;
+  filter: drop-shadow(0 0 6px var(--app-glow));
+}
+.app-banner-appname {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--app-color);
+  text-transform: uppercase;
+}
+
+/* Middle block — breadcrumb. The leading "/" separator only appears
+   for app-scoped sections (template x-if'd in markup); for global
+   sections (Settings, About), the section name renders standalone. */
+.app-banner-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.app-banner-sep {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Right block — auto-sync chip + user chip. Empty in this Sprint 2
+   commit; populated by later commits. Pushed to the far right via
+   margin-left:auto so the breadcrumb stays attached to the left
+   block. */
+.app-banner-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* Auto-sync status chip — shows last-run timestamp for the active app's
+   auto-sync rules. Color-coded dot reflects state: green ok, red failed,
+   amber paused, grey never. Click navigates to Profiles → History. */
+.app-banner-autosync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.app-banner-autosync:hover {
+  border-color: var(--app-color);
+  background: var(--bg-elevated-hover);
+  color: var(--text-body);
+}
+/* Leading dot — green for ok, red for failed. Chip is only rendered
+   in those two states, so no other visual variants needed. */
+.app-banner-autosync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.app-banner-autosync.state-ok .app-banner-autosync-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+}
+.app-banner-autosync.state-failed .app-banner-autosync-dot {
+  background: var(--accent-red);
+  box-shadow: 0 0 6px var(--accent-red);
+}
+.app-banner-autosync.state-failed { color: var(--accent-red); }
+
+/* User chip — relocated from sidebar in Sprint 2 slice 2 (.sidebar-user-*
+   rules used to live in sidebar.css and were deleted in the same commit
+   that added these styles). Avatar circle
+   in --app-color tint + username + chevron. Clicking opens a small
+   popover with a single Logout button (POST + CSRF, same flow as the
+   sidebar form it replaced). Local-network-bypass users see a non-
+   interactive variant ("● Local network") with no popover. */
+.app-banner-user {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.app-banner-user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.app-banner-user-trigger:hover,
+.app-banner-user.open .app-banner-user-trigger {
+  border-color: var(--app-color);
+  background: var(--bg-elevated-hover);
+}
+.app-banner-user-icon {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+.app-banner-user-trigger:hover .app-banner-user-icon,
+.app-banner-user.open .app-banner-user-icon {
+  color: var(--app-color);
+}
+.app-banner-user-name {
+  font-weight: 500;
+}
+.app-banner-user-chev {
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  margin-left: 1px;
+}
+.app-banner-user-chev.flip { transform: rotate(180deg); }
+
+.app-banner-user-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  z-index: 60;
+}
+.app-banner-user-logout-form { margin: 0; padding: 0; }
+.app-banner-user-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-body);
+  cursor: pointer;
+  text-align: left;
+}
+.app-banner-user-logout:hover {
+  background: var(--bg-elevated-hover);
+  color: var(--accent-red);
+}
+.app-banner-user-logout svg { flex: 0 0 auto; }
+
+/* Local-network bypass variant — flat chip with a green dot, no popover. */
+.app-banner-user-local {
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  font-size: 12.5px;
+}
+.app-banner-user-localdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+}
+
+/* Global mode — Settings, About. Same gradient + border-fade design
+   as app-scoped pages, just anchored to Clonarr's own brand identity
+   (green) instead of Radarr/Sonarr. Overrides the --app-color cascade
+   for THIS element only so the rest of the page (sidebar, etc.) keeps
+   its active-app color and the user knows that switching apps still
+   works from a global section. */
+.app-banner.is-global {
+  --app-color: var(--clonarr-color);
+  --app-glow: var(--clonarr-glow);
+}

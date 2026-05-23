@@ -589,28 +589,29 @@ func InitAuth(ctx context.Context, configStore *core.ConfigStore, version string
 	}
 
 	if envProxies := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES")); envProxies != "" {
-		ips, hostnames, err := netsec.ResolveTrustedProxies(envProxies)
+		nets, hostnames, err := netsec.ResolveTrustedProxies(envProxies)
 		if err != nil {
 			log.Fatalf("auth: invalid TRUSTED_PROXIES env var: %v", err)
 		}
-		// Count literal IPs by re-parsing — log line shouldn't lie when a
-		// hostname resolves to multiple IPs (multi-A or IPv4+IPv6).
-		literals, _, _ := netsec.ParseTrustedProxyEntries(envProxies)
-		cfg.TrustedProxies = ips
+		// Count entry types by re-parsing — log line shouldn't lie when a
+		// hostname resolves to multiple IPs (multi-A or IPv4+IPv6) or when
+		// CIDR ranges are mixed in.
+		literals, cidrs, _, _ := netsec.ParseTrustedProxyEntries(envProxies)
+		cfg.TrustedProxies = nets
 		cfg.TrustedProxyHostnames = hostnames
 		cfg.TrustedProxiesLocked = true
 		cfg.TrustedProxiesRaw = envProxies
 		if len(hostnames) > 0 {
-			log.Printf("auth: trusted_proxies locked by TRUSTED_PROXIES env var (%d effective IPs: %d literal, %d hostnames re-resolved every 60s)", len(ips), len(literals), len(hostnames))
+			log.Printf("auth: trusted_proxies locked by TRUSTED_PROXIES env var (%d effective networks: %d literal, %d CIDR, %d hostnames re-resolved every 60s)", len(nets), len(literals), len(cidrs), len(hostnames))
 		} else {
-			log.Printf("auth: trusted_proxies locked by TRUSTED_PROXIES env var (%d entries)", len(ips))
+			log.Printf("auth: trusted_proxies locked by TRUSTED_PROXIES env var (%d entries: %d literal, %d CIDR)", len(nets), len(literals), len(cidrs))
 		}
 	} else if appCfg.TrustedProxies != "" {
-		ips, hostnames, err := netsec.ResolveTrustedProxies(appCfg.TrustedProxies)
+		nets, hostnames, err := netsec.ResolveTrustedProxies(appCfg.TrustedProxies)
 		if err != nil {
 			log.Fatalf("auth: invalid trustedProxies config: %v", err)
 		}
-		cfg.TrustedProxies = ips
+		cfg.TrustedProxies = nets
 		cfg.TrustedProxyHostnames = hostnames
 		// Persist the raw CSV so RefreshTrustedProxies's literal-rebuild
 		// path is precise even on the UI-edit (non-env-locked) flow.

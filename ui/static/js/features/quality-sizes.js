@@ -105,7 +105,7 @@ export default {
     },
 
     qsRowStyle(appType, qs) {
-      if (!this.qsInstanceId[appType]) return '';
+      if (!this.mediaInstanceId[appType]) return '';
       const def = this._findInstanceDef(appType, qs.quality);
       if (!def) return '';
       const allMatch = ['min', 'preferred', 'max'].every(f =>
@@ -156,7 +156,7 @@ export default {
     },
 
     async _saveQSOverrides(appType) {
-      const instanceId = this.qsInstanceId[appType];
+      const instanceId = this.mediaInstanceId[appType];
       if (!instanceId) return;
       try {
         await fetch(`/api/instances/${instanceId}/quality-sizes/overrides`, {
@@ -168,7 +168,7 @@ export default {
     },
 
     async toggleQSAutoSync(appType, enabled, inputEl) {
-      const instanceId = this.qsInstanceId[appType];
+      const instanceId = this.mediaInstanceId[appType];
       if (!instanceId) return;
 
       if (enabled) {
@@ -196,7 +196,7 @@ export default {
     },
 
     async _applyQSAutoSync(appType, enabled) {
-      const instanceId = this.qsInstanceId[appType];
+      const instanceId = this.mediaInstanceId[appType];
       if (!instanceId) return;
 
       const allQS = this.getQualitySizes(appType);
@@ -245,7 +245,7 @@ export default {
     },
 
     async syncSingleQS(appType, qualityName) {
-      const instanceId = this.qsInstanceId[appType];
+      const instanceId = this.mediaInstanceId[appType];
       if (!instanceId) return;
       const qs = this.getSelectedQS(appType).find(q => q.quality === qualityName);
       if (!qs) return;
@@ -277,7 +277,7 @@ export default {
     },
 
     async syncQualitySizes(appType) {
-      const instanceId = this.qsInstanceId[appType];
+      const instanceId = this.mediaInstanceId[appType];
       if (!instanceId) return;
       this.qsSyncing = { ...this.qsSyncing, [appType]: true };
       this.qsSyncResult = { ...this.qsSyncResult, [appType]: null };

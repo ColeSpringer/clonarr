@@ -189,34 +189,54 @@ export default {
     async loadExtraCFList() {
       const t = this.profileDetail?.instance?.type;
       if (!t) return;
+      // Cache hit: same Arr type as the populated catalog → skip the
+      // network round-trip. extraCFGroups is the heavy /all-cfs payload
+      // (every TRaSH CF organised into picker groups); without this
+      // gate every profile-detail open refetches the same data.
+      // Invalidated by loadCFBrowse (hit by save/delete/import of any
+      // custom CF + by pullTrash), and by clearTrashDerivedCaches
+      // (hit by resetTrashData). Together those cover every path that
+      // could change the underlying catalog.
+      if (this._extraCFGroupsCachedType === t && Array.isArray(this.extraCFGroups) && this.extraCFGroups.length > 0) {
+        return;
+      }
       try {
         const r = await fetch(`/api/trash/${t}/all-cfs`);
         if (!r.ok) return;
         const d = await r.json();
-        // Build grouped + ungrouped lists. Backend marks user-created CFs
-        // with cf.isCustom=true regardless of which category the user
-        // assigned. Pull them all into a dedicated "Custom" group so the
-        // picker matches Custom Formats tab behaviour (one Custom bucket,
-        // not scattered across the user's chosen categories).
+        // Build grouped + ungrouped lists. Three buckets:
+        //   1. TRaSH cf-groups (have groupTrashId) → push verbatim
+        //   2. TRaSH CFs not in any group → roll into a single "Other"
+        //      group (pushed before Custom so OTHER section sorts above
+        //      CUSTOM in Sync Preview's sub-nav)
+        //   3. Custom-category groups (g.isCustom + parent category
+        //      "Custom") → push each user-cat as its own group, named
+        //      "[Custom] <user-cat>" so spGroupBySection clusters them
+        //      under a CUSTOM section in Sync Preview's sub-nav. This
+        //      matches the Custom Formats browse view's sidebar nesting.
         const groups = []; // { name, category, cfs[] }
         const ungrouped = [];
-        const customCFs = [];
+        const customGroups = [];
         for (const c of (d.categories || [])) for (const g of c.groups) {
           if (g.groupTrashId) {
-            // category passed through so getCategoryClass() can paint the
-            // left-border color the same way the main Groups section does.
-            // trashDescription forwarded so the picker shows the same
-            // group-blurb the main Groups section does on expand.
             groups.push({ name: g.name, category: c.category, trashDescription: g.trashDescription, cfs: g.cfs });
-          } else {
-            for (const cf of g.cfs) {
-              if (cf.isCustom) customCFs.push(cf);
-              else ungrouped.push(cf);
+          } else if (g.isCustom && c.category === 'Custom') {
+            if ((g.cfs || []).length > 0) {
+              customGroups.push({
+                name: `[Custom] ${g.name}`,
+                category: 'Custom',
+                cfs: g.cfs,
+              });
             }
+          } else {
+            for (const cf of g.cfs) ungrouped.push(cf);
           }
         }
+        // Order matters — spGroupBySection preserves input order and
+        // the sub-nav renders sections top-to-bottom in that order.
+        // Other above Custom by request.
         if (ungrouped.length > 0) groups.push({ name: 'Other', category: 'Other', cfs: ungrouped });
-        if (customCFs.length > 0) groups.push({ name: 'Custom', category: 'Other', cfs: customCFs });
+        groups.push(...customGroups);
         this.extraCFGroups = groups;
         // Ensure all groups start collapsed. Alpine's reactive proxy treats
         // missing keys as truthy in some cases AND direct keyed mutation
@@ -229,6 +249,10 @@ export default {
         const all = [];
         for (const g of groups) for (const cf of g.cfs) all.push(cf);
         this.extraCFAllCFs = all;
+        // Record which Arr type this catalog is for so the next
+        // openProfileDetail can hit the cache. Reset alongside the
+        // groups in pdResetDetailState / clearTrashDerivedCaches.
+        this._extraCFGroupsCachedType = t;
       } catch (e) { console.error('loadExtraCFs:', e); }
     },
 
@@ -334,6 +358,35 @@ export default {
         ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
         : this.theme;
       document.documentElement.setAttribute('data-theme', resolved);
+    },
+
+    // v3 content-alignment toggle — applies immediately, persists to
+    // localStorage. CSS rule in layout.css reads [data-content-align="left"]
+    // on the x-data wrapper and removes the centering margin.
+    setContentAlign(value) {
+      this.contentAlign = (value === 'left') ? 'left' : 'center';
+      localStorage.setItem('clonarr-content-align', this.contentAlign);
+    },
+
+    // v3 navigation-style toggle — applies immediately, persists to
+    // localStorage. Switches between sidebar (default) and topnav (classic
+    // horizontal bar with v3 color treatment). The x-if templates in
+    // index.html swap the layout in/out; CSS rule in layout.css reads
+    // [data-nav-style="topnav"] on the x-data wrapper to suppress the
+    // sidebar grid + collapse it back to a vertical stack.
+    setNavStyle(value) {
+      this.navStyle = (value === 'topnav') ? 'topnav' : 'sidebar';
+      localStorage.setItem('clonarr-nav-style', this.navStyle);
+      // Close the sub-nav popup if it was open from the sidebar.
+      this.sidebarSubnavPopup = '';
+      // Reset sidebar to expanded on every nav-style switch. Without
+      // this, a user who collapses the sidebar, switches to topnav,
+      // then switches back finds an unexpectedly-collapsed sidebar
+      // (the collapsed flag persists in localStorage).
+      if (this.sidebarCollapsed) {
+        this.sidebarCollapsed = false;
+        localStorage.setItem('clonarr-sidebar-collapsed', '0');
+      }
     },
 
     async checkCleanupEvents() {
@@ -507,6 +560,8 @@ export default {
             }
             this.loadTrashProfiles('radarr');
             this.loadTrashProfiles('sonarr');
+            this.loadTrashProfileDescriptions('radarr');
+            this.loadTrashProfileDescriptions('sonarr');
             this.loadQualitySizes('radarr');
             this.loadQualitySizes('sonarr');
             this.loadCFBrowse('radarr');
@@ -580,6 +635,9 @@ export default {
 
       this.extraCFAllCFs = [];
       this.extraCFGroups = [];
+      // Invalidate /all-cfs cache marker so the next openProfileDetail
+      // refetches fresh after Pull/Reset.
+      this._extraCFGroupsCachedType = null;
       this._extraInProfileSet = null;
 
       this.cfgbCFs = [];
@@ -598,7 +656,6 @@ export default {
       this._sandboxCFCache = {};
       this._trashScoreContextCache = {};
       this.profileDetail = null;
-      this.showProfileInfo = false;
       this.profileBuilder = false;
       this.sandboxCFBrowser = {
         open: false,
@@ -637,13 +694,21 @@ export default {
       this.syncResult = null;
       this.selectedOptionalCFs = {};
 
-      this.showProfileInfo = false;
       this.profileDetail = { instance: inst, profile: profile, detail: null };
       // Pre-load languages and quality presets for this instance (for override dropdowns)
       this.getLanguagesForInstance(inst.id);
       if (!this.pbQualityPresets.length) {
         fetch(`/api/trash/${inst.type}/quality-presets`).then(r => r.ok ? r.json() : []).then(d => this.pbQualityPresets = d || []).catch(() => {});
       }
+      // Fire /all-cfs in parallel with the profile fetch. It's the
+      // heavy catalog the Additional CF picker + Diffs view rely on,
+      // and there's no dependency between the two requests — the
+      // previous sequential ordering (profile → applyRuleStateToEditor
+      // → loadExtraCFList) just cost a full round-trip's worth of
+      // latency. loadExtraCFList is idempotent + cache-gated by Arr
+      // type so the subsequent call from resyncProfile / applyRuleState
+      // becomes a no-op when the catalog already arrived.
+      this.loadExtraCFList();
       try {
         const r = await fetch(`/api/trash/${inst.type}/profiles/${profile.trashId}`);
         if (!r.ok) {
@@ -683,6 +748,11 @@ export default {
             this.applyRuleStateToEditor(matchingRules[0], detail);
           }
         }
+        // Issue #52 — initial baseline. resyncProfile re-captures this
+        // after its own restore pass; for the create-new path (TPD Use
+        // this profile, no resyncProfile follow-up) this is the only
+        // capture point.
+        this._captureProfileBaseline();
       } catch (e) { console.error('loadProfileDetail:', e); }
     },
 
@@ -779,6 +849,14 @@ export default {
       if (rule.behavior) {
         this.syncForm.behavior = { ...(this.syncForm.behavior || {}), ...rule.behavior };
       }
+      // Restore the user's free-form notes for this rule. Empty by
+      // default — the Notes editor renders an "Add notes" CTA when
+      // pdDescription is blank. Auto-expand the Notes card on
+      // reopen when notes exist so the user instantly sees they're
+      // still there (collapsed default + small snippet otherwise
+      // reads as "my notes are gone" — first reported bug).
+      this.pdDescription = rule.description || '';
+      this.pdNotesExpanded = !!(rule.description || '').trim();
       if (anyOverride || (rule.selectedCFs && rule.selectedCFs.length > 0)) {
         this.pdOverridesEnabled = true;
       }
@@ -891,7 +969,13 @@ export default {
       clearTimeout(window._tooltipHideTimer);
       const el = document.getElementById('cf-tooltip-portal');
       if (!el) return;
-      el.innerHTML = sanitizeHTML(text);
+      // Pre-process pymdownx-extra "caret" syntax (^^text^^) used in
+      // TRaSH descriptions for underline emphasis — without this the
+      // raw "^^NOT^^" leaks through to the tooltip text. The <u> tag
+      // is already on sanitizeHTML's allow-list, so the rendered
+      // underline survives sanitization.
+      const md = (text || '').replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
+      el.innerHTML = sanitizeHTML(md);
       el.style.display = 'block';
       const rect = event.target.getBoundingClientRect();
       // UI Scale fix: getBoundingClientRect() returns post-zoom actual
@@ -916,25 +1000,33 @@ export default {
       // Walk up parents until we find the first ancestor containing >1
       // .cf-info — that's the group container.
       let anchorRight = rect.right;
-      let parent = event.target.parentElement;
-      while (parent) {
-        const siblings = parent.querySelectorAll('.cf-info');
-        if (siblings.length > 1) {
-          const hoverLeft = rect.left;
-          let maxRight = 0;
-          for (const s of siblings) {
-            const r = s.getBoundingClientRect();
-            // Same-column filter: ⓘ rects vary in left because name length
-            // varies, but column boundaries are ~hundreds of pixels apart
-            // in grid layouts. 80px band is loose enough to cover varied
-            // names within a column, tight enough to exclude other columns.
-            if (Math.abs(r.left - hoverLeft) > 80) continue;
-            if (r.right > maxRight) maxRight = r.right;
+      // Only walk ancestors when the trigger itself IS a .cf-info icon
+      // (Sync Preview / classic editor / etc.). The new CF browse hover
+      // moved off .cf-info onto .cf-name-text, where the X-anchor logic
+      // does nothing useful — short-circuit to avoid an unnecessary
+      // tree walk on every hover.
+      if (event.target.classList && event.target.classList.contains('cf-info')) {
+        let parent = event.target.parentElement;
+        while (parent) {
+          const siblings = parent.querySelectorAll('.cf-info');
+          if (siblings.length > 1) {
+            const hoverLeft = rect.left;
+            let maxRight = 0;
+            for (const s of siblings) {
+              const r = s.getBoundingClientRect();
+              // Same-column filter: ⓘ rects vary in left because name
+              // length varies, but column boundaries are ~hundreds of
+              // pixels apart in grid layouts. 80px band is loose
+              // enough to cover varied names within a column, tight
+              // enough to exclude other columns.
+              if (Math.abs(r.left - hoverLeft) > 80) continue;
+              if (r.right > maxRight) maxRight = r.right;
+            }
+            if (maxRight > 0) anchorRight = maxRight;
+            break;
           }
-          if (maxRight > 0) anchorRight = maxRight;
-          break;
+          parent = parent.parentElement;
         }
-        parent = parent.parentElement;
       }
       const rTop = rect.top / zoom;
       const rLeft = rect.left / zoom;
@@ -1602,6 +1694,10 @@ export default {
       }
       // Sync behavior rules
       if (this.syncForm.behavior) body.behavior = this.syncForm.behavior;
+      // Free-form user notes about this rule — persists as
+      // AutoSyncRule.Description. Trim to avoid whitespace-only saves.
+      const desc = (this.pdDescription || '').trim();
+      if (desc) body.description = desc;
       return body;
     },
 
@@ -1824,6 +1920,9 @@ export default {
         this.syncResult = result;
         this.syncResultDetailsOpen = false;
         this.syncPlan = null;
+        // Issue #52 — Save & Sync success: re-snapshot baseline so the
+        // editor doesn't show as dirty after a clean save.
+        this._captureProfileBaseline();
         // Reload Arr profiles first (new profile may have been created), then sync history + rules
         const inst = this.instances.find(i => i.id === this.syncForm.instanceId);
         if (inst) await this.loadInstanceProfiles(inst);
@@ -1868,6 +1967,13 @@ export default {
             // edit keepArrCFIDs, the user's change won't be silently
             // dropped here.
             keepArrCFIDs: (Array.isArray(syncBody.keepArrCFIDs) ? syncBody.keepArrCFIDs : existingRule.keepArrCFIDs) || null,
+            // Description: echo whatever the sync body just sent.
+            // buildSyncBody only includes the field when trimmed
+            // pdDescription is non-empty, so explicit empty-string
+            // fallback persists "user cleared their notes" correctly
+            // — without this the spread of ...existingRule would
+            // resurrect the old description.
+            description: syncBody.description !== undefined ? syncBody.description : '',
           };
           try {
             await fetch(`/api/auto-sync/rules/${existingRule.id}`, {
@@ -1948,6 +2054,7 @@ export default {
         qualityOverrides: syncBody.qualityOverrides || null,
         qualityStructure: syncBody.qualityStructure || null,
         keepArrCFIDs: (Array.isArray(syncBody.keepArrCFIDs) ? syncBody.keepArrCFIDs : existingRule.keepArrCFIDs) || null,
+        description: syncBody.description !== undefined ? syncBody.description : '',
       };
       this.debugLog('UI', `Save (rule-only): "${profile.name}" → ${inst.name}`);
       this.savingRule = true;
@@ -1965,6 +2072,11 @@ export default {
           return;
         }
         await this.loadAutoSyncRules();
+        // Issue #52 — Save success: re-snapshot the baseline so the
+        // freshly-saved state becomes the new "clean" reference.
+        // Future edits diverge from this; navigation guards stop
+        // tripping on the just-saved-and-clean state.
+        this._captureProfileBaseline();
         this.showToast('Settings saved. Will sync on next Sync All / Sync Now / Auto-Sync.', 'success', 6000);
       } catch (e) {
         console.error('saveRuleOnly:', e);
@@ -2435,6 +2547,27 @@ export default {
         }
         this.selectedOptionalCFs = { ...this.selectedOptionalCFs };
       }
+      // Phase 2c — restore required-CF exclusions from rule.ExcludedCFs.
+      // The optional-CF restore loop above intentionally skips required
+      // CFs (their inclusion is driven by group state). But Phase 2c
+      // lets users opt out of required CFs via the lock-icon UI, so the
+      // rule can carry excludedCFs entries that target required CFs
+      // (both formatItemNames and required-in-group). Without this
+      // restore step, the editor reopens with the exclusion silently
+      // dropped from sel — the Diffs view + lock-icon visuals show the
+      // CF as included even though the rule on disk still excludes it.
+      // applyRuleStateToEditor handles this for the single-matching-
+      // rule case via openProfileDetail; this is the resyncProfile path
+      // that runs after that and must not undo it. Belt-and-braces: we
+      // re-apply the rule's excludedCFs here so the state is consistent
+      // regardless of which load path ran.
+      if (ruleForRestore && Array.isArray(ruleForRestore.excludedCFs)) {
+        const sel = { ...this.selectedOptionalCFs };
+        for (const tid of ruleForRestore.excludedCFs) {
+          sel[tid] = false;
+        }
+        this.selectedOptionalCFs = sel;
+      }
       // Restore overrides. ruleData prefers the rule (saved intent) over
       // sync history, so Save-only edits are visible on reopen. Values are
       // written to pdOverrides; pdOverridesEnabled flips on at the end if
@@ -2521,19 +2654,71 @@ export default {
       if (Object.keys(extras).length > 0) {
         this.extraCFs = extras;
         anyOverride = true;
+        // Sync Preview's Additional CF picker + Profile overview's
+        // Additional CF + Diffs bucket 3 all read selectedOptionalCFs
+        // (NOT extraCFs) to decide whether an extra is activated.
+        // applyRuleStateToEditor sets sel[extras] = true via
+        // rule.selectedCFs, but only fires for the single-matching-
+        // rule case (multi-Arr profiles sharing a TRaSH profile skip
+        // it). The optional-CF restore loop above only visits
+        // profile.trashGroups, never extras. Result: extras land in
+        // extraCFs but NOT in sel, so Sync Preview's UI sees them as
+        // "not activated". Belt-and-braces: write sel[id] = true for
+        // every extra so both Classic (extraCFs) and Sync Preview
+        // (sel) agree.
+        const selWithExtras = { ...this.selectedOptionalCFs };
+        for (const tid of Object.keys(extras)) {
+          selWithExtras[tid] = true;
+        }
+        this.selectedOptionalCFs = selWithExtras;
         // Load all CFs for the browser
         const appType = this.profileDetail?.instance?.type;
         if (appType) this.loadExtraCFList();
+      }
+      // Phase 2c — excludedCFs (required opt-outs + default-on opt-outs)
+      // counts as customization. Without this, a rule whose only edit is
+      // an excluded required CF reopens with Customize off and the
+      // "Customize this profile" CTA — even though the rule clearly IS
+      // customized (Sync Rules pill correctly shows N excluded). Mirror
+      // backend ComputeRuleCustomizations bucket 4 / frontend
+      // pdExcludedCFCount: count entries that resolve to default CFs.
+      //
+      // Defensive: if profileDetail.detail hasn't loaded yet (async race
+      // — shouldn't happen since resyncProfile awaits openProfileDetail,
+      // but cheap to guard), conservatively flip anyOverride=true so the
+      // rule's saved-customization state isn't lost. The downstream
+      // diff/badge counters will reconcile correctly once detail loads.
+      if (Array.isArray(ruleData.excludedCFs) && ruleData.excludedCFs.length > 0) {
+        const detail = this.profileDetail?.detail;
+        if (!detail) {
+          anyOverride = true;
+        } else {
+          const defaults = this.computeTrashDefaults();
+          for (const tid of ruleData.excludedCFs) {
+            if (defaults.has(tid)) { anyOverride = true; break; }
+          }
+        }
       }
       // Restore behavior — prefer rule's behavior (current intent) over sync
       // history (last applied).
       if (ruleData.behavior) {
         this.syncForm.behavior = { ...this.syncForm.behavior, ...ruleData.behavior };
       }
+      // Restore the rule's free-form notes. ruleForRestore is preferred
+      // (current rule state) over sh (last-synced history snapshot) so
+      // Save-only notes edits are visible on reopen. Auto-expand the
+      // Notes card when notes exist (same UX rationale as
+      // applyRuleStateToEditor).
+      this.pdDescription = (ruleForRestore?.description || ruleData.description || '');
+      this.pdNotesExpanded = !!(this.pdDescription || '').trim();
       // Auto-enable the Profile Detail overrides toggle if ANY override was
       // restored, so the UI reflects the saved state of the rule (no "All
       // values follow profile defaults" lie when there are real overrides).
       if (anyOverride) this.pdOverridesEnabled = true;
+      // Issue #52 — snapshot the just-restored state as the dirty-check
+      // baseline. Anything the user changes after this point is an
+      // unsaved edit that warrants a Stay/Discard prompt on navigation.
+      this._captureProfileBaseline();
     },
 
     async removeSyncHistory(instanceId, arrProfileId) {
@@ -2635,11 +2820,115 @@ export default {
       }
       const col = this.syncRulesSort.col || 'arr';
       const dir = this.syncRulesSort.dir === 'desc' ? -1 : 1;
+      // Status sort order: failed > drift > pending > ok (most-urgent first
+      // when sorting ascending — matches "show me what needs attention").
+      const statusOrder = { failed: 0, drift: 1, pending: 2, ok: 3 };
+      // Pre-index this instance's rules by arrProfileId so the comparator
+      // is O(1) per call. Without this, lastSync / status sorts do
+      // .find() twice per compare → O(N² log N) on each sort.
+      let ruleByArrID = null;
+      if (col === 'lastSync' || col === 'status') {
+        ruleByArrID = new Map();
+        for (const r of this.autoSyncRules) {
+          if (r.instanceId === instId) ruleByArrID.set(r.arrProfileId, r);
+        }
+      }
       return [...rules].sort((a, b) => {
-        const av = col === 'trash' ? (a.profileName || '') : (a.arrProfileName || '');
-        const bv = col === 'trash' ? (b.profileName || '') : (b.arrProfileName || '');
-        return dir * av.localeCompare(bv);
+        switch (col) {
+          case 'trash': return dir * (a.profileName || '').localeCompare(b.profileName || '');
+          case 'arr':   return dir * (a.arrProfileName || '').localeCompare(b.arrProfileName || '');
+          case 'lastSync': {
+            const ar = ruleByArrID.get(a.arrProfileId);
+            const br = ruleByArrID.get(b.arrProfileId);
+            const at = ar?.lastSyncTime ? new Date(ar.lastSyncTime).getTime() : 0;
+            const bt = br?.lastSyncTime ? new Date(br.lastSyncTime).getTime() : 0;
+            return dir * (at - bt);
+          }
+          case 'status': {
+            const ar = ruleByArrID.get(a.arrProfileId);
+            const br = ruleByArrID.get(b.arrProfileId);
+            const av = statusOrder[this.v3RuleStatus(ar)] ?? 99;
+            const bv = statusOrder[this.v3RuleStatus(br)] ?? 99;
+            return dir * (av - bv);
+          }
+          default: return dir * (a.arrProfileName || '').localeCompare(b.arrProfileName || '');
+        }
       });
+    },
+
+    // v3 Sprint 3 — per-rule status badge. Cheap-only checks (no API calls).
+    //   'failed'  — LastSyncError set. Wins over everything else because
+    //               the error is the user's first concern; surfacing
+    //               "pending" while a sync is broken would bury the lede.
+    //               The status pill's tooltip carries the lastSyncError so
+    //               the user can see WHY without leaving the list.
+    //   'pending' — user saved overrides via Save without a follow-up sync
+    //   'drift'   — TRaSH local commit moved past this rule's last-synced commit
+    //   'ok'      — last sync succeeded, no pending overrides, TRaSH-commit in sync
+    //   ''        — no rule object (orphaned / never-synced display path)
+    // Arr-side drift (manual Arr edits) requires dry-run; see CLAUDE.md
+    // post-v3 backlog.
+    v3RuleStatus(rule) {
+      if (!rule) return '';
+      if (rule.lastSyncError) return 'failed';
+      const hasPending = rule.updatedAt && (!rule.lastSyncTime || rule.updatedAt > rule.lastSyncTime);
+      if (hasPending) return 'pending';
+      const remoteCommit = this.trashStatus?.commitHash || '';
+      if (rule.lastSyncCommit && remoteCommit && rule.lastSyncCommit !== remoteCommit) {
+        return 'drift';
+      }
+      return 'ok';
+    },
+    v3RuleStatusLabel(rule) {
+      switch (this.v3RuleStatus(rule)) {
+        case 'ok':      return 'In sync';
+        case 'pending': return 'Pending';
+        case 'drift':   return 'Out of sync';
+        case 'failed':  return 'Failed';
+        default:        return '—';
+      }
+    },
+    v3RuleStatusTip(rule) {
+      switch (this.v3RuleStatus(rule)) {
+        case 'ok':      return 'Last sync matched the target Arr profile';
+        case 'pending': return 'Saved overrides not yet pushed — click Sync now';
+        case 'drift':   return 'TRaSH was updated since last sync — Sync to apply';
+        case 'failed':  return rule?.lastSyncError || 'Last sync attempt failed';
+        default:        return '';
+      }
+    },
+
+    // Customizations pill — reads from the ruleCustomizations cache
+    // populated by loadRuleCustomizations() on Sync Rules tab mount.
+    // Backend (core.ComputeRuleCustomizations) does the actual diff
+    // against TRaSH defaults; the frontend just reads the result.
+    //
+    // Returns an empty (all-zero) object until the cache loads, which
+    // the markup renders as "—". Once loaded, the breakdown matches
+    // what the detail view's "Override mode · N changes" header shows
+    // for the same rule.
+    v3RuleCustomizations(rule) {
+      const empty = { total: 0, quality: 0, extraCFs: 0, customScores: 0, general: 0, excludedCFs: 0 };
+      if (!rule || !this.ruleCustomizationsLoaded) return empty;
+      return this.ruleCustomizations[rule.id] || empty;
+    },
+
+    // Load per-rule customization counts from the backend. Called when
+    // the user navigates to the Sync Rules tab; results cache in
+    // ruleCustomizations until the next call. Refresh after Save+Sync
+    // is wired separately via the existing autoSyncRules reload chain.
+    async loadRuleCustomizations() {
+      try {
+        const r = await fetch('/api/auto-sync/rules/customizations');
+        if (!r.ok) return;
+        const data = await r.json();
+        this.ruleCustomizations = data || {};
+        this.ruleCustomizationsLoaded = true;
+      } catch (e) {
+        // Network error — keep whatever's in the cache. Pill renders "—"
+        // for entries we don't have.
+        console.error('loadRuleCustomizations:', e);
+      }
     },
 
     historyEventCount(instId, arrProfileId) {
@@ -2868,12 +3157,17 @@ export default {
       const cfScores = overridden;
       const extraCFs = added;
       const optional = this.pdOptionalCount();
+      // Phase 2c — excluded CFs (lock-icon opt-outs + default-on
+      // optional opt-outs) count toward total. Without this the
+      // header reads "0 changes" for a rule that materially excludes
+      // CFs from sync (the user's "no changes" confusion).
+      const excludedCFs = this.pdExcludedCFCount();
       // total = overrides only (profile-level settings the user changed).
       // optional = separate count of TRaSH optional CFs / groups
       //   activated outside the profile's defaults.
       return {
-        general, quality, cfScores, extraCFs, customizations, added, overridden, optional,
-        total: general + quality + customizations,
+        general, quality, cfScores, extraCFs, customizations, added, overridden, optional, excludedCFs,
+        total: general + quality + customizations + excludedCFs,
       };
     },
 
@@ -3005,6 +3299,24 @@ export default {
       }
       items.sort((a, b) => (a.groupName || '').localeCompare(b.groupName || '') || (a.name || '').localeCompare(b.name || ''));
       return items;
+    },
+
+    // Phase 2c — count of excluded CFs that affect the synced output
+    // (i.e. the CF would normally sync as part of the profile's
+    // defaults). Mirrors backend ComputeRuleCustomizations.ExcludedCFs
+    // so frontend + Sync Rules pill agree. Kept as a separate count
+    // (rather than folded into pdAllCustomizations) so the existing
+    // CF Customizations card render — which only knows how to show
+    // added / score-overridden CFs — stays unchanged. Sync Preview's
+    // Diffs view surfaces the detail via spOverviewDiffs bucket 5.
+    pdExcludedCFCount() {
+      const sel = this.selectedOptionalCFs || {};
+      const defaults = this.computeTrashDefaults();
+      let n = 0;
+      for (const tid of defaults) {
+        if (sel[tid] === false) n++;
+      }
+      return n;
     },
 
     // Hybrid layout for the CF Customizations card: split pdAllCustomizations()
@@ -3289,6 +3601,9 @@ export default {
     // Used by: loadProfileDetail (fresh load), Back-link (leaving the view), pdResetAllOverrides.
     pdResetDetailState() {
       this.pdOverridesEnabled = false;
+      this.pdDescription = '';
+      this.pdDescriptionPreview = false;
+      this.pdNotesExpanded = false;
       this.pdGeneralCollapsed = false;
       this.pdQualityCollapsed = false;
       this.pdCFScoresCollapsed = true;
@@ -3302,8 +3617,13 @@ export default {
       this.qualityStructureRenaming = null;
       this.extraCFs = {};
       this.extraCFSearch = '';
-      this.extraCFAllCFs = [];
-      this.extraCFGroups = [];
+      // NOTE: extraCFAllCFs + extraCFGroups deliberately NOT cleared.
+      // They hold the heavy /all-cfs catalog which is identical for
+      // every profile of the same Arr type. loadExtraCFList() checks
+      // _extraCFGroupsCachedType and skips the network fetch when the
+      // cache still matches — wiping it here would force a refetch on
+      // every profile-detail open. Invalidated by Pull/Reset via
+      // clearTrashDerivedCaches.
       this._extraInProfileSet = null;
     },
 
@@ -3380,6 +3700,92 @@ export default {
         minUpgradeFormatScore: { enabled: true, value: p.minUpgradeFormatScore ?? 1 },
         cutoffFormatScore: { enabled: true, value: p.cutoffFormatScore || p.cutoffScore || 10000 },
         cutoffQuality: p.cutoff || '',
+      };
+    },
+
+    // --- Profile-editor unsaved-changes tracking (Issue #52) ---
+
+    // Snapshot the profile-editor state as a JSON string. Cheap diff
+    // primitive: compare the snapshot vs a re-snapshot to detect any
+    // change. Called after openProfileDetail + resyncProfile finish
+    // restoring state, so the baseline reflects "what the rule looks
+    // like right now on disk". Future edits diverge from this.
+    _snapshotProfileEditor() {
+      // Quality structure: when it equals the profile's defaults the
+      // user hasn't actually changed anything, even if qsInitFromProfile
+      // happened to seed it (the Qualities edit button does this just
+      // to populate the modal). Normalise that case to `null` so
+      // opening the editor doesn't flip the dirty flag and trigger
+      // beforeunload prompts.
+      const qStruct = (this.qualityStructure && this.qualityStructure.length > 0
+                       && !this.qualityStructureMatchesDefaults())
+        ? this.qualityStructure
+        : null;
+      return JSON.stringify({
+        sel: this.selectedOptionalCFs,
+        cfScore: this.cfScoreOverrides,
+        extras: this.extraCFs,
+        pdOv: this.pdOverrides,
+        qStruct,
+        qOver: this.qualityOverrides,
+        desc: (this.pdDescription || '').trim(),
+      });
+    },
+
+    // Capture the current state as the dirty-tracking baseline.
+    // Invoked by openProfileDetail at the end of state restoration.
+    _captureProfileBaseline() {
+      this._profileBaseline = this._snapshotProfileEditor();
+    },
+
+    // Clear the baseline so subsequent dirty-checks return false until
+    // a new editor session opens. Called on save-success + Discard.
+    _clearProfileBaseline() {
+      this._profileBaseline = null;
+    },
+
+    // True when the editor has unsaved changes vs the baseline taken
+    // at load time. Returns false when no editor is open (no
+    // profileDetail) or no baseline was captured yet (race window
+    // during initial load — better to say "not dirty" than to gate
+    // navigation on a snapshot that doesn't exist).
+    profileDetailIsDirty() {
+      if (!this.profileDetail || !this._profileBaseline) return false;
+      return this._snapshotProfileEditor() !== this._profileBaseline;
+    },
+
+    // Centralised editor-close handler. Called by the Cancel button +
+    // sidebar navigation guards. When dirty, shows a Stay / Discard
+    // modal. The done callback fires after Discard (or immediately if
+    // not dirty) — caller passes a function that performs whatever
+    // destination action they wanted (route change, app switch,
+    // open-other-rule, etc.).
+    closeProfileEditor(done) {
+      const finish = () => {
+        this._clearProfileBaseline();
+        this.profileDetail = null;
+        this.syncPlan = null;
+        this.syncResult = null;
+        this.selectedOptionalCFs = {};
+        this.groupExpanded = {};
+        this.detailSections = { core: true };
+        this.pdResetDetailState();
+        this.pdInitOverrides(null);
+        if (typeof done === 'function') done();
+      };
+      if (!this.profileDetailIsDirty()) {
+        finish();
+        return;
+      }
+      this.confirmModal = {
+        show: true,
+        title: 'Unsaved changes',
+        message: 'You have unsaved changes in the profile editor. Stay to keep editing, or discard the changes to leave.',
+        cancelLabel: 'Stay on this page',
+        confirmLabel: 'Discard changes',
+        confirmStyle: 'border-color:var(--accent-red);color:var(--accent-red)',
+        onConfirm: finish,
+        onCancel: () => {},
       };
     },
 
@@ -3663,6 +4069,10 @@ export default {
       this.qualityStructureExpanded = {};
       this.qualityStructureRenaming = null;
       this.qsResetDrag();
+      // Defensive: reset qualityEditorTarget so a future opener that
+      // forgets to set it lands on a safe default ('builder') rather
+      // than a stale 'edit' that would mis-route writes.
+      this.qualityEditorTarget = 'builder';
     },
 
     // Drag-drop on a gap → reorder (or ungroup-and-insert if dragging a member)
@@ -4066,6 +4476,12 @@ export default {
       if (enabled) {
         if (!group.exclusive) {
           for (const cf of (group.cfs || [])) {
+            // Preserve Phase 2c required-CF exclusions. Without this
+            // guard, toggling a group off then back on within the same
+            // edit session silently wipes any explicit user opt-out
+            // (sel[id] === false) for required CFs in the group —
+            // exclusion entries are lost on save.
+            if (updated[cf.trashId] === false) continue;
             if (cf.required) {
               updated[cf.trashId] = true;
             } else if (cf.default) {

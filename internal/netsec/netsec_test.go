@@ -127,11 +127,25 @@ func TestParseClientIP_NoProxy(t *testing.T) {
 	}
 }
 
+// hostNet wraps a literal IP string in a /32 (v4) / /128 (v6) net.IPNet
+// so test fixtures can declare trusted-proxy slices the same shape the
+// production code now uses.
+func hostNet(ipStr string) *net.IPNet {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+}
+
 func TestParseClientIP_TrustedProxy_Rightmost(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "172.17.0.1:54321" // trusted proxy
 	r.Header.Set("X-Forwarded-For", "8.8.8.8")
-	trusted := []net.IP{net.ParseIP("172.17.0.1")}
+	trusted := []*net.IPNet{hostNet("172.17.0.1")}
 	ip := ParseClientIP(r, trusted)
 	if ip.String() != "8.8.8.8" {
 		t.Errorf("single XFF: got %s, want 8.8.8.8", ip)
@@ -145,7 +159,7 @@ func TestParseClientIP_SpoofedLeftmost(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "172.17.0.1:54321"
 	r.Header.Set("X-Forwarded-For", "127.0.0.1, 8.8.8.8")
-	trusted := []net.IP{net.ParseIP("172.17.0.1")}
+	trusted := []*net.IPNet{hostNet("172.17.0.1")}
 	ip := ParseClientIP(r, trusted)
 	if ip.String() != "8.8.8.8" {
 		t.Errorf("spoofed leftmost: got %s, want 8.8.8.8 (rightmost non-trusted)", ip)
@@ -161,7 +175,7 @@ func TestParseClientIP_ChainedProxies(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "172.17.0.2:54321" // proxy2
 	r.Header.Set("X-Forwarded-For", "1.2.3.4, 172.17.0.1")
-	trusted := []net.IP{net.ParseIP("172.17.0.1"), net.ParseIP("172.17.0.2")}
+	trusted := []*net.IPNet{hostNet("172.17.0.1"), hostNet("172.17.0.2")}
 	ip := ParseClientIP(r, trusted)
 	if ip.String() != "1.2.3.4" {
 		t.Errorf("chained proxies: got %s, want 1.2.3.4", ip)
@@ -173,7 +187,7 @@ func TestParseClientIP_UntrustedSource(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "8.8.8.8:54321"
 	r.Header.Set("X-Forwarded-For", "1.1.1.1")
-	trusted := []net.IP{net.ParseIP("172.17.0.1")}
+	trusted := []*net.IPNet{hostNet("172.17.0.1")}
 	ip := ParseClientIP(r, trusted)
 	if ip.String() != "8.8.8.8" {
 		t.Errorf("untrusted source: got %s, want 8.8.8.8 (ignore XFF)", ip)
@@ -185,10 +199,10 @@ func TestParseClientIP_AllXFFAreTrusted(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "172.17.0.1:54321"
 	r.Header.Set("X-Forwarded-For", "172.17.0.2, 172.17.0.3")
-	trusted := []net.IP{
-		net.ParseIP("172.17.0.1"),
-		net.ParseIP("172.17.0.2"),
-		net.ParseIP("172.17.0.3"),
+	trusted := []*net.IPNet{
+		hostNet("172.17.0.1"),
+		hostNet("172.17.0.2"),
+		hostNet("172.17.0.3"),
 	}
 	ip := ParseClientIP(r, trusted)
 	if ip.String() != "172.17.0.1" {
@@ -202,13 +216,82 @@ func TestParseTrustedProxies_Valid(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if len(got) != 3 {
-		t.Fatalf("got %d IPs, want 3", len(got))
+		t.Fatalf("got %d networks, want 3", len(got))
 	}
-	want := []string{"172.17.0.1", "10.0.0.5", "192.168.1.1"}
+	want := []string{"172.17.0.1/32", "10.0.0.5/32", "192.168.1.1/32"}
 	for i, w := range want {
 		if got[i].String() != w {
 			t.Errorf("idx %d: got %s, want %s", i, got[i], w)
 		}
+	}
+}
+
+func TestParseTrustedProxies_CIDR(t *testing.T) {
+	got, err := ParseTrustedProxies("172.19.0.0/24")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d networks, want 1", len(got))
+	}
+	if got[0].String() != "172.19.0.0/24" {
+		t.Errorf("got %s, want 172.19.0.0/24", got[0])
+	}
+}
+
+func TestParseTrustedProxies_MixedIPAndCIDR(t *testing.T) {
+	got, err := ParseTrustedProxies("127.0.0.1, 172.19.0.0/24, 10.0.0.5")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d networks, want 3", len(got))
+	}
+	// Literals come back as /32s; the CIDR comes back as-is. Literal-
+	// first ordering matches ResolveTrustedProxies's build sequence.
+	want := []string{"127.0.0.1/32", "10.0.0.5/32", "172.19.0.0/24"}
+	for i, w := range want {
+		if got[i].String() != w {
+			t.Errorf("idx %d: got %s, want %s", i, got[i], w)
+		}
+	}
+}
+
+func TestParseClientIP_CIDRMembership(t *testing.T) {
+	// Direct peer is inside 172.19.0.0/24 → trusted-proxy chain
+	// honoured, XFF parsed right-to-left.
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "172.19.0.42:54321"
+	r.Header.Set("X-Forwarded-For", "8.8.8.8")
+	trusted, err := ParseTrustedProxies("172.19.0.0/24")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	ip := ParseClientIP(r, trusted)
+	if ip.String() != "8.8.8.8" {
+		t.Errorf("CIDR direct-peer: got %s, want 8.8.8.8", ip)
+	}
+	// Outside-CIDR peer → XFF ignored.
+	r.RemoteAddr = "8.8.4.4:54321"
+	ip = ParseClientIP(r, trusted)
+	if ip.String() != "8.8.4.4" {
+		t.Errorf("CIDR non-match: got %s, want 8.8.4.4 (XFF must be ignored)", ip)
+	}
+}
+
+func TestParseTrustedProxyEntries_AllThreeTypes(t *testing.T) {
+	literals, cidrs, hostnames, err := ParseTrustedProxyEntries("127.0.0.1, 172.19.0.0/24, traefik")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(literals) != 1 || literals[0].String() != "127.0.0.1" {
+		t.Errorf("literals: got %v, want [127.0.0.1]", literals)
+	}
+	if len(cidrs) != 1 || cidrs[0].String() != "172.19.0.0/24" {
+		t.Errorf("cidrs: got %v, want [172.19.0.0/24]", cidrs)
+	}
+	if len(hostnames) != 1 || hostnames[0] != "traefik" {
+		t.Errorf("hostnames: got %v, want [traefik]", hostnames)
 	}
 }
 
@@ -227,23 +310,23 @@ func TestResolveTrustedProxies_HostnamesAccepted(t *testing.T) {
 	// Hostname syntax must pass parse-time validation. Lookup is
 	// allowed to fail (lab/CI may not have DNS for "proxy"), but the
 	// hostname slice should still come back so a refresh can retry.
-	ips, hostnames, err := ResolveTrustedProxies("172.17.0.1, proxy")
+	nets, hostnames, err := ResolveTrustedProxies("172.17.0.1, proxy")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if len(hostnames) != 1 || hostnames[0] != "proxy" {
 		t.Errorf("hostnames: got %v, want [\"proxy\"]", hostnames)
 	}
-	// Must contain at least the literal IP.
+	// Must contain at least the literal IP (promoted to /32).
 	gotLiteral := false
-	for _, ip := range ips {
-		if ip.String() == "172.17.0.1" {
+	for _, n := range nets {
+		if n != nil && n.String() == "172.17.0.1/32" {
 			gotLiteral = true
 			break
 		}
 	}
 	if !gotLiteral {
-		t.Errorf("ips: literal 172.17.0.1 missing from %v", ips)
+		t.Errorf("nets: literal 172.17.0.1/32 missing from %v", nets)
 	}
 }
 

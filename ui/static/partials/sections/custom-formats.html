@@ -2,29 +2,133 @@
       <!-- ===== Custom Formats section ===== -->
       <div class="page" x-show="currentSection === 'custom-formats'">
         <div style="font-size:18px;font-weight:600;margin-bottom:4px">Custom Formats</div>
-        <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">All Custom Formats from TRaSH Guides, organized by category. Use Create to build a custom format from scratch, or Import to add existing formats from an Arr instance or JSON.</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">All Custom Formats from TRaSH Guides, organized by category. Use Create to build a custom format from scratch, or Import to add existing formats from an Arr instance or JSON.</div>
 
         <template x-if="getCFBrowseGroups(activeAppType).length > 0">
-          <div>
-            <div style="padding:0 0 12px;display:flex;align-items:center;justify-content:space-between">
-              <div style="font-size:14px;color:var(--text-muted)">
-                Showing <strong style="color:var(--text-primary)" x-text="(getCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0)"></strong> Custom Formats.
+          <div class="cf-browse-shell">
+            <!-- Sidebar rail — All + per-category filter. Same look as
+                 Sync Preview overview sub-nav so the two pages feel
+                 consistent. Counter per category. localStorage-
+                 persisted selection (see setCFBrowseCategory). -->
+            <nav class="cf-browse-sidebar">
+              <button type="button"
+                      class="cf-browse-side-item cf-browse-side-all"
+                      :class="{ active: cfBrowseActiveCategory === 'all' }"
+                      @click="setCFBrowseCategory('all')">
+                <span class="cf-browse-side-label">All categories</span>
+                <span class="cf-browse-side-count"
+                      x-text="(getCFBrowseGroups(activeAppType) || []).reduce((a,c) => a + (c.totalCFs || 0), 0)"></span>
+              </button>
+              <template x-for="par in cfBrowseCategoriesHierarchy(activeAppType)" :key="par.parent">
+                <div class="cf-browse-side-group" :class="[getCategoryClass(par.parent), { 'is-custom': par.isCustom }]">
+                  <!-- Parent row: chevron toggles expansion, label filters
+                       to "all subs under this parent". Two separate click
+                       targets so the user can browse without filtering. -->
+                  <div class="cf-browse-side-parent-row">
+                    <button type="button"
+                            class="cf-browse-side-chevron"
+                            :class="{ open: isCFBrowseParentExpanded(par.parent, par.children) }"
+                            @click="toggleCFBrowseParent(par.parent)"
+                            aria-label="Toggle expansion">
+                      &#9654;
+                    </button>
+                    <button type="button"
+                            class="cf-browse-side-parent-label"
+                            :class="{ active: cfBrowseActiveCategory === 'parent:' + par.parent }"
+                            x-tt="par.parent"
+                            @click="setCFBrowseCategory('parent:' + par.parent)">
+                      <span class="cf-browse-side-label" x-text="par.parent"></span>
+                      <span class="cf-browse-side-count" x-text="par.totalCFs"></span>
+                    </button>
+                  </div>
+                  <!-- Children: only render when parent is expanded
+                       (saves DOM nodes on collapsed parents). -->
+                  <div class="cf-browse-side-children" x-show="isCFBrowseParentExpanded(par.parent, par.children)" x-cloak>
+                    <template x-for="child in par.children" :key="child.displayName">
+                      <button type="button"
+                              class="cf-browse-side-item is-child"
+                              :class="{ active: cfBrowseActiveCategory === child.displayName, 'is-custom': child.isCustom }"
+                              x-tt="child.displayName"
+                              @click="setCFBrowseCategory(child.displayName)">
+                        <span class="cf-browse-side-label" x-text="child.shortName || child.displayName"></span>
+                        <span class="cf-browse-side-count" x-text="child.totalCFs"></span>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </nav>
+
+            <!-- Main pane — original card-list, now filtered by sidebar -->
+            <div class="cf-browse-main">
+            <!-- Toolbar: app tag · count · search · actions. Toolbar carries
+                 the gradient + --app-color treatment (same language as the
+                 v3-inst-header in Sync Rules / History) so the page makes
+                 the active app obvious without an extra banner row. -->
+            <div class="cf-browse-toolbar">
+              <span class="cf-browse-app-tag" x-text="activeAppType === 'sonarr' ? 'SONARR' : 'RADARR'"></span>
+              <div class="cf-browse-count">
+                <strong x-text="(getCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0)"></strong> Custom Formats
+                <span x-show="cfBrowseFilter" class="cf-browse-filter-hint"
+                      x-text="' · ' + (filteredCFBrowseGroups(activeAppType) || []).reduce((acc, c) => acc + (c.totalCFs || 0), 0) + ' match'"></span>
               </div>
-              <div style="display:flex;gap:8px;margin-left:12px;flex-shrink:0">
+              <button type="button" class="cf-browse-expand-toggle"
+                      @click="toggleAllCFCategories(activeAppType)"
+                      x-text="anyCFCategoryExpanded(activeAppType) ? 'Collapse all' : 'Expand all'"></button>
+              <div class="cf-browse-search-wrap">
+                <input type="search" class="cf-browse-search js-page-search"
+                       x-model="cfBrowseFilter"
+                       placeholder="Search by CF or category name… (press / to focus)"
+                       autocomplete="off"
+                       @keydown.escape="cfBrowseFilter = ''; $event.target.blur()">
+                <button type="button" class="cf-browse-search-clear"
+                        x-show="cfBrowseFilter"
+                        @click="cfBrowseFilter = ''"
+                        x-tt="'Clear search'"
+                        aria-label="Clear search">&#10005;</button>
+              </div>
+              <div class="cf-browse-actions">
                 <button class="btn btn-sm" style="background:var(--accent-blue-strong);color:var(--text-on-accent);white-space:nowrap" @click="openCFEditor('create', activeAppType)">Create</button>
                 <button class="btn btn-sm" style="background:var(--accent-green-strong);color:var(--text-on-accent);white-space:nowrap" @click="openImportCFModal(activeAppType)">Import</button>
               </div>
             </div>
-            <template x-for="cat in getCFBrowseGroups(activeAppType)" :key="cat.displayName">
-              <div class="detail-section" :class="getCategoryClass(cat.category)" style="margin-bottom:8px">
-                <button type="button" class="detail-section-header" @click="toggleDetailSection('cfb_' + cat.displayName)"
-                        :aria-expanded="detailSections['cfb_' + cat.displayName]"
-                        :style="cat.isCustom ? 'border-left:3px solid var(--accent-orange);background:var(--accent-orange-bg)' : ''">
-                  <span class="detail-section-label" :style="cat.isCustom ? 'color:var(--accent-orange)' : ''" x-text="cat.displayName"></span>
+
+            <!-- Page-level column headers — one row at the top, shared by
+                 ALL category cards below. Sticks under the toolbar via
+                 position:sticky so the labels stay visible while scrolling.
+                 Same grid-template-columns as .cf-grid so headers line up
+                 with data cells across cards (cards use fixed widths so
+                 alignment is consistent even when the longest-name CF
+                 differs from card to card). -->
+            <div class="cf-table-header" aria-hidden="true" x-show="filteredCFBrowseGroups(activeAppType).length > 0">
+              <div class="cf-table-header-cell cf-table-header-name">Name</div>
+              <div class="cf-table-header-cell cf-table-header-pills">Conditions</div>
+              <div class="cf-table-header-cell cf-table-header-actions">Actions</div>
+            </div>
+
+            <template x-if="filteredCFBrowseGroups(activeAppType).length === 0">
+              <div class="empty-state" style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No Custom Formats match "<span x-text="cfBrowseFilter"></span>".</div>
+            </template>
+
+            <template x-for="cat in filteredCFBrowseGroups(activeAppType)" :key="cat.displayName">
+              <div class="detail-section cf-browse-card" :class="getCategoryClass(cat.category)">
+                <button type="button" class="detail-section-header cf-browse-header"
+                        @click="toggleDetailSection('cfb_' + cat.displayName)"
+                        :aria-expanded="isCFCategoryExpanded(cat)">
+                  <span class="cf-browse-header-text">
+                    <span class="detail-section-label" x-text="cat.displayName"></span>
+                    <!-- Description snippet — collapsed-card preview so the
+                         user can tell what each category covers without a
+                         click. Hidden when the card is expanded (the full
+                         description renders above the CF list there). -->
+                    <span class="cf-browse-snippet"
+                          x-show="!isCFCategoryExpanded(cat) && cfCategorySnippet(cat)"
+                          x-text="cfCategorySnippet(cat)"></span>
+                  </span>
                   <span class="detail-section-count" x-text="cat.totalCFs + ' CFs'"></span>
-                  <span class="detail-section-chevron" :class="{ open: detailSections['cfb_' + cat.displayName] }">&#9654;</span>
+                  <span class="detail-section-chevron" :class="{ open: isCFCategoryExpanded(cat) }">&#9654;</span>
                 </button>
-                <div x-show="detailSections['cfb_' + cat.displayName]">
+                <div x-show="isCFCategoryExpanded(cat)">
                   <template x-for="group in cat.groups" :key="group.name">
                     <div class="cf-section">
                       <!-- Single group in category: show CFs directly -->
@@ -32,45 +136,23 @@
                         <div>
                           <!-- Group description from TRaSH (shows above CF list when category is expanded). -->
                           <div x-show="cat.trashDescription" class="group-desc-html"
-                               style="padding:6px 16px 10px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
+                               style="padding:6px 16px 8px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
                                x-html="sanitizeHTML(cat.trashDescription)"></div>
-                        <div :style="group.cfs.length >= 30 ? 'display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px' : group.cfs.length >= 10 ? 'display:grid;grid-template-columns:repeat(2,1fr);gap:0 12px' : ''">
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div>
-                              <div class="cf-row">
-                                <div class="cf-name" style="flex:1">
-                                  <span x-text="cf.name"></span>
-                                  <span x-show="cf.isCustom" style="font-size:12px;color:var(--accent-orange);border:1px solid var(--accent-orange);border-radius:3px;padding:0 4px;margin-left:6px">Custom</span>
-                                  <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                  <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-blue);margin-left:6px" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                  <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-red);margin-left:4px" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
-                                </div>
-                                <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                     x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                              </div>
-                            </div>
-                          </template>
-                        </div>
+                          <div class="cf-grid">
+                            <template x-for="cf in group.cfs" :key="cf.trashId">
+                              {{template "sections/cf-row" .}}
+                            </template>
+                          </div>
                         </div>
                       </template>
                       <!-- Single-CF group in multi-group category: show inline -->
                       <template x-if="cat.groups.length > 1 && group.cfs.length === 1">
                         <div>
-                          <template x-for="cf in group.cfs" :key="cf.trashId">
-                            <div>
-                              <div class="cf-row">
-                                <div class="cf-name" style="flex:1">
-                                  <span x-text="cf.name"></span>
-                                  <span x-show="cf.isCustom" style="font-size:12px;color:var(--accent-orange);border:1px solid var(--accent-orange);border-radius:3px;padding:0 4px;margin-left:6px">Custom</span>
-                                  <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                  <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-blue);margin-left:6px" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>
-                                  <button type="button" class="inline-action" x-show="cf.isCustom" style="font-size:13px;color:var(--accent-red);margin-left:4px" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
-                                </div>
-                                <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                     x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                              </div>
-                            </div>
-                          </template>
+                          <div class="cf-grid">
+                            <template x-for="cf in group.cfs" :key="cf.trashId">
+                              {{template "sections/cf-row" .}}
+                            </template>
+                          </div>
                         </div>
                       </template>
                       <!-- Multi-CF group: collapsible sub-headers -->
@@ -89,21 +171,13 @@
                           <div x-show="groupExpanded['cfb_' + cat.displayName + '/' + group.shortName]">
                             <!-- Group description from TRaSH (sourced from cat.trashDescription / group.trash_description JSON) -->
                             <div x-show="cat.trashDescription" class="group-desc-html"
-                                 style="padding:6px 16px 10px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
+                                 style="padding:6px 16px 8px;font-size:13px;color:var(--text-secondary);font-style:italic;line-height:1.5"
                                  x-html="sanitizeHTML(cat.trashDescription)"></div>
-                          <div :style="group.cfs.length >= 30 ? 'display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px' : group.cfs.length >= 10 ? 'display:grid;grid-template-columns:repeat(2,1fr);gap:0 12px' : ''">
+                            <div class="cf-grid">
                             <template x-for="cf in group.cfs" :key="cf.trashId">
-                              <div>
-                                <div class="cf-row">
-                                  <div class="cf-name" style="flex:1">
-                                    <span x-text="cf.name"></span>
-                                    <span class="cf-info" x-show="cf.description" @mouseenter="showCFTooltip($event, cf.description)" @mouseleave="hideCFTooltip()">ⓘ</span>
-                                  </div>
-                                  <div class="cf-score" :class="cf.score > 0 ? 'positive' : cf.score < 0 ? 'negative' : 'zero'"
-                                       x-text="cf.score !== undefined ? ((cf.score > 0 ? '+' : '') + cf.score) : '—'"></div>
-                                </div>
-                              </div>
-                            </template>
+                                {{template "sections/cf-row" .}}
+                              </template>
+                            </div>
                           </div>
                         </div>
                       </template>
@@ -112,6 +186,7 @@
                 </div>
               </div>
             </template>
+            </div>
           </div>
         </template>
         <template x-if="getCFBrowseGroups(activeAppType).length === 0">

@@ -43,6 +43,16 @@ type CleanupItem struct {
 	Name     string   `json:"name"`
 	Detail   string   `json:"detail,omitempty"`
 	Profiles []string `json:"profiles,omitempty"`
+	// ProfileScores maps profile name → score for actions that need to
+	// surface per-profile score data (reset-unsynced-scores). Avoids the
+	// frontend having to parse a string like "Score 100 on HD-Bluray, 50
+	// on UHD-Bluray" out of Detail.
+	ProfileScores map[string]int `json:"profileScores,omitempty"`
+	// Usage maps usage-axis → count for unused-profiles scan. Keys vary
+	// by app type: Radarr returns {"movies", "importLists", "collections"};
+	// Sonarr returns {"series", "importLists"}. A profile is safely
+	// deletable when every value in this map is 0.
+	Usage map[string]int `json:"usage,omitempty"`
 	// RenamingFlag is true when the CF has includeCustomFormatWhenRenaming
 	// set in Arr. When the instance's naming format uses the {Custom Formats}
 	// token, deleting these CFs removes their tags from filenames rendered
@@ -62,6 +72,11 @@ type ManagedCFRef struct {
 	Name           string   `json:"name"`
 	UsedInProfiles []string `json:"usedInProfiles,omitempty"`
 	RenamingFlag   bool     `json:"renamingFlag,omitempty"`
+	// Usage carries the same per-axis count map as CleanupItem.Usage —
+	// populated only by the unused-profiles scan for the in-use bucket
+	// so the frontend can render the same column shape across both
+	// filter tabs.
+	Usage map[string]int `json:"usage,omitempty"`
 }
 
 // --- Handlers ---
@@ -90,7 +105,7 @@ func (s *Server) handleCleanupScan(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Action {
 	case "duplicates":
-		result, err := scanDuplicateCFs(client, inst)
+		result, err := scanDuplicateCFs(client, inst, req.Keep)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -114,7 +129,7 @@ func (s *Server) handleCleanupScan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, result)
 
 	case "reset-unsynced-scores":
-		result, err := scanUnsyncedScores(s.Core, client, inst)
+		result, err := scanUnsyncedScores(s.Core, client, inst, req.Keep)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -131,6 +146,14 @@ func (s *Server) handleCleanupScan(w http.ResponseWriter, r *http.Request) {
 
 	case "unused-by-clonarr":
 		result, err := scanUnusedByClonarr(s.Core, client, inst, req.Keep)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, result)
+
+	case "unused-profiles":
+		result, err := scanUnusedProfiles(client, inst)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -172,6 +195,44 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 
 	client := arr.NewArrClient(inst.URL, inst.APIKey, s.Core.HTTPClient)
 
+	// Defense-in-depth: for actions that affect CFs, re-validate the
+	// caller-supplied IDs against the persisted keep list. If a scan was
+	// buggy or the frontend dropped its filter, this still protects the
+	// user's pinned CFs. orphaned-scores and unused-profiles skip the
+	// filter — the first targets CFs that no longer exist (keep can't
+	// protect what isn't there) and the second operates on quality
+	// profiles, not CFs.
+	skipped := []string{}
+	if req.Action != "orphaned-scores" && req.Action != "unused-profiles" {
+		cfg := s.Core.Config.Get()
+		keepSet := keepSetFromNames(cfg.CleanupKeep[instanceID])
+		if len(keepSet) > 0 {
+			cfs, lerr := client.ListCustomFormats()
+			if lerr != nil {
+				writeError(w, http.StatusInternalServerError, "failed to list CFs for keep-list validation: "+lerr.Error())
+				return
+			}
+			idToName := make(map[int]string, len(cfs))
+			for _, cf := range cfs {
+				idToName[cf.ID] = cf.Name
+			}
+			// In-place filter — write index always trails the read
+			// index, so reusing req.IDs's backing array is safe. The
+			// final reassignment shortens the slice header without
+			// allocating.
+			filtered := req.IDs[:0]
+			for _, id := range req.IDs {
+				if name, ok := idToName[id]; ok && keepSet[name] {
+					skipped = append(skipped, name)
+					log.Printf("CLEANUP: skipping %s/%d — protected by keep list (action=%s)", name, id, req.Action)
+					continue
+				}
+				filtered = append(filtered, id)
+			}
+			req.IDs = filtered
+		}
+	}
+
 	switch req.Action {
 	case "duplicates":
 		count, err := applyDeleteCFs(client, req.IDs)
@@ -179,7 +240,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": count})
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
 
 	case "delete-cfs-keep-scores":
 		count, err := applyDeleteCFs(client, req.IDs)
@@ -187,7 +248,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": count})
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
 
 	case "delete-cfs-and-scores":
 		// Delete CFs first, then reset scores only for the deleted CFs.
@@ -199,12 +260,12 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 		}
 		count, err := applyDeleteCFs(client, req.IDs)
 		if err != nil {
-			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "error": "CF deletion failed: " + err.Error()})
+			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "skipped": skipped, "error": "CF deletion failed: " + err.Error()})
 			return
 		}
 		profiles, err := client.ListProfiles()
 		if err != nil {
-			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "error": "CFs deleted but failed to list profiles for score reset: " + err.Error()})
+			writeJSON(w, map[string]any{"deleted": count, "scoresReset": 0, "skipped": skipped, "error": "CFs deleted but failed to list profiles for score reset: " + err.Error()})
 			return
 		}
 		resetCount := 0
@@ -223,7 +284,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		writeJSON(w, map[string]any{"deleted": count, "scoresReset": resetCount})
+		writeJSON(w, map[string]any{"deleted": count, "scoresReset": resetCount, "skipped": skipped})
 
 	case "reset-unsynced-scores":
 		count, err := applyResetScores(client, req.IDs)
@@ -231,7 +292,7 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"scoresReset": count})
+		writeJSON(w, map[string]any{"scoresReset": count, "skipped": skipped})
 
 	case "orphaned-scores":
 		count, err := applyResetScores(client, req.IDs)
@@ -243,6 +304,14 @@ func (s *Server) handleCleanupApply(w http.ResponseWriter, r *http.Request) {
 
 	case "unused-by-clonarr":
 		count, err := applyDeleteCFs(client, req.IDs)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"deleted": count, "skipped": skipped})
+
+	case "unused-profiles":
+		count, err := applyDeleteProfiles(client, inst, req.IDs)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -300,11 +369,17 @@ func (s *Server) handleSaveCleanupKeep(w http.ResponseWriter, r *http.Request) {
 
 // --- Scan helpers ---
 
-func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanResult, error) {
+func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
 	}
+
+	// Build keep set. Duplicate groups share the same name across all
+	// entries, so a single keep-list hit protects the whole group —
+	// skip the group entirely rather than deleting "all but the first"
+	// when the user has marked that name as protected.
+	keepSet := keepSetFromNames(keep)
 
 	// Group by normalized spec fingerprint
 	type cfEntry struct {
@@ -326,6 +401,19 @@ func scanDuplicateCFs(client *arr.ArrClient, inst core.Instance) (*CleanupScanRe
 	var items []CleanupItem
 	for _, group := range groups {
 		if len(group) < 2 {
+			continue
+		}
+		// Skip the whole group when any member's name is on the keep list.
+		// All duplicates share the same name (or close variants), so a
+		// keep entry for that name protects every instance.
+		protected := false
+		for _, entry := range group {
+			if keepSet[entry.name] {
+				protected = true
+				break
+			}
+		}
+		if protected {
 			continue
 		}
 		// Keep the first, flag the rest as duplicates
@@ -381,19 +469,36 @@ func fingerprintFields(fields any) string {
 	return "{" + b.String() + "}"
 }
 
+// keepSetFromNames turns a CSV-of-trimmed-strings keep list into a
+// case-sensitive lookup set. Whitespace around each name is trimmed,
+// blank entries become a "" key (harmless — no CF name is empty in
+// Arr). Case-sensitive on purpose: CF names are case-sensitive in the
+// sync engine (see sync.go existingByName lookup), so a Keep List
+// entry "PCOK" must only protect the CF named exactly "PCOK", not
+// "pcok". Shared by every cleanup-scan + handleCleanupApply so the
+// keep semantics stay identical across actions.
+func keepSetFromNames(keep []string) map[string]bool {
+	if len(keep) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(keep))
+	for _, name := range keep {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out[name] = true
+	}
+	return out
+}
+
 func scanAllCFs(client *arr.ArrClient, inst core.Instance, action string, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
 	}
 
-	// Build case-sensitive keep set. CF names match case-sensitively across
-	// the sync engine (see sync.go existingByName lookup), so a Keep List
-	// entry "PCOK" only protects the CF named exactly "PCOK", not "pcok".
-	keepSet := make(map[string]bool, len(keep))
-	for _, name := range keep {
-		keepSet[strings.TrimSpace(name)] = true
-	}
+	keepSet := keepSetFromNames(keep)
 
 	items := make([]CleanupItem, 0, len(cfs))
 	for _, cf := range cfs {
@@ -416,7 +521,7 @@ func scanAllCFs(client *arr.ArrClient, inst core.Instance, action string, keep [
 	}, nil
 }
 
-func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance) (*CleanupScanResult, error) {
+func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance, keep []string) (*CleanupScanResult, error) {
 	cfs, err := client.ListCustomFormats()
 	if err != nil {
 		return nil, err
@@ -425,6 +530,11 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 	if err != nil {
 		return nil, err
 	}
+
+	// Keep set protects user-pinned CFs (typically Arr-only release-group
+	// CFs like FLUX / SiC that aren't in any synced TRaSH profile) from
+	// surfacing as score-reset candidates.
+	keepSet := keepSetFromNames(keep)
 
 	// Build set of CF names that are in any synced profile
 	syncedCFNames := make(map[string]bool)
@@ -466,11 +576,12 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 
 
 
-	// Find CFs with non-zero scores that aren't in any synced profile
-	// Collect all profiles where each CF has a non-zero score
+	// Find CFs with non-zero scores that aren't in any synced profile.
+	// Collect per-profile scores so the modal can render them as structured
+	// chips rather than parsing a "Score 100 on X, 50 on Y" string client-side.
 	type cfScoreInfo struct {
-		name    string
-		details []string
+		name   string
+		scores map[string]int // profile name → score
 	}
 	cfScores := make(map[int]*cfScoreInfo)
 	for _, profile := range profiles {
@@ -479,7 +590,7 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 				continue
 			}
 			if info, ok := cfScores[fi.Format]; ok {
-				info.details = append(info.details, strconv.Itoa(fi.Score)+" on "+profile.Name)
+				info.scores[profile.Name] = fi.Score
 			} else {
 				var cfName string
 				for _, cf := range cfs {
@@ -488,12 +599,12 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 						break
 					}
 				}
-				if cfName == "" || syncedCFNames[cfName] {
+				if cfName == "" || syncedCFNames[cfName] || keepSet[cfName] {
 					continue
 				}
 				cfScores[fi.Format] = &cfScoreInfo{
-					name:    cfName,
-					details: []string{strconv.Itoa(fi.Score) + " on " + profile.Name},
+					name:   cfName,
+					scores: map[string]int{profile.Name: fi.Score},
 				}
 			}
 		}
@@ -501,9 +612,9 @@ func scanUnsyncedScores(app *core.App, client *arr.ArrClient, inst core.Instance
 	var items []CleanupItem
 	for cfID, info := range cfScores {
 		items = append(items, CleanupItem{
-			ID:     cfID,
-			Name:   info.name,
-			Detail: "Score " + strings.Join(info.details, ", "),
+			ID:            cfID,
+			Name:          info.name,
+			ProfileScores: info.scores,
 		})
 	}
 
@@ -533,22 +644,30 @@ func scanOrphanedScores(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 		cfIDs[cf.ID] = true
 	}
 
-	// Find profile format items referencing non-existent CFs
-	var items []CleanupItem
-	seen := make(map[int]bool)
+	// Find profile format items referencing non-existent CFs. First pass
+	// collects ALL referencing profiles per orphan ID (the old code stopped
+	// at the first match, so a CF orphaned across three profiles only showed
+	// one of them). Second pass turns the map into stable-ordered items.
+	orphanProfiles := make(map[int][]string)
 	for _, profile := range profiles {
 		for _, fi := range profile.FormatItems {
-			if cfIDs[fi.Format] || seen[fi.Format] {
+			if cfIDs[fi.Format] {
 				continue
 			}
-			seen[fi.Format] = true
-			items = append(items, CleanupItem{
-				ID:     fi.Format,
-				Name:   "CF #" + strconv.Itoa(fi.Format),
-				Detail: "Referenced in " + profile.Name + " but CF no longer exists",
-			})
+			orphanProfiles[fi.Format] = append(orphanProfiles[fi.Format], profile.Name)
 		}
 	}
+	var items []CleanupItem
+	for id, profs := range orphanProfiles {
+		items = append(items, CleanupItem{
+			ID:       id,
+			Name:     "CF #" + strconv.Itoa(id),
+			Profiles: profs,
+		})
+	}
+	// Stable order — Go map iteration is randomised, so without this two
+	// consecutive scans would surface the same orphans in different rows.
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 
 	return &CleanupScanResult{
 		Action:        "orphaned-scores",
@@ -560,7 +679,195 @@ func scanOrphanedScores(client *arr.ArrClient, inst core.Instance) (*CleanupScan
 	}, nil
 }
 
+// scanUnusedProfiles returns ALL quality profiles on the instance with
+// usage counts across every axis Arr ties profiles to. A profile is
+// safely deletable only when every usage count is 0 — Arr itself will
+// refuse to delete a profile that's in use, so we surface the counts
+// here so the user can see why a profile can't be removed.
+//
+// Radarr axes: library (movies), import lists, collections.
+// Sonarr axes: library (series), import lists. Sonarr has no
+// collections in the Plex-collection sense, so that key is omitted.
+//
+// Items (delete candidates) = profiles with all-zero usage.
+// ManagedItems (read-only display) = profiles with non-zero usage in
+// any axis. Same split pattern as unused-by-clonarr.
+func scanUnusedProfiles(client *arr.ArrClient, inst core.Instance) (*CleanupScanResult, error) {
+	profiles, err := client.ListProfiles()
+	if err != nil {
+		return nil, fmt.Errorf("list profiles: %w", err)
+	}
+
+	usage := make(map[int]map[string]int, len(profiles))
+	for _, p := range profiles {
+		usage[p.ID] = map[string]int{}
+	}
+
+	// Library axis — movies for Radarr, series for Sonarr
+	libraryKey := "movies"
+	if inst.Type == "sonarr" {
+		libraryKey = "series"
+	}
+	var libraryIDs []int
+	if inst.Type == "sonarr" {
+		libraryIDs, err = client.ListSeriesProfileIDs()
+	} else {
+		libraryIDs, err = client.ListMovieProfileIDs()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", libraryKey, err)
+	}
+	for _, pid := range libraryIDs {
+		if m, ok := usage[pid]; ok {
+			m[libraryKey]++
+		}
+	}
+
+	// Import lists — both apps
+	if listIDs, err := client.ListImportListProfileIDs(); err == nil {
+		for _, pid := range listIDs {
+			if m, ok := usage[pid]; ok {
+				m["importLists"]++
+			}
+		}
+	} else {
+		log.Printf("CLEANUP: ListImportListProfileIDs failed on %s: %v", inst.Name, err)
+	}
+
+	// Collections — Radarr only
+	if inst.Type == "radarr" {
+		if colIDs, err := client.ListCollectionProfileIDs(); err == nil {
+			for _, pid := range colIDs {
+				if m, ok := usage[pid]; ok {
+					m["collections"]++
+				}
+			}
+		} else {
+			log.Printf("CLEANUP: ListCollectionProfileIDs failed on %s: %v", inst.Name, err)
+		}
+	}
+
+	// Split into deletable (all zero) vs in-use (non-zero somewhere).
+	// Always populate every axis key — even with zero — so frontend
+	// knows which columns to render even when nothing happens to be
+	// in that axis on this instance.
+	axes := []string{libraryKey, "importLists"}
+	if inst.Type == "radarr" {
+		axes = append(axes, "collections")
+	}
+	var items []CleanupItem
+	var managed []ManagedCFRef
+	for _, p := range profiles {
+		// Ensure every axis key exists (even at 0) so frontend table
+		// renders consistent columns.
+		for _, ax := range axes {
+			if _, ok := usage[p.ID][ax]; !ok {
+				usage[p.ID][ax] = 0
+			}
+		}
+		total := 0
+		for _, ax := range axes {
+			total += usage[p.ID][ax]
+		}
+		if total == 0 {
+			items = append(items, CleanupItem{
+				ID:    p.ID,
+				Name:  p.Name,
+				Usage: usage[p.ID],
+			})
+		} else {
+			managed = append(managed, ManagedCFRef{
+				ID:    p.ID,
+				Name:  p.Name,
+				Usage: usage[p.ID],
+			})
+		}
+	}
+
+	return &CleanupScanResult{
+		Action:       "unused-profiles",
+		InstanceID:   inst.ID,
+		Instance:     inst.Name,
+		TotalCount:   len(profiles),
+		AffectCount:  len(items),
+		Items:        items,
+		ManagedItems: managed,
+	}, nil
+}
+
 // --- Apply helpers ---
+
+// applyDeleteProfiles deletes the requested quality profile IDs. Re-
+// verifies usage from a fresh library/import-list/collection snapshot
+// taken once at the top of the call, then checks each ID against that
+// snapshot before deleting. Narrows the scan→delete race window to the
+// few hundred ms between snapshot and per-ID delete, but does not
+// eliminate it. Any axis lookup that fails is a hard error — proceeding
+// with partial usage data could silently delete a profile that is in
+// fact still referenced by the unread axis (Arr does not block deletes
+// on import-list / collection wiring).
+func applyDeleteProfiles(client *arr.ArrClient, inst core.Instance, ids []int) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	wanted := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	usageNow := make(map[int]int)
+
+	var libraryIDs []int
+	var err error
+	if inst.Type == "sonarr" {
+		libraryIDs, err = client.ListSeriesProfileIDs()
+	} else {
+		libraryIDs, err = client.ListMovieProfileIDs()
+	}
+	if err != nil {
+		return 0, fmt.Errorf("re-list library for usage check: %w", err)
+	}
+	for _, pid := range libraryIDs {
+		if wanted[pid] {
+			usageNow[pid]++
+		}
+	}
+	listIDs, err := client.ListImportListProfileIDs()
+	if err != nil {
+		return 0, fmt.Errorf("re-list import lists for usage check: %w", err)
+	}
+	for _, pid := range listIDs {
+		if wanted[pid] {
+			usageNow[pid]++
+		}
+	}
+	if inst.Type == "radarr" {
+		colIDs, err := client.ListCollectionProfileIDs()
+		if err != nil {
+			return 0, fmt.Errorf("re-list collections for usage check: %w", err)
+		}
+		for _, pid := range colIDs {
+			if wanted[pid] {
+				usageNow[pid]++
+			}
+		}
+	}
+
+	deleted := 0
+	var errs []error
+	for _, id := range ids {
+		if usageNow[id] > 0 {
+			log.Printf("CLEANUP: Profile %d on %s skipped — usage rose to %d since scan", id, inst.Name, usageNow[id])
+			continue
+		}
+		if err := client.DeleteProfile(id); err != nil {
+			log.Printf("CLEANUP: Failed to delete profile %d on %s: %v", id, inst.Name, err)
+			errs = append(errs, err)
+			continue
+		}
+		deleted++
+	}
+	return deleted, errors.Join(errs...)
+}
 
 func applyDeleteCFs(client *arr.ArrClient, ids []int) (int, error) {
 	deleted := 0
@@ -651,14 +958,7 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 		return nil, err
 	}
 
-	// Keep list — case-insensitive name protection
-	keepSet := make(map[string]bool, len(keep))
-	for _, k := range keep {
-		k = strings.TrimSpace(k)
-		if k != "" {
-			keepSet[k] = true
-		}
-	}
+	keepSet := keepSetFromNames(keep)
 
 	// Build the managed-name set from clonarr's sync rules + imported profiles.
 	managedNames := make(map[string]bool)
@@ -759,9 +1059,14 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 	// non-zero score (i.e. actively influences release decisions in that
 	// profile). Score-zero entries are omitted because they're inert
 	// padding — every Arr profile contains every CF at score 0 by default.
-	// Soft-fail: empty map if the profile list can't be fetched.
+	// profileUsageOK tracks whether the lookup succeeded; if not, we
+	// must NOT label any CF rename-only (an empty map would otherwise
+	// silently mark every flagged scoring-CF as deletable rename-tag and
+	// reintroduce the bug the score==0 guard was added to fix).
 	profileUsage := make(map[int][]string)
+	profileUsageOK := false
 	if profiles, err := client.ListProfiles(); err == nil {
+		profileUsageOK = true
 		for _, p := range profiles {
 			for _, fi := range p.FormatItems {
 				if fi.Score != 0 {
@@ -769,30 +1074,44 @@ func scanUnusedByClonarr(app *core.App, client *arr.ArrClient, inst core.Instanc
 				}
 			}
 		}
+	} else {
+		log.Printf("CLEANUP: ListProfiles failed in scanUnusedByClonarr on %s — rename-only badges disabled this scan: %v", inst.Name, err)
 	}
 
 	// Walk the Arr CF list once: split into unmanaged (Items — delete
 	// candidates) and managed (ManagedItems — display only). Keep-list
 	// CFs are skipped from both buckets — they're explicit user-protected.
+	//
+	// RenamingFlag requires THREE conditions: profile lookup succeeded,
+	// the Arr per-CF flag (IncludeCustomFormatWhenRenaming), AND zero
+	// score across every quality profile. The Arr flag alone is
+	// misleading: TRaSH CFs like Repack 1/2/3, CC (Comedy Central), and
+	// streaming-service variants all have the flag set on top of
+	// meaningful scores, so they're scoring CFs first, rename contributors
+	// second. Labelling them "rename tag" implied they were safe-to-
+	// delete-as-rename-only, which they're not — deleting them changes
+	// scoring decisions. profileUsage[cf.ID] is the list of profile names
+	// where this CF has non-zero score; empty slice == score 0 everywhere.
 	var items []CleanupItem
 	var managedItems []ManagedCFRef
 	for _, cf := range cfs {
 		if keepSet[cf.Name] {
 			continue
 		}
+		isRenameOnly := profileUsageOK && cf.IncludeCustomFormatWhenRenaming && len(profileUsage[cf.ID]) == 0
 		if managedNames[cf.Name] {
 			managedItems = append(managedItems, ManagedCFRef{
 				ID:             cf.ID,
 				Name:           cf.Name,
 				UsedInProfiles: profileUsage[cf.ID],
-				RenamingFlag:   cf.IncludeCustomFormatWhenRenaming,
+				RenamingFlag:   isRenameOnly,
 			})
 			continue
 		}
 		items = append(items, CleanupItem{
 			ID:           cf.ID,
 			Name:         cf.Name,
-			RenamingFlag: cf.IncludeCustomFormatWhenRenaming,
+			RenamingFlag: isRenameOnly,
 		})
 	}
 
