@@ -1,9 +1,17 @@
+import { sanitizeHTML } from '../utils/csrf.js';
+
 export default {
   state: {
     // Custom Formats browse — name/category text filter. Single string
     // applies across all categories simultaneously; matching categories
     // auto-expand so results are visible without manual clicks.
     cfBrowseFilter: '',
+    // CF row info-cell mode: 'description' (default — show the cf's
+    // description + TRaSH guide / JSON links) or 'conditions' (show
+    // the regex / quality / size condition pills). Toggled from the
+    // toolbar; persisted to localStorage. Replaces the hover-tooltip
+    // pattern so users get the same information without hovering.
+    cfBrowseViewMode: localStorage.getItem('clonarr_cfBrowseViewMode') || 'description',
     // Sidebar category-filter selection. Three formats:
     //   'all'                 — every category (today's stacked cards)
     //   'parent:<prefix>'     — filter to every sub-group under a parent
@@ -711,7 +719,7 @@ export default {
         return '<p>' + lines.join('<br>') + '</p>';
       });
       const out = blocks.join('');
-      return this.sanitizeHTML ? this.sanitizeHTML(out) : out;
+      return sanitizeHTML(out);
     },
 
     // Build the SAFE HTML payload for the row's hover tooltip.
@@ -721,9 +729,63 @@ export default {
     // constructed from helper-emitted strings (no user input), but we
     // still escape via a quick attribute-safe encoder before
     // concatenation to harden against future bugs in those helpers.
+    // Toggle the Conditions/Description column for the CF browse view.
+    // Persists to localStorage so the choice survives reload.
+    setCFBrowseViewMode(mode) {
+      if (mode !== 'description' && mode !== 'conditions') return;
+      this.cfBrowseViewMode = mode;
+      try { localStorage.setItem('clonarr_cfBrowseViewMode', mode); } catch (_) {}
+    },
+
+    // Inline description HTML for the CF browse row's description cell.
+    // Differs from buildCFInfoHTML (tooltip view) by wrapping pieces in
+    // dedicated classes so per-row CSS can control sizing — links sit
+    // in a small muted footer instead of inheriting body font-size.
+    // Falls back to "No description" when both fields are empty so the
+    // cell is never blank.
+    cfInlineDescriptionHTML(cf, appType) {
+      // Description resolve chain — row data first, then raw cfBrowseData
+      // (data.cfs / data.customCFs) as fallback. getCFBrowseGroups carries
+      // description forward but only for the path it was loaded under;
+      // for some load orders the row gets built before descriptions
+      // arrive, so fall back to the raw source if row.description is empty.
+      let raw = cf?.description || '';
+      if (!raw && cf?.trashId) {
+        const src = this.cfBrowseData?.[appType];
+        if (src) {
+          const trashHit = (src.cfs || []).find(c => c.trash_id === cf.trashId);
+          if (trashHit?.description) raw = trashHit.description;
+          if (!raw) {
+            const customHit = (src.customCFs || []).find(c => c.trashId === cf.trashId);
+            if (customHit?.description) raw = customHit.description;
+          }
+        }
+      }
+      const desc = raw.replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
+      const safeDesc = sanitizeHTML(desc);
+      const esc = (u) => String(u).replace(/[<>"'&]/g, c => ({ '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;', '&':'&amp;' }[c]));
+      let html = '';
+      if (safeDesc) {
+        html += `<span class="cf-desc-text">${safeDesc}</span>`;
+      } else {
+        html += `<span class="cf-desc-empty">No description</span>`;
+      }
+      if (!cf?.isCustom) {
+        const guideUrl = this.trashCFGuideUrl ? this.trashCFGuideUrl(cf, appType) : '';
+        const jsonUrl = this.trashCFJsonUrl ? this.trashCFJsonUrl(cf, appType) : '';
+        const links = [];
+        if (guideUrl) links.push(`<a href="${esc(guideUrl)}" target="_blank" rel="noopener noreferrer">TRaSH guide</a>`);
+        if (jsonUrl) links.push(`<a href="${esc(jsonUrl)}" target="_blank" rel="noopener noreferrer">JSON</a>`);
+        if (links.length) {
+          html += `<span class="cf-desc-links">${links.join(' · ')}</span>`;
+        }
+      }
+      return html;
+    },
+
     buildCFInfoHTML(cf, appType) {
       const desc = (cf?.description || '').replace(/\^\^([^^\n]+?)\^\^/g, '<u>$1</u>');
-      const safeDesc = this.sanitizeHTML ? this.sanitizeHTML(desc) : '';
+      const safeDesc = sanitizeHTML(desc);
       let html = safeDesc;
       if (!cf?.isCustom) {
         const guideUrl = this.trashCFGuideUrl ? this.trashCFGuideUrl(cf, appType) : '';

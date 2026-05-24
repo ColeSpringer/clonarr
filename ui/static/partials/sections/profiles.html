@@ -489,8 +489,14 @@
         <div class="page" x-show="getProfileTab(activeAppType) === 'compare'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">Compare Profiles</div>
           <div style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Compare your <span x-text="activeAppLabel"></span> profiles against TRaSH Guides profiles. See what's matching, what has wrong scores, and what's missing — then sync individual fixes or all at once.</div>
-          <div style="font-size:12px;color:var(--text-primary);margin-bottom:16px;line-height:1.6;padding:10px 14px;background:var(--accent-orange-bg);border:1px solid var(--accent-orange-strong);border-radius:6px;border-left:3px solid var(--accent-orange)">
-            <strong style="color:var(--accent-orange)">Note:</strong> Compare works best with profiles synced via Clonarr. For profiles created with other tools, custom formats with a score of 0 cannot be reliably distinguished from unused formats — these may not appear as "in use" in the comparison.
+          <!-- Info strip themed via --app-color so the whole note (border,
+               background, "Note:" label) follows Radarr yellow / Sonarr
+               blue. Hardcoded orange used to read as a warning even
+               though this is an informational caveat. --app-glow gives
+               a soft tinted background that doesn't compete with the
+               body content. -->
+          <div style="font-size:12px;color:var(--text-primary);margin-bottom:16px;line-height:1.6;padding:10px 14px;border-radius:6px;background:var(--app-glow);border:1px solid var(--app-color);border-left:3px solid var(--app-color)">
+            <strong style="color:var(--app-color)">Note:</strong> Compare works best with profiles synced via Clonarr. For profiles created with other tools, custom formats with a score of 0 cannot be reliably distinguished from unused formats — these may not appear as "in use" in the comparison.
           </div>
 
           <!-- Compact selector bar: instance + Arr profile + TRaSH profile on one row -->
@@ -520,7 +526,7 @@
                 <span style="width:1px;height:20px;background:var(--border-subtle)"></span>
               </template>
               <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType">
-                <span style="font-size:12px;color:var(--text-muted)">Arr:</span>
+                <span style="font-size:12px;color:var(--text-muted)">Current:</span>
               </template>
               <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType">
                 <select class="input" style="width:200px;font-size:12px;padding:4px 8px"
@@ -536,14 +542,14 @@
                 <span style="font-size:11px;color:var(--accent-orange);font-weight:600">VS</span>
               </template>
               <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType">
-                <span style="font-size:12px;color:var(--text-muted)">TRaSH:</span>
+                <span style="font-size:12px;color:var(--text-muted)">Guide:</span>
               </template>
               <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType">
                 <select class="input" style="width:240px;font-size:12px;padding:4px 8px"
                         :disabled="!instCompareProfile[getCompareInstance(activeAppType)?.id]"
                         :value="instCompareTrashId[getCompareInstance(activeAppType)?.id] || ''"
                         @change="runProfileCompare(getCompareInstance(activeAppType), instCompareProfile[getCompareInstance(activeAppType)?.id], $event.target.value)">
-                  <option value="">Select TRaSH profile...</option>
+                  <option value="">Select Guide profile...</option>
                   <template x-for="gn in getTrashProfileGroups(activeAppType)" :key="'cmpg-'+gn">
                     <optgroup :label="gn">
                       <template x-for="tp in getTrashProfilesByGroup(activeAppType, gn)" :key="tp.trashId">
@@ -580,12 +586,12 @@
           </template>
           <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType && instProfiles[getCompareInstance(activeAppType)?.id] && !instCompareProfile[getCompareInstance(activeAppType)?.id]">
             <div class="card">
-              <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">Select an Arr profile and a TRaSH profile above to compare.</div>
+              <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">Select a Current profile and a Guide profile above to compare.</div>
             </div>
           </template>
           <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType && instCompareProfile[getCompareInstance(activeAppType)?.id] && !instCompareTrashId[getCompareInstance(activeAppType)?.id]">
             <div class="card">
-              <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">Select a TRaSH profile to compare against.</div>
+              <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">Select a Guide profile to compare against.</div>
             </div>
           </template>
           <template x-if="getCompareInstance(activeAppType) && getCompareInstance(activeAppType)?.type === activeAppType && instCompareTrashId[getCompareInstance(activeAppType)?.id]">
@@ -628,97 +634,126 @@
                                       <div x-data="{ get cr() { return instCompareResult[getCompareInstance(activeAppType)?.id] }, get iid() { return getCompareInstance(activeAppType)?.id }, get inst() { return getCompareInstance(activeAppType) } }">
 
                                         <!-- Summary bar — single-row: profile identity + status + Sync All Fixes.
-                                             Diff counts intentionally removed; the filter chip bar below is the single source of truth for counts.
-                                             NOTE: :style uses object form so it MERGES with the base style attribute. A string form would replace it entirely. -->
+                                             Diff counts live in the sidebar sub-nav (single source of
+                                             truth). Header diff-count was removed because backend +
+                                             frontend classifications produced disagreeing totals.
+                                             Border tint follows app-color so Radarr stays yellow /
+                                             Sonarr blue when something is unsynced; green when fully
+                                             in sync. -->
                                         <div style="background:var(--bg-card);border:1px solid var(--text-muted-secondary);border-radius:8px;padding:10px 14px;margin-bottom:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 6px var(--alpha-shadow)"
-                                             :style="{ borderColor: ((cr.summary?.wrongScore||0) + (cr.summary?.missing||0) + (cr.summary?.extra||0) + (cr.summary?.settingsDiffs||0) + (cr.summary?.qualityDiffs||0)) > 0 ? 'var(--accent-orange)' : 'var(--accent-green)' }">
+                                             :style="{ borderColor: compareAdjustedCounts(cr).allDiffs > 0 || (cr.summary?.extra||0) > 0 || (cr.summary?.settingsDiffs||0) > 0 || (cr.summary?.qualityDiffs||0) > 0 ? 'var(--app-color)' : 'var(--accent-green)' }">
                                           <strong style="color:var(--text-primary);font-size:13px" x-text="ap.name"></strong>
-                                          <span style="color:var(--text-muted);font-size:12px">vs</span>
+                                          <span style="color:var(--app-color);font-size:12px;font-weight:600">vs</span>
                                           <strong style="color:var(--text-primary);font-size:13px" x-text="cr.trashProfileName"></strong>
-                                          <span x-show="cr.summary.missing === 0 && cr.summary.wrongScore === 0 && cr.summary.extra === 0 && cr.summary.settingsDiffs === 0 && cr.summary.qualityDiffs === 0"
+                                          <span x-show="compareAdjustedCounts(cr).allDiffs === 0 && (cr.summary?.extra||0) === 0 && (cr.summary?.settingsDiffs||0) === 0 && (cr.summary?.qualityDiffs||0) === 0"
                                                 style="color:var(--accent-green);font-size:13px;font-weight:500;margin-left:8px">&#10003; Profile fully in sync</span>
-                                          <span x-show="((cr.summary?.wrongScore||0) + (cr.summary?.missing||0) + (cr.summary?.extra||0) + (cr.summary?.settingsDiffs||0) + (cr.summary?.qualityDiffs||0)) > 0"
-                                                style="color:var(--accent-orange);font-size:13px;font-weight:500;margin-left:8px"
-                                                x-text="'\u26A0 ' + ((cr.summary?.wrongScore||0) + (cr.summary?.missing||0) + (cr.summary?.extra||0) + (cr.summary?.settingsDiffs||0) + (cr.summary?.qualityDiffs||0)) + ' diffs — see filter below for details'"></span>
-                                          <!-- Optional CFs surface separately in blue. Distinguishes
-                                               'intentionally customized within TRaSH spec' from 'out
-                                               of sync' — these aren't problems, just choices. -->
-                                          <template x-if="compareAdjustedCounts(cr).optional > 0">
-                                            <span style="color:var(--accent-purple);font-size:13px;font-weight:500;margin-left:8px"
-                                                  x-tt="'Optional CFs activated outside profile defaults — filter by Optional below to see them.'"
-                                                  x-text="'\u25CF ' + compareAdjustedCounts(cr).optional + ' optional CFs activated'"></span>
-                                          </template>
                                           <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
                                             <!-- Edit & Sync — opens the profile editor pre-loaded with
                                                  your current Arr state captured as overrides. You inspect,
                                                  keep what you want, revert what you don't, then Save & Sync.
                                                  Goes through the same engine path as Profile Sync. -->
                                             <button class="btn btn-sm btn-primary" style="font-size:12px;padding:3px 10px"
-                                                    x-show="compareAdjustedCounts(cr).diffs > 0"
+                                                    x-show="compareAdjustedCounts(cr).allDiffs > 0"
                                                     x-tt="'Open the profile editor — review the differences and adjust which to keep as overrides before applying.'"
                                                     @click="openCompareEditor(inst, cr.arrProfileId, cr.trashProfileId)">Edit &amp; Sync &rarr;</button>
                                           </div>
                                         </div>
+                                        <!-- Sub-nav + content shell.
+                                             Each item maps to one of the new compareFilter values.
+                                             Items are organized: Overview group -> Settings -> Diff buckets -> Browse views. -->
+                                        <div class="cmp-shell">
+                                          <nav class="cmp-side-nav" aria-label="Compare sections">
+                                            <button type="button" class="cmp-side-item"
+                                                    :class="{ active: compareFilter === 'overview' }"
+                                                    @click="compareFilter = 'overview'">
+                                              <span class="cmp-side-label">Overview</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).overview || ''"></span>
+                                            </button>
+                                            <button type="button" class="cmp-side-item cmp-side-optional"
+                                                    :class="{ active: compareFilter === 'optional', inactive: compareAdjustedCounts(cr).optional === 0 }"
+                                                    @click="compareFilter = 'optional'">
+                                              <span class="cmp-side-label">Optional</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).optional || ''"></span>
+                                            </button>
+                                            <div class="cmp-side-divider" aria-hidden="true"></div>
+                                            <button type="button" class="cmp-side-item"
+                                                    :class="{ active: compareFilter === 'general', inactive: (cr.settingsDiffs || []).filter(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)).length === 0 }"
+                                                    @click="compareFilter = 'general'">
+                                              <span class="cmp-side-label">General</span>
+                                              <span class="cmp-side-count" x-text="(cr.settingsDiffs || []).filter(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)).length || ''"></span>
+                                            </button>
+                                            <button type="button" class="cmp-side-item"
+                                                    :class="{ active: compareFilter === 'quality', inactive: ((cr.settingsDiffs || []).filter(s => s.name === 'Cutoff' && !s.match).length + (cr.qualityDiffs || []).filter(q => !q.match).length) === 0 }"
+                                                    @click="compareFilter = 'quality'">
+                                              <span class="cmp-side-label">Qualities</span>
+                                              <span class="cmp-side-count" x-text="((cr.settingsDiffs || []).filter(s => s.name === 'Cutoff' && !s.match).length + (cr.qualityDiffs || []).filter(q => !q.match).length) || ''"></span>
+                                            </button>
+                                            <div class="cmp-side-divider" aria-hidden="true"></div>
+                                            <button type="button" class="cmp-side-item"
+                                                    :class="{ active: compareFilter === 'all-diffs', inactive: compareAdjustedCounts(cr).allDiffs === 0 }"
+                                                    @click="compareFilter = 'all-diffs'">
+                                              <span class="cmp-side-label">All Diffs</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).allDiffs || ''"></span>
+                                            </button>
+                                            <button type="button" class="cmp-side-item cmp-side-wrong"
+                                                    :class="{ active: compareFilter === 'wrong', inactive: compareAdjustedCounts(cr).wrong === 0 }"
+                                                    @click="compareFilter = 'wrong'">
+                                              <span class="cmp-side-label">Wrong score</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).wrong || ''"></span>
+                                            </button>
+                                            <button type="button" class="cmp-side-item cmp-side-extra"
+                                                    :class="{ active: compareFilter === 'extra', inactive: compareAdjustedCounts(cr).extra === 0 }"
+                                                    @click="compareFilter = 'extra'">
+                                              <span class="cmp-side-label">Additional CFs</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).extra || ''"></span>
+                                            </button>
+                                            <button type="button" class="cmp-side-item cmp-side-missing"
+                                                    :class="{ active: compareFilter === 'missing', inactive: compareAdjustedCounts(cr).missing === 0 }"
+                                                    @click="compareFilter = 'missing'">
+                                              <span class="cmp-side-label">Missing</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).missing || ''"></span>
+                                            </button>
+                                            <div class="cmp-side-divider" aria-hidden="true"></div>
+                                            <button type="button" class="cmp-side-item"
+                                                    :class="{ active: compareFilter === 'all-active' }"
+                                                    @click="compareFilter = 'all-active'">
+                                              <span class="cmp-side-label">All Active</span>
+                                              <span class="cmp-side-count" x-text="compareAdjustedCounts(cr).allActive || ''"></span>
+                                            </button>
+                                          </nav>
+                                          <div class="cmp-pane">
+                                            <!-- Pane description: one short, plain-language sentence
+                                                 telling the user what THIS tab shows. Changes per
+                                                 sub-tab via cmpPaneDescription(). -->
+                                            <div class="cmp-pane-desc" x-text="cmpPaneDescription(compareFilter)"></div>
 
-                                        <!-- Filter chip bar — single source of truth for diff counts. -->
-                                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-                                          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-right:6px">Filter</span>
-                                          <button type="button" class="compare-chip" :class="compareFilter === 'all' ? 'active' : ''" :aria-pressed="compareFilter === 'all'" @click="compareFilter = 'all'" x-text="'All (' + compareAdjustedCounts(cr).all + ')'"></button>
-                                          <button type="button" class="compare-chip" :class="compareFilter === 'diff' ? 'active' : ''" :aria-pressed="compareFilter === 'diff'" @click="compareFilter = 'diff'" x-text="'Only diffs (' + compareAdjustedCounts(cr).diffs + ')'"></button>
-                                          <button type="button" class="compare-chip compare-chip-wrong" :class="compareFilter === 'wrong' ? 'active' : ''" :aria-pressed="compareFilter === 'wrong'" @click="compareFilter = 'wrong'" x-text="'⚠ Wrong score (' + compareAdjustedCounts(cr).wrong + ')'"></button>
-                                          <button type="button" class="compare-chip compare-chip-missing" :class="compareFilter === 'missing' ? 'active' : ''" :aria-pressed="compareFilter === 'missing'" @click="compareFilter = 'missing'" x-tt="'Golden Rule groups count as 1 item — pick 1 of the available variants'" x-text="'✗ Missing (' + compareAdjustedCounts(cr).missing + ')'"></button>
-                                          <button type="button" class="compare-chip compare-chip-extra" :class="compareFilter === 'extra' ? 'active' : ''" :aria-pressed="compareFilter === 'extra'" @click="compareFilter = 'extra'" x-text="'+ Extra (' + compareAdjustedCounts(cr).extra + ')'"></button>
-                                          <button type="button" class="compare-chip compare-chip-optional" :class="compareFilter === 'optional' ? 'active' : ''" :aria-pressed="compareFilter === 'optional'" @click="compareFilter = 'optional'" x-tt="'Optional CFs activated outside the profile defaults — Reset to Profile Default would clear these.'" x-text="'⬢ Optional (' + compareAdjustedCounts(cr).optional + ')'"></button>
-                                          <button type="button" class="compare-chip compare-chip-match" :class="compareFilter === 'match' ? 'active' : ''" :aria-pressed="compareFilter === 'match'" @click="compareFilter = 'match'" x-text="'✓ Matching (' + compareAdjustedCounts(cr).matching + ')'"></button>
-                                        </div>
-
-                                        <!-- Profile Settings — one card with a 4-column table (Setting | Current | TRaSH | Sync) and sub-header rows for General / Quality / Quality Items. Rows filtered by compareFilter. Entire card hidden if filter yields 0 visible rows. Matches clonarr-compare-redesign-v3.html mockup. -->
-                                        <!-- General + Quality split into two side-by-side cards (was a single
-                                             "Profile Settings" card with sub-headers). Card titles align with
-                                             profile-detail.html's pd-card-general / pd-card-quality. Each card
-                                             keeps a flat table view (no collapse). Both cards still drive the
-                                             same 'settings' section in JS handlers — visual split only. -->
-                                        <template x-if="['all','diff','match'].includes(compareFilter) && ((cr.settingsDiffs || []).some(s => compareFilter === 'all' || (compareFilter === 'diff' && !s.match) || (compareFilter === 'match' && s.match)) || (cr.qualityDiffs || []).some(q => compareFilter === 'all' || (compareFilter === 'diff' && !q.match) || (compareFilter === 'match' && q.match)))">
-                                          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-
-                                            <!-- ===== General card ===== -->
-                                            <template x-if="(cr.settingsDiffs || []).some(s => ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name) && (compareFilter === 'all' || (compareFilter === 'diff' && !s.match) || (compareFilter === 'match' && s.match))) || compareFilter === 'all' || compareFilter === 'match'">
-                                              <div class="card" style="flex:1;min-width:340px;overflow:hidden">
+                                            <!-- ===== General settings card ===== -->
+                                            <template x-if="compareFilter === 'general'">
+                                              <div class="card" style="margin-bottom:10px;overflow:hidden">
                                                 <div style="padding:10px 14px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:center;gap:8px">
-                                                  <span style="font-size:13px;width:14px;text-align:center;flex-shrink:0"
-                                                        :style="(cr.settingsDiffs || []).some(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)) ? 'color:var(--accent-orange)' : 'color:var(--accent-green)'"
-                                                        x-text="(cr.settingsDiffs || []).some(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)) ? '⚠' : '✓'"></span>
                                                   <span style="font-size:14px;font-weight:600;color:var(--text-body)">General</span>
-                                                  <template x-if="(cr.settingsDiffs || []).filter(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)).length > 0">
-                                                    <span style="font-size:11px;color:var(--accent-orange);background:var(--accent-orange-bg);padding:1px 6px;border-radius:8px;margin-left:4px"
-                                                          x-text="(cr.settingsDiffs || []).filter(s => !s.match && ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name)).length + ' differ'"></span>
-                                                  </template>
-                                                  <div style="flex:1"></div>
                                                 </div>
                                                 <table class="cmp-settings-table">
                                                   <thead>
                                                     <tr>
                                                       <th class="col-name">Setting</th>
                                                       <th class="col-value">Current</th>
-                                                      <th class="col-value">Profile</th>
+                                                      <th class="col-value">Guide</th>
                                                     </tr>
                                                   </thead>
                                                   <tbody>
                                                     <template x-for="sd in (cr.settingsDiffs || []).filter(s => ['Language','Upgrade Allowed','Min Format Score','Min Upgrade Format Score','Cutoff Format Score'].includes(s.name))" :key="'g-'+sd.name">
-                                                      <tr x-show="compareFilter === 'all' || (compareFilter === 'diff' && !sd.match) || (compareFilter === 'match' && sd.match)">
+                                                      <tr>
                                                         <td class="name" x-text="sd.name === 'Min Format Score' ? 'Min Score' : sd.name === 'Min Upgrade Format Score' ? 'Min Upgrade Score' : sd.name === 'Cutoff Format Score' ? 'Cutoff Score' : sd.name === 'Upgrade Allowed' ? 'Upgrades Allowed' : sd.name"></td>
-                                                        <td class="current" x-text="sd.current"></td>
-                                                        <td :class="sd.match ? 'target-match' : 'target-diff'" x-text="sd.desired"></td>
+                                                        <td :class="sd.match ? 'current-match' : 'current-diff'" x-text="sd.current"></td>
+                                                        <td class="guide" x-text="sd.desired"></td>
                                                       </tr>
                                                     </template>
-                                                    <!-- Score Set — read-only row to mirror profile-detail's General card.
-                                                         Shown only on All/Match filters; always a "match" since
-                                                         compare doesn't expose score-set as a writable diff. -->
-                                                    <tr x-show="compareFilter === 'all' || compareFilter === 'match'">
+                                                    <tr>
                                                       <td class="name">Score Set</td>
-                                                      <td class="current target-match"
+                                                      <td class="current-match"
                                                           x-text="((trashProfiles[inst.type] || []).find(p => p.trashId === cr.trashProfileId)?.trashScoreSet) || 'default'"></td>
-                                                      <td class="target-match"
+                                                      <td class="guide"
                                                           x-text="((trashProfiles[inst.type] || []).find(p => p.trashId === cr.trashProfileId)?.trashScoreSet) || 'default'"></td>
                                                     </tr>
                                                   </tbody>
@@ -726,41 +761,33 @@
                                               </div>
                                             </template>
 
-                                            <!-- ===== Quality card ===== -->
-                                            <template x-if="((cr.settingsDiffs || []).some(s => s.name === 'Cutoff' && (compareFilter === 'all' || (compareFilter === 'diff' && !s.match) || (compareFilter === 'match' && s.match))) || (cr.qualityDiffs || []).some(q => compareFilter === 'all' || (compareFilter === 'diff' && !q.match) || (compareFilter === 'match' && q.match)))">
-                                              <div class="card" style="flex:1;min-width:340px;overflow:hidden">
+                                            <!-- ===== Quality items card ===== -->
+                                            <template x-if="compareFilter === 'quality'">
+                                              <div class="card" style="margin-bottom:10px;overflow:hidden">
                                                 <div style="padding:10px 14px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:center;gap:8px">
-                                                  <span style="font-size:13px;width:14px;text-align:center;flex-shrink:0"
-                                                        :style="((cr.settingsDiffs || []).some(s => s.name === 'Cutoff' && !s.match) || (cr.qualityDiffs || []).some(q => !q.match)) ? 'color:var(--accent-orange)' : 'color:var(--accent-green)'"
-                                                        x-text="((cr.settingsDiffs || []).some(s => s.name === 'Cutoff' && !s.match) || (cr.qualityDiffs || []).some(q => !q.match)) ? '⚠' : '✓'"></span>
-                                                  <span style="font-size:14px;font-weight:600;color:var(--text-body)">Quality</span>
-                                                  <template x-if="(cr.qualityDiffs || []).filter(q => !q.match).length > 0 || (cr.settingsDiffs || []).some(s => s.name === 'Cutoff' && !s.match)">
-                                                    <span style="font-size:11px;color:var(--accent-orange);background:var(--accent-orange-bg);padding:1px 6px;border-radius:8px;margin-left:4px"
-                                                          x-text="((cr.qualityDiffs || []).filter(q => !q.match).length + ((cr.settingsDiffs || []).some(s => s.name === 'Cutoff' && !s.match) ? 1 : 0)) + ' differ'"></span>
-                                                  </template>
-                                                  <div style="flex:1"></div>
+                                                  <span style="font-size:14px;font-weight:600;color:var(--text-body)">Qualities</span>
                                                 </div>
                                                 <table class="cmp-settings-table">
                                                   <thead>
                                                     <tr>
-                                                      <th class="col-name">Setting</th>
+                                                      <th class="col-name">Quality</th>
                                                       <th class="col-value">Current</th>
-                                                      <th class="col-value">Profile</th>
+                                                      <th class="col-value">Guide</th>
                                                     </tr>
                                                   </thead>
                                                   <tbody>
                                                     <template x-for="sd in (cr.settingsDiffs || []).filter(s => s.name === 'Cutoff')" :key="'q-'+sd.name">
-                                                      <tr x-show="compareFilter === 'all' || (compareFilter === 'diff' && !sd.match) || (compareFilter === 'match' && sd.match)">
+                                                      <tr>
                                                         <td class="name">Cutoff</td>
-                                                        <td class="current" x-text="sd.current"></td>
-                                                        <td :class="sd.match ? 'target-match' : 'target-diff'" x-text="sd.desired"></td>
+                                                        <td :class="sd.match ? 'current-match' : 'current-diff'" x-text="sd.current"></td>
+                                                        <td class="guide" x-text="sd.desired"></td>
                                                       </tr>
                                                     </template>
                                                     <template x-for="qd in (cr.qualityDiffs || [])" :key="'qi-'+qd.name">
-                                                      <tr x-show="compareFilter === 'all' || (compareFilter === 'diff' && !qd.match) || (compareFilter === 'match' && qd.match)">
+                                                      <tr>
                                                         <td class="name" x-text="qd.name"></td>
-                                                        <td class="current" :style="qd.currentAllowed ? 'color:var(--accent-green)' : 'color:var(--accent-red)'" x-text="qd.currentAllowed ? 'Enabled' : 'Disabled'"></td>
-                                                        <td :style="qd.desiredAllowed ? 'color:var(--accent-green)' : 'color:var(--accent-red)'" x-text="qd.desiredAllowed ? 'Enabled' : 'Disabled'"></td>
+                                                        <td :class="qd.match ? 'current-match' : 'current-diff'" x-text="qd.currentAllowed ? 'Enabled' : 'Disabled'"></td>
+                                                        <td class="guide" x-text="qd.desiredAllowed ? 'Enabled' : 'Disabled'"></td>
                                                       </tr>
                                                     </template>
                                                   </tbody>
@@ -768,200 +795,158 @@
                                               </div>
                                             </template>
 
-                                          </div>
-                                        </template>
-
-                                        <!-- Required CFs — same 4-col table layout as Profile Settings, using CB | Name | Current | TRaSH | New columns. Status icons shown inside Name column. -->
-                                        <template x-if="(cr.formatItems || []).filter(fi => compareRowVisible(compareFormatItemStatus(fi))).length > 0">
-                                          <div class="card" style="margin-bottom:10px;overflow:hidden">
-                                            <div style="padding:10px 14px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:center;gap:8px">
-                                              <span style="font-size:13px;width:14px;text-align:center;flex-shrink:0"
-                                                    :style="cr.formatItems.some(fi => !fi.scoreMatch || !fi.exists) ? 'color:var(--accent-orange)' : 'color:var(--accent-green)'"
-                                                    x-text="cr.formatItems.some(fi => !fi.scoreMatch || !fi.exists) ? '⚠' : '✓'"></span>
-                                              <span style="font-size:14px;font-weight:600;color:var(--text-body)">Required CFs</span>
-                                              <span style="display:flex;gap:4px;align-items:center;font-size:11px;margin-left:8px">
-                                                <span style="color:var(--accent-green);background:var(--fill-green-soft);padding:1px 6px;border-radius:8px" x-text="cr.formatItems.filter(fi => fi.exists && fi.scoreMatch).length + ' matching'"></span>
-                                                <span x-show="cr.formatItems.some(fi => fi.exists && !fi.scoreMatch)" style="color:var(--accent-orange);background:var(--accent-orange-bg);padding:1px 6px;border-radius:8px" x-text="cr.formatItems.filter(fi => fi.exists && !fi.scoreMatch).length + ' wrong score'"></span>
-                                                <span x-show="cr.formatItems.some(fi => !fi.exists)" style="color:var(--accent-red);background:var(--accent-red-bg);padding:1px 6px;border-radius:8px" x-text="cr.formatItems.filter(fi => !fi.exists).length + ' missing'"></span>
-                                              </span>
-                                              <div style="flex:1"></div>
-                                            </div>
-                                            <table class="cmp-settings-table">
-                                              <thead>
-                                                <tr>
-                                                  <th class="col-name">Custom Format</th>
-                                                  <th class="col-value">Current</th>
-                                                  <th class="col-value">Profile</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                <template x-for="fi in cr.formatItems" :key="fi.trashId">
-                                                  <tr x-show="compareRowVisible(compareFormatItemStatus(fi))">
-                                                    <td class="name">
-                                                      <span style="margin-right:4px"
-                                                            :style="fi.exists && fi.scoreMatch ? 'color:var(--accent-green)' : fi.exists ? 'color:var(--accent-orange)' : 'color:var(--accent-red)'"
-                                                            x-text="fi.exists && fi.scoreMatch ? '✓' : fi.exists ? '⚠' : '✗'"></span>
-                                                      <span x-text="fi.name"></span>
-                                                      <span class="cf-info" x-show="fi.description"
-                                                            @mouseenter="showCFTooltip($event, fi.description)"
-                                                            @mouseleave="hideCFTooltip()">ⓘ</span>
-                                                    </td>
-                                                    <td class="current">
-                                                      <span class="cmp-override-badge"
-                                                            :class="fi.scoreOverride != null ? 'on' : ''"
-                                                            x-tt="fi.scoreOverride != null ? ('Override: this score is set intentionally via a Clonarr sync rule (saved as ' + ((fi.scoreOverride > 0 ? '+' : '') + fi.scoreOverride) + ')') : ''"
-                                                            x-text="fi.scoreOverride != null ? 'OR' : ''"></span>
-                                                      <span :style="fi.scoreOverride != null ? 'color:var(--accent-blue);font-weight:600' : ''"
-                                                            x-text="fi.exists ? ((fi.currentScore > 0 ? '+' : '') + fi.currentScore) : '—'"></span>
-                                                    </td>
-                                                    <td :class="fi.scoreMatch ? 'target-match' : 'target-diff'"
-                                                        x-text="(fi.desiredScore > 0 ? '+' : '') + fi.desiredScore"></td>
-                                                  </tr>
-                                                </template>
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </template>
-
-                                        <!-- Groups — flat table. No outer collapse, no per-group collapse. Each group is a subsection header + its CFs listed directly below. Filter predicates hide individual rows AND entire groups when all rows are filtered. Card title aligned with profile-detail.html (was "CF Groups"). -->
-                                        <template x-if="(cr.groups || []).filter(g => g.cfs.some(cf => compareRowVisible(compareGroupCFStatus(cf, g)))).length > 0">
-                                          <div class="card" style="margin-bottom:10px;overflow:hidden">
-                                            <div style="padding:10px 14px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:center;gap:8px">
-                                              <span style="font-size:13px;width:14px;text-align:center;flex-shrink:0"
-                                                    :style="cr.groups.some(g => g.wrongScore > 0 || g.missing > 0) ? 'color:var(--accent-orange)' : 'color:var(--accent-green)'"
-                                                    x-text="cr.groups.some(g => g.wrongScore > 0 || g.missing > 0) ? '⚠' : '✓'"></span>
-                                              <span style="font-size:14px;font-weight:600;color:var(--text-body)">Groups</span>
-                                              <span style="display:flex;gap:4px;align-items:center;font-size:11px;margin-left:8px">
-                                                <span style="color:var(--accent-green);background:var(--fill-green-soft);padding:1px 6px;border-radius:8px" x-text="cr.groups.length + ' groups'"></span>
-                                                <span x-show="cr.groups.some(g => g.wrongScore > 0)" style="color:var(--accent-orange);background:var(--accent-orange-bg);padding:1px 6px;border-radius:8px"
-                                                      x-text="cr.groups.reduce((n,g) => n + g.wrongScore, 0) + ' wrong score'"></span>
-                                                <span x-show="cr.groups.some(g => g.missing > 0)" style="color:var(--accent-red);background:var(--accent-red-bg);padding:1px 6px;border-radius:8px"
-                                                      x-text="cr.groups.reduce((n,g) => n + g.missing, 0) + ' missing'"></span>
-                                              </span>
-                                              <div style="flex:1"></div>
-                                            </div>
-                                            <table class="cmp-settings-table">
-                                              <thead>
-                                                <tr>
-                                                  <th class="col-name">Custom Format</th>
-                                                  <th class="col-value">Current</th>
-                                                  <th class="col-value">Profile</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                <template x-for="row in flatCompareGroupRows(cr)" :key="row.key">
-                                                  <tr :class="(row.type === 'sub' || row.type === 'multi') ? 'sub-header' : ''"
-                                                      x-show="row.type !== 'cf' || (row.group.exclusive && compareGroupHasDiff(row.group) && compareFilter !== 'match' && compareFilter !== 'matching') || compareRowVisible(compareGroupCFStatus(row.cf, row.group))">
-                                                    <template x-if="row.type === 'sub'">
-                                                      <td colspan="3">
-                                                        <template x-if="row.isGolden">
-                                                          <span x-tt="stripHtml(row.group.trashDescription) || 'Exclusive required group — pick one variant'"
-                                                                style="color:var(--accent-red);font-size:14px;margin-right:6px;cursor:help">&#9888;</span>
-                                                        </template>
-                                                        <template x-if="!row.isGolden">
-                                                          <span :style="row.group.wrongScore > 0 || row.group.missing > 0 ? 'color:var(--accent-orange)' : row.group.present > 0 && row.group.matching === row.group.present ? 'color:var(--accent-green)' : 'color:var(--text-secondary)'"
-                                                                x-text="row.group.wrongScore > 0 || row.group.missing > 0 ? '⚠' : row.group.present > 0 && row.group.matching === row.group.present ? '✓' : '○'"
-                                                                style="margin-right:6px"></span>
-                                                        </template>
-                                                        <span :style="row.isGolden ? 'color:var(--accent-red)' : ''" x-text="row.group.name"></span>
-                                                        <span x-show="row.group.exclusive" :style="row.isGolden ? 'font-size:10px;color:var(--text-on-accent);background:var(--accent-red);padding:1px 6px;border-radius:8px;margin-left:8px;text-transform:none;letter-spacing:0;font-weight:600' : 'font-size:10px;color:var(--accent-blue);background:var(--fill-blue-soft);padding:1px 6px;border-radius:8px;margin-left:8px;text-transform:none;letter-spacing:0'">pick one</span>
-                                                        <span x-show="row.group.defaultEnabled && !row.isGolden" style="font-size:10px;color:var(--accent-green);background:var(--fill-green-soft);padding:1px 6px;border-radius:8px;margin-left:4px;text-transform:none;letter-spacing:0">default</span>
-                                                        <span style="float:right;font-size:10px;display:inline-flex;gap:4px">
-                                                          <template x-if="row.group.present > 0">
-                                                            <span style="color:var(--accent-green);background:var(--fill-green-soft);padding:1px 6px;border-radius:8px;text-transform:none;letter-spacing:0" x-text="row.group.present + '/' + row.group.total + ' in use'"></span>
-                                                          </template>
-                                                          <span x-show="row.group.wrongScore > 0" style="color:var(--accent-orange);background:var(--accent-orange-bg);padding:1px 6px;border-radius:8px;text-transform:none;letter-spacing:0" x-text="row.group.wrongScore + ' wrong score'"></span>
-                                                          <span x-show="row.group.missing > 0" style="color:var(--accent-red);background:var(--accent-red-bg);padding:1px 6px;border-radius:8px;text-transform:none;letter-spacing:0" x-text="row.group.missing + ' missing'"></span>
-                                                          <!-- Blue dot — visible when this group has any optional CFs
-                                                               activated outside profile defaults. Drill-down marker for
-                                                               the summary-bar Optional total. -->
-                                                          <template x-if="compareGroupOptionalCount(row.group) > 0">
-                                                            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent-purple);align-self:center;flex-shrink:0;margin-left:4px"
-                                                                  x-tt="compareGroupOptionalCount(row.group) + ' optional CF' + (compareGroupOptionalCount(row.group) === 1 ? '' : 's') + ' activated outside profile defaults'"></span>
-                                                          </template>
-                                                        </span>
-                                                      </td>
-                                                    </template>
-                                                    <template x-if="row.type === 'multi'">
-                                                      <td colspan="3" style="color:var(--accent-orange);background:var(--accent-orange-bg)">&#9888; Multiple CFs scored — TRaSH recommends only one with a non-zero score</td>
-                                                    </template>
-                                                    <template x-if="row.type === 'cf'">
-                                                      <td class="name">
-                                                        <span style="margin-right:4px"
-                                                              :style="row.cf.exists && row.cf.inUse && row.cf.scoreMatch ? 'color:var(--accent-green)' : row.cf.exists && row.cf.inUse ? 'color:var(--accent-orange)' : !row.cf.exists && row.group.defaultEnabled && row.cf.required ? 'color:var(--accent-red)' : 'color:var(--text-secondary)'"
-                                                              x-text="row.cf.exists && row.cf.inUse && row.cf.scoreMatch ? '✓' : row.cf.exists && row.cf.inUse ? '⚠' : !row.cf.exists && row.group.defaultEnabled && row.cf.required ? '✗' : '○'"></span>
-                                                        <span x-text="row.cf.name"></span>
-                                                        <span class="cf-info" x-show="row.cf.description"
-                                                              @mouseenter="showCFTooltip($event, row.cf.description)"
-                                                              @mouseleave="hideCFTooltip()">ⓘ</span>
-                                                        <template x-if="row.cf.required">
-                                                          <span style="font-size:10px;margin-left:4px" x-tt="'Required by TRaSH'">&#128274;</span>
-                                                        </template>
-                                                        <template x-if="row.cf.default">
-                                                          <span style="font-size:10px;color:var(--accent-green);background:var(--fill-green-soft);padding:1px 5px;border-radius:6px;margin-left:4px">rec</span>
-                                                        </template>
-                                                      </td>
-                                                    </template>
-                                                    <template x-if="row.type === 'cf'">
-                                                      <td class="current">
-                                                        <span class="cmp-override-badge"
-                                                              :class="row.cf.scoreOverride != null ? 'on' : ''"
-                                                              x-tt="row.cf.scoreOverride != null ? ('Override: this score is set intentionally via a Clonarr sync rule (saved as ' + ((row.cf.scoreOverride > 0 ? '+' : '') + row.cf.scoreOverride) + ')') : ''"
-                                                              x-text="row.cf.scoreOverride != null ? 'OR' : ''"></span>
-                                                        <span :style="row.cf.scoreOverride != null ? 'color:var(--accent-blue);font-weight:600' : ''"
-                                                              x-text="row.cf.exists ? ((row.cf.currentScore > 0 ? '+' : '') + row.cf.currentScore) : '—'"></span>
-                                                      </td>
-                                                    </template>
-                                                    <template x-if="row.type === 'cf'">
-                                                      <td :class="row.cf.scoreMatch && row.cf.exists ? 'target-match' : 'target-diff'"
-                                                          x-text="(row.cf.desiredScore > 0 ? '+' : '') + row.cf.desiredScore"></td>
-                                                    </template>
-                                                  </tr>
-                                                </template>
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </template>
-
-                                        <!-- Additional CFs — flat table, no collapse. Hidden when compareFilter excludes 'extra'. CFs in user's Arr profile but not in any TRaSH cf-group for the compared profile. Card title aligned with profile-detail.html (was "Extra in Arr"). -->
-                                        <template x-if="cr.summary?.extra > 0 && compareRowVisible('extra')">
-                                          <div class="card" style="margin-bottom:10px;overflow:hidden">
-                                            <div style="padding:10px 14px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:center;gap:8px">
-                                              <span style="font-size:13px;width:14px;text-align:center;flex-shrink:0;color:var(--accent-blue)">&#9432;</span>
-                                              <span style="font-size:14px;font-weight:600;color:var(--text-body)">Additional CFs</span>
-                                              <span style="font-size:11px;color:var(--accent-blue);background:var(--fill-blue-soft);padding:1px 6px;border-radius:8px;margin-left:8px" x-text="cr.summary.extra + ' CFs'"></span>
-                                              <div style="flex:1"></div>
-                                            </div>
-                                            <div>
-                                            <div style="font-size:12px;color:var(--text-muted);padding:6px 14px 2px">
-                                              CFs scored in your Arr profile but not part of this profile. Use Edit &amp; Sync to adjust which extras to keep.
-                                            </div>
-                                            <template x-for="ecf in (cr.extraCFs || [])" :key="ecf.format">
-                                              <div class="compare-cf-row">
-                                                <div class="compare-cf-name">
-                                                  <span style="color:var(--text-muted)" x-text="ecf.name"></span>
+                                            <!-- ===== Required CFs (Format Items) ===== -->
+                                            <template x-if="!['general','quality','extra','optional'].includes(compareFilter) && cmpRequiredVisibleIn(cr, compareFilter)">
+                                              <div class="card cmp-section cmp-section-required" style="margin-bottom:10px;overflow:hidden">
+                                                <div class="cmp-section-header">
+                                                  <span class="cmp-section-title">Required CFs (Format Items)</span>
+                                                  <span class="cmp-tax-pill cmp-tax-required">Required</span>
                                                 </div>
-                                                <div class="compare-cf-scores">
-                                                  <span style="color:var(--text-muted)" x-text="'score: ' + ecf.score"></span>
-                                                </div>
+                                                <table class="cmp-settings-table">
+                                                  <thead>
+                                                    <tr>
+                                                      <th class="col-name">Custom Format</th>
+                                                      <th class="col-value">Current</th>
+                                                      <th class="col-value">Guide</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    <template x-for="fi in cr.formatItems" :key="'fi-'+fi.trashId">
+                                                      <tr x-show="(() => { const st = cfRowStatus(fi, null); if (st === 'na') return false; if (compareFilter === 'overview') return true; if (compareFilter === 'all-diffs') return st === 'missing' || st === 'wrong'; if (compareFilter === 'wrong') return st === 'wrong'; if (compareFilter === 'missing') return st === 'missing'; if (compareFilter === 'all-active') return fi.exists && fi.currentScore !== 0; return false; })()">
+                                                        <td class="name">
+                                                          <!-- Unified hover-tooltip — same buildCFInfoHTML used in
+                                                               Custom Formats + Profile Editor so description + TRaSH
+                                                               links are consistent everywhere. Cursor:help only
+                                                               when CF actually has info to surface. -->
+                                                          <span :class="{ 'sp-cf-name-has-tooltip': fi.description || (!fi.isCustom && (trashCFGuideUrl(fi, activeAppType) || trashCFJsonUrl(fi, activeAppType))) }"
+                                                                x-text="fi.name"
+                                                                @mouseenter="if (fi.description || (!fi.isCustom && (trashCFGuideUrl(fi, activeAppType) || trashCFJsonUrl(fi, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(fi, activeAppType))"
+                                                                @mouseleave="hideCFTooltip()"></span>
+                                                        </td>
+                                                        <td :class="cfRowStatus(fi, null) === 'match' ? 'current-match' : (fi.exists ? 'current-diff' : 'current-diff')"
+                                                            x-text="fi.exists ? ((fi.currentScore > 0 ? '+' : '') + fi.currentScore) : '—'"></td>
+                                                        <td class="guide" x-text="(fi.desiredScore > 0 ? '+' : '') + fi.desiredScore"></td>
+                                                      </tr>
+                                                    </template>
+                                                  </tbody>
+                                                </table>
                                               </div>
                                             </template>
-                                          </div>
-                                          </div>
-                                        </template>
 
-                                        <!-- Action buttons moved to the top summary bar. -->
-                                        <!-- Empty state when filter yields no rows in any section -->
-                                        <template x-if="compareFilter !== 'all' &&
-                                                        !(cr.settingsDiffs || []).some(s => compareFilter === 'diff' ? !s.match : compareFilter === 'match' ? s.match : false) &&
-                                                        !(cr.qualityDiffs || []).some(q => compareFilter === 'diff' ? !q.match : compareFilter === 'match' ? q.match : false) &&
-                                                        !(cr.formatItems || []).some(fi => compareRowVisible(compareFormatItemStatus(fi))) &&
-                                                        !(cr.groups || []).some(g => g.cfs.some(cf => compareRowVisible(compareGroupCFStatus(cf, g)))) &&
-                                                        !(compareFilter === 'extra' && cr.summary?.extra > 0)">
-                                          <div style="padding:32px;text-align:center;color:var(--text-secondary);font-size:13px;background:var(--bg-page);border:1px solid var(--bg-muted);border-radius:6px;margin-top:6px">
-                                            <span x-text="'No ' + (compareFilter === 'diff' ? 'diffs' : compareFilter) + ' found — try a different filter'"></span>
-                                          </div>
-                                        </template>
+                                            <!-- ===== Per-group sections =====
+                                                 One card per cf-group with header carrying the
+                                                 group's default-on / optional taxonomy badge.
+                                                 Card is hidden if no rows are visible in this
+                                                 sub-tab. Default-on groups render first, then
+                                                 optional groups, preserving the All Diffs visual
+                                                 ordering (Format Items -> Default on -> Optional). -->
+                                            <template x-for="g in [...((cr.groups || []).filter(g => g.defaultEnabled)), ...((cr.groups || []).filter(g => !g.defaultEnabled))]" :key="'grp-'+g.name">
+                                              <template x-if="!['general','quality','extra'].includes(compareFilter) && cmpGroupVisibleIn(g, compareFilter)">
+                                                <div class="card cmp-section" :class="g.defaultEnabled ? 'cmp-section-default-on' : 'cmp-section-optional'" style="margin-bottom:10px;overflow:hidden">
+                                                  <div class="cmp-section-header">
+                                                    <span class="cmp-section-title" x-text="g.name"></span>
+                                                    <!-- Hide group-level taxonomy pill on the Optional sub-tab.
+                                                         On Optional the only rows shown are opt-in CFs, so a
+                                                         "Default on" pill on Audio Formats (which contains MP3
+                                                         as an opt-in) reads as a contradiction. The per-row
+                                                         pills under each CF already convey taxonomy. -->
+                                                    <template x-if="compareFilter !== 'optional'">
+                                                      <span class="cmp-tax-pill" :class="g.defaultEnabled ? 'cmp-tax-default-on' : 'cmp-tax-optional'"
+                                                            x-text="g.defaultEnabled ? 'Default on' : 'Optional'"></span>
+                                                    </template>
+                                                    <!-- "Pick one" meta removed — exclusive groups now
+                                                         surface only the chosen variant (unchosen ones
+                                                         classify as 'na' and stay hidden), so the
+                                                         explanation has nothing to describe on Compare.
+                                                         Same affordance lives in the editor where
+                                                         Pick-one is actionable. -->
+
+                                                  </div>
+                                                  <table class="cmp-settings-table">
+                                                    <thead>
+                                                      <tr>
+                                                        <th class="col-name">Custom Format</th>
+                                                        <th class="col-value">Current</th>
+                                                        <th class="col-value">Guide</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      <template x-for="cf in g.cfs" :key="'gcf-'+g.name+'-'+cf.trashId">
+                                                        <tr x-show="cfVisibleIn(cf, g, compareFilter)">
+                                                          <td class="name">
+                                                            <!-- Same unified tooltip as Profile Editor + CF Management. -->
+                                                            <span :class="{ 'sp-cf-name-has-tooltip': cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType))) }"
+                                                                  x-text="cf.name"
+                                                                  @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
+                                                                  @mouseleave="hideCFTooltip()"></span>
+                                                            <!-- Per-row taxonomy pill only when it ADDS info the
+                                                                 group header doesn't already convey. The only such
+                                                                 case: optional CF inside a Default-on group (e.g.
+                                                                 MP3 in Audio Formats — group is on by default but
+                                                                 MP3 specifically is opt-in). Everywhere else (Default
+                                                                 on / Required inside Default-on group, any CF inside
+                                                                 Optional group) the pill just repeats the header. -->
+                                                            <template x-if="g.defaultEnabled && cfTaxonomy(cf, g) === 'optional'">
+                                                              <span class="cmp-tax-pill cmp-tax-row cmp-tax-optional">Optional</span>
+                                                            </template>
+                                                          </td>
+                                                          <td :class="(cfRowStatus(cf, g) === 'match' || cfRowStatus(cf, g) === 'optional-off') ? 'current-match' : 'current-diff'"
+                                                              x-text="cf.exists && cf.currentScore !== 0 ? ((cf.currentScore > 0 ? '+' : '') + cf.currentScore) : (cfTaxonomy(cf, g) === 'optional' ? 'Not in use' : '—')"></td>
+                                                          <!-- For optional-off rows the guide score is the
+                                                               "recommended IF you opt in" value, not a target
+                                                               you should match. Showing it next to "Not in use"
+                                                               reads as a diff signal. Render "—" for optional-off
+                                                               so the row reads as informational, not actionable. -->
+                                                          <td class="guide"
+                                                              x-text="cfRowStatus(cf, g) === 'optional-off' ? '—' : ((cf.desiredScore > 0 ? '+' : '') + cf.desiredScore)"></td>
+                                                        </tr>
+                                                      </template>
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </template>
+                                            </template>
+
+                                            <!-- ===== Additional CFs ===== -->
+                                            <template x-if="(compareFilter === 'extra' || compareFilter === 'all-diffs' || compareFilter === 'all-active') && (cr.extraCFs || []).length > 0">
+                                              <div class="card cmp-section cmp-section-additional" style="margin-bottom:10px;overflow:hidden">
+                                                <div class="cmp-section-header">
+                                                  <span class="cmp-section-title">Additional CFs</span>
+                                                  <span class="cmp-tax-pill cmp-tax-extra">Additional</span>
+                                                </div>
+                                                <table class="cmp-settings-table">
+                                                  <thead>
+                                                    <tr>
+                                                      <th class="col-name">Custom Format</th>
+                                                      <th class="col-value">Current</th>
+                                                      <th class="col-value">Guide</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    <template x-for="ecf in (cr.extraCFs || [])" :key="'ecf-'+ecf.format">
+                                                      <tr>
+                                                        <td class="name" x-text="ecf.name"></td>
+                                                        <td class="current" x-text="(ecf.score > 0 ? '+' : '') + ecf.score"></td>
+                                                        <td class="guide">—</td>
+                                                      </tr>
+                                                    </template>
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </template>
+
+                                            <!-- Empty-state: nothing visible in current pane. -->
+                                            <template x-if="!['general','quality'].includes(compareFilter) &&
+                                                            !cmpRequiredVisibleIn(cr, compareFilter) &&
+                                                            !(cr.groups || []).some(g => cmpGroupVisibleIn(g, compareFilter)) &&
+                                                            !((compareFilter === 'extra' || compareFilter === 'all-diffs' || compareFilter === 'all-active') && (cr.extraCFs || []).length > 0)">
+                                              <div style="padding:32px;text-align:center;color:var(--text-secondary);font-size:13px;background:var(--bg-page);border:1px solid var(--bg-muted);border-radius:6px;margin-top:6px">
+                                                <span x-text="'Nothing to show here.'"></span>
+                                              </div>
+                                            </template>
+
+                                          </div><!-- /.cmp-pane -->
+                                        </div><!-- /.cmp-shell -->
                                       </div>
                                     </template>
                                   </div>

@@ -145,6 +145,11 @@ export default function baseState() {
     spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
     spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
+    // Sync Preview CF search — single state shared across the three
+    // sub-nav surfaces (Profile default, Additional CF, Profile
+    // overview). When set, panes filter their CF rows to ones whose
+    // name matches case-insensitively.
+    spSearchFilter: '',
     spOverviewSort: 'default',   // 'default' | 'name-asc' | 'name-desc' | 'score-desc' | 'score-asc'
     // Show CF section groupings on Overview (true) vs flat list (false).
     // Persisted per-browser via localStorage so the user's choice
@@ -164,9 +169,10 @@ export default function baseState() {
     pdQualityCollapsed: false,  // Profile-detail Quality card chevron collapse state (default expanded)
     pdCFScoresCollapsed: true,  // Profile-detail Overridden Scores card chevron collapse state (default collapsed — list-style sections opened on demand)
     pdExtraCFsCollapsed: true,  // Profile-detail Extra CFs card chevron collapse state (default collapsed — picker lazy-loaded only when user expands)
-    // Compare-tab filter: 'all' shows everything, 'diff' hides rows that match (default),
-    // 'wrong'/'missing'/'extra'/'match' restricts to one status class.
-    compareFilter: 'diff',
+    // Compare-tab sub-nav. Values:
+    // 'overview' | 'optional' | 'general' | 'quality' | 'all-diffs'
+    // 'wrong' | 'extra' | 'missing' | 'all-active'
+    compareFilter: 'overview',
     cfScoreOverrides: {}, // per-CF score overrides { trashId: score }
     qualityOverrides: {}, // legacy flat overrides { name: allowed(bool) } — kept for backwards compat
     qualityOverrideActive: false, // Quality Items editor modal-open flag (NOT a persistence gate)

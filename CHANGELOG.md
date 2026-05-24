@@ -6,6 +6,50 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave — 2026-05-24
+
+Polish + cleanup on top of the May 14 drop:
+
+- **Compare tab rebuilt.** New sub-nav reads top-to-bottom: Overview /
+  Optional / General / Qualities / All Diffs / Wrong score /
+  Additional CFs / Missing / All Active. Each pane has a one-line
+  plain-language description so you always know what you're looking
+  at. Per-row context labels (Required / Default on / Optional) now
+  appear only when they add information the section header doesn't
+  already convey.
+- **Compare: cleaner exclusive groups (Golden Rule etc).** Only the
+  variant you actually picked surfaces — the unchosen alternative
+  stays hidden. If a default-on exclusive group has no variant
+  picked, only the TRaSH-recommended one shows up as missing.
+- **Custom Formats — Description / Conditions toggle.** Toolbar
+  switch swaps the per-row info cell between the CF's description
+  (with small TRaSH guide / JSON footer links) and the condition
+  pills. Description by default; replaces the old hover-tooltip.
+- **Hover-tooltips on every CF name.** Same TRaSH info (description +
+  links) is now available everywhere — Custom Formats tab, Profile
+  editor, and Compare — by hovering the CF name. Tooltip stays off
+  when there's nothing to show.
+- **Profile editor — cross-group CF search.** Search box at the top
+  of the sidebar filters CFs across every group in the active tab at
+  once (not just the currently selected group). Works the same way
+  in Profile default, Additional CF, and Profile overview.
+- **App-themed customization indicators.** "N customizations",
+  "N changes", modified values, and the Note strip on Compare now
+  use yellow for Radarr and cyan-blue for Sonarr. Orange stays
+  reserved for actual warnings.
+
+#### Fixed
+
+- CF descriptions weren't rendering anywhere (a helper was calling
+  an undefined sanitiser — the old hover-tooltip silently showed
+  only the TRaSH links, no description).
+- Required CFs in the profile editor missed description text from
+  the backend (only Group CFs had it).
+- Compare's header diff count could disagree with the sidebar
+  count (the header was using the backend total, the sidebar uses
+  frontend re-classification). Header count removed; sidebar is the
+  source of truth.
+
 ### What's new at a glance
 
 - **Brand new look.** A persistent sidebar replaces the top tabs. The

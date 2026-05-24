@@ -83,27 +83,200 @@
     background: var(--alpha-subtle); border-bottom: 1px solid var(--bg-muted);
   }
   .cmp-settings-table th.cb { width: 28px; padding-right: 0; }
-  .cmp-settings-table th.col-name { width: 28%; }
-  .cmp-settings-table th.col-value { width: 22%; }
-  .cmp-settings-table th.col-new { width: 22%; }
+  /* Fixed widths mirror Profile overview's row grid (240px name + 160px
+     value slot). Table-layout: fixed pins the columns to these widths
+     so the values sit immediately after the name regardless of the
+     name's content length. Any remaining card width becomes empty
+     space on the right (matching Profile overview's trailing 1fr). */
+  .cmp-settings-table { table-layout: fixed; }
+  .cmp-settings-table th.col-name { width: 240px; }
+  .cmp-settings-table th.col-value { width: 100px; text-align: left; }
+  .cmp-settings-table th.col-new { width: 100px; text-align: left; }
   .cmp-settings-table tbody td { padding: 5px 10px; border-top: 1px solid var(--bg-muted); vertical-align: middle; }
+  /* Group sub-header — beef up the background contrast so the user can
+     scan where one group ends and the next begins. Was nearly invisible
+     against the table body with --alpha-subtle alone. */
   .cmp-settings-table tbody tr.sub-header td {
-    background: var(--alpha-subtle); color: var(--text-secondary);
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
-    padding: 4px 10px;
+    background: var(--bg-elevated); color: var(--text-body);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.2px;
+    padding: 8px 12px;
+    border-top: 2px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
   }
   .cmp-settings-table td.cb { padding-right: 0; width: 28px; }
   .cmp-settings-table td.name { color: var(--text-body); font-weight: 500; }
-  .cmp-settings-table td.current { color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, monospace; }
+  .cmp-settings-table td.current { color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, monospace; text-align: left; }
   /* Fixed-width badge slot inside the Current cell so alignment is consistent whether or not
      a row has an override. Empty span for non-override rows, small "OR" chip for override rows. */
   .cmp-override-badge { display: inline-block; width: 22px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700; font-family: -apple-system, system-ui, sans-serif; margin-right: 6px; vertical-align: middle; text-align: center; }
   .cmp-override-badge.on { color: var(--accent-blue); background: var(--fill-blue-soft); padding: 1px 0; border-radius: 6px; cursor: help; }
-  .cmp-settings-table td.target-diff { color: var(--accent-orange); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; }
-  .cmp-settings-table td.target-match { color: var(--accent-green); font-family: ui-monospace, SFMono-Regular, monospace; }
+  .cmp-settings-table td.target-diff { color: var(--accent-red); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; text-align: left; }
+  .cmp-settings-table td.target-match { color: var(--accent-green); font-family: ui-monospace, SFMono-Regular, monospace; text-align: left; }
+  /* Match-based colouring on Current ONLY. Guide stays neutral so the
+     row reads as "this is what your Arr has now (red = wrong, green =
+     OK)" against the guide reference value (no colour signal). */
+  .cmp-settings-table td.current-diff { color: var(--accent-red); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; text-align: left; }
+  .cmp-settings-table td.current-match { color: var(--accent-green); font-family: ui-monospace, SFMono-Regular, monospace; text-align: left; }
+  .cmp-settings-table td.guide { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, monospace; text-align: left; }
   .cmp-settings-table td.new-fixed { color: var(--accent-green); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; }
   .cmp-settings-table td.new-unchanged { color: var(--text-muted-secondary); font-family: ui-monospace, SFMono-Regular, monospace; font-style: italic; }
   .cmp-settings-table td.actions { text-align: right; }
+
+  /* v3 Compare — per-pane description shown at the top of each
+     sub-tab. Plain-language sentence that tells the user what THIS
+     view is. Uses --text-body (not --text-secondary) so it stays
+     legible against --bg-elevated in light mode where the secondary
+     token sits too close to the elevated surface. */
+  .cmp-pane-desc {
+    font-size: 13px; color: var(--text-body);
+    line-height: 1.5;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: var(--bg-elevated);
+    border-left: 3px solid var(--app-color);
+    border-radius: 4px;
+  }
+
+  /* v3 Compare — section card header (one per Required CFs block +
+     one per cf-group + one per Additional block). Carries the group
+     name and a taxonomy pill ("Required" / "Default on" / "Optional"
+     / "Additional"). */
+  .cmp-section { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; }
+  .cmp-section-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--bg-muted);
+  }
+  .cmp-section-title {
+    font-size: 14px; font-weight: 600;
+    color: var(--text-body);
+  }
+  .cmp-section-meta {
+    font-size: 11px; color: var(--text-muted);
+    padding: 1px 6px; border-radius: 3px;
+    background: var(--bg-muted);
+    cursor: help;
+  }
+
+  /* Taxonomy pills — one for the section header (carries the group's
+     taxonomy: Default on / Optional), one for each row (carries the
+     CF's per-row taxonomy: Required / Default on / Optional). */
+  .cmp-tax-pill {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-muted);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .cmp-tax-pill.cmp-tax-row {
+    font-size: 9px;
+    padding: 1px 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  /* Color the pills by taxonomy. Required uses --app-color so the
+     "must be on per guide" badge follows the active app theme (yellow
+     for Radarr, blue for Sonarr) instead of a hard-coded orange that
+     reads as a warning. Default-on = soft green for "on by default".
+     Optional = neutral grey so it reads as "opt-in". */
+  .cmp-tax-required {
+    background: var(--app-glow);
+    color: var(--app-color);
+  }
+  .cmp-tax-default-on {
+    background: var(--accent-green-bg);
+    color: var(--accent-green);
+  }
+  .cmp-tax-optional {
+    background: var(--bg-muted);
+    color: var(--text-muted);
+  }
+  .cmp-tax-extra {
+    background: var(--fill-blue-soft);
+    color: var(--accent-blue);
+  }
+
+  /* v3 Compare sub-nav — 2-column shell (sidebar + content pane).
+     Replaces the old horizontal chip bar. Mirrors Sync Preview's
+     Profile overview sub-nav for consistency. */
+  .cmp-shell {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .cmp-side-nav {
+    display: flex; flex-direction: column;
+    gap: 2px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px;
+    position: sticky;
+    top: 70px; /* clear the app-banner */
+  }
+  .cmp-side-item {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent; border: 0;
+    color: var(--text-secondary);
+    font-size: 13px; font-weight: 500;
+    text-align: left; cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+    border-left: 3px solid transparent;
+  }
+  .cmp-side-item:hover {
+    background: var(--bg-elevated-hover);
+    color: var(--text-body);
+  }
+  .cmp-side-item.active {
+    background: var(--bg-elevated);
+    color: var(--text-body);
+    font-weight: 600;
+    border-left-color: var(--app-color);
+  }
+  .cmp-side-item.inactive { opacity: 0.45; }
+  .cmp-side-item.active.inactive { opacity: 0.85; }
+  .cmp-side-count {
+    background: var(--bg-muted);
+    color: var(--text-muted);
+    font-size: 11px; font-weight: 600;
+    padding: 1px 7px; border-radius: 9px;
+    min-width: 22px; text-align: center;
+  }
+  .cmp-side-item.active .cmp-side-count {
+    background: var(--app-color);
+    color: var(--text-on-accent);
+  }
+  .cmp-side-divider {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border-subtle);
+  }
+  /* Per-filter accent borders on the active state. Each one paints the
+     left-border in its semantic colour so the active section reads as
+     "this is the orange / red / etc. category" — same convention as the
+     Compare chip-bar this replaces. */
+  .cmp-side-item.cmp-side-wrong.active    { border-left-color: var(--accent-orange); }
+  .cmp-side-item.cmp-side-missing.active  { border-left-color: var(--accent-red); }
+  .cmp-side-item.cmp-side-extra.active    { border-left-color: var(--accent-blue); }
+  .cmp-side-item.cmp-side-optional.active { border-left-color: var(--accent-purple); }
+  .cmp-side-item.cmp-side-match.active    { border-left-color: var(--accent-green); }
+  .cmp-pane { min-width: 0; }
+
+  @media (max-width: 1000px) {
+    .cmp-shell { grid-template-columns: 1fr; }
+    .cmp-side-nav { position: relative; top: 0; flex-direction: row; flex-wrap: wrap; }
+    .cmp-side-item { width: auto; flex: 0 0 auto; }
+    .cmp-side-divider { display: none; }
+  }
 
   /* Compare view filter chips — sized to match the diff chips in the summary bar */
   .compare-chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-muted); font-size: 12px; line-height: 1.4; cursor: pointer; user-select: none; transition: border-color 0.12s, color 0.12s, background 0.12s; font-family: inherit; }

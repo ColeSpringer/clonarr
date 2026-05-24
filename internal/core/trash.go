@@ -2575,6 +2575,11 @@ func ProfileDetailData(ad *AppData, profileTrashID string) *ProfileDetailResult 
 		}
 		if cf, ok := ad.CustomFormats[cfTrashID]; ok {
 			rc.Name = cf.Name
+			// Description from includes/cf-descriptions/*.md so the
+			// profile editor's Required-CFs hover-tooltip has the same
+			// info as Group CFs (which populate Description on line
+			// 2059). Without this, Required CFs had blank tooltips.
+			rc.Description = cf.Description
 			if s, ok := cf.TrashScores[scoreCtx]; ok {
 				rc.Score = s
 				rc.HasScore = true
@@ -2755,14 +2760,17 @@ func ImportedProfileDetailData(ad *AppData, imported *ImportedProfile) *ProfileD
 				name = n
 			}
 		}
+		description := ""
 		if cf, ok := ad.CustomFormats[tid]; ok {
 			name = cf.Name
+			description = cf.Description
 		}
 		formatItemNames = append(formatItemNames, ResolvedCF{
-			TrashID:  tid,
-			Name:     name,
-			Score:    score,
-			HasScore: true,
+			TrashID:     tid,
+			Name:        name,
+			Description: description,
+			Score:       score,
+			HasScore:    true,
 		})
 	}
 	sort.Slice(formatItemNames, func(i, j int) bool {

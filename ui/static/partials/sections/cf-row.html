@@ -6,18 +6,37 @@
        cf.isCustom, so one template covers every case. -->
   <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom }]">
     <div class="cf-cell-name">
-      <span class="cf-name-text" x-text="cf.name" :title="cf.name"
-            @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
+      <!-- Hover tooltip only in Conditions mode — Description mode
+           shows the same info inline, so the tooltip would just
+           duplicate it (and a help cursor on something that isn't
+           hover-actionable is misleading). -->
+      <span class="cf-name-text"
+            :class="{ 'has-tooltip': cfBrowseViewMode === 'conditions' && (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) }"
+            x-text="cf.name" :title="cf.name"
+            @mouseenter="if (cfBrowseViewMode === 'conditions' && (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType))))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
             @mouseleave="hideCFTooltip()"></span>
       <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
     </div>
     <div class="cf-cell-pills">
-      <template x-for="(p, pidx) in cfConditionPills(cf, 99)" :key="pidx + '_' + p.full">
-        <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
-              x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
-          <span class="cf-pill-label" x-text="p.label"></span>
-          <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
-        </span>
+      <!-- Description mode (default): show cf.description rendered as
+           sanitized HTML plus TRaSH guide / JSON links. Replaces the
+           old name-hover tooltip so users get the same info inline
+           without hovering. -->
+      <template x-if="cfBrowseViewMode === 'description'">
+        <div class="cf-cell-desc"
+             x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
+      </template>
+      <!-- Conditions mode: original condition pills. -->
+      <template x-if="cfBrowseViewMode === 'conditions'">
+        <div class="cf-cell-pills-inner">
+          <template x-for="(p, pidx) in cfConditionPills(cf, 99)" :key="pidx + '_' + p.full">
+            <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
+                  x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
+              <span class="cf-pill-label" x-text="p.label"></span>
+              <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
+            </span>
+          </template>
+        </div>
       </template>
     </div>
     <div class="cf-cell-actions">

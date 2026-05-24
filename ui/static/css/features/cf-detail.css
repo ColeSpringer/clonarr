@@ -306,6 +306,82 @@
     border-radius: 3px;
   }
   .cf-browse-expand-toggle:hover { color: var(--app-color); background: var(--app-glow); }
+  /* Description / Conditions segmented toggle — sits between the
+     Expand-all toggle and the search field. Two-button segmented
+     control: active one is filled with --app-color, the other is
+     ghost. Replaces the old per-row hover tooltip on CF names. */
+  .cf-browse-view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .cf-browse-view-toggle button {
+    background: transparent; border: 0;
+    padding: 4px 10px;
+    color: var(--text-secondary);
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    border-right: 1px solid var(--border-subtle);
+  }
+  .cf-browse-view-toggle button:last-child { border-right: 0; }
+  .cf-browse-view-toggle button:hover { background: var(--bg-elevated); color: var(--text-body); }
+  .cf-browse-view-toggle button.active {
+    background: var(--app-color);
+    color: var(--text-on-accent);
+    font-weight: 600;
+  }
+  /* Description cell content — replaces the condition pills when view
+     mode is "description". High-specificity selector so the per-row
+     subgrid context can't bubble its inherited size up to the links. */
+  .cf-grid .cf-cell-pills .cf-cell-desc {
+    display: block;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-body);
+    min-width: 0;
+  }
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-text {
+    display: inline;
+    font-size: 12px;
+    color: var(--text-body);
+  }
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-text u {
+    text-decoration: underline;
+  }
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-empty {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--text-muted);
+  }
+  /* Footer with the TRaSH-guide / JSON links — tiny muted text on its
+     own line so it sits under the description without competing for
+     attention. */
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-links {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.2px;
+  }
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-links a:hover {
+    color: var(--app-color);
+    text-decoration: underline;
+  }
+  /* When in description mode the pill-cell shouldn't behave like a
+     flex container any more — undo the flex/wrap from the conditions
+     layout so descriptions wrap naturally as a paragraph. */
+  .cf-grid .cf-cell-pills:has(.cf-cell-desc) {
+    display: block;
+    align-self: center;
+  }
   .cf-browse-search-wrap {
     position: relative;
     flex: 1; max-width: 360px;
@@ -453,7 +529,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
-    cursor: help;
+    /* cursor: help only when a tooltip is actually wired up — toggled
+       by .has-tooltip via Alpine. In Description mode the same info
+       renders inline so a help cursor would be misleading. */
+    cursor: default;
     /* Match the density of the rest of the row — pills are 10px, score
        is 13px. Body default was bigger and made the name shout. Bold
        carries the visual weight without bumping the size. */
@@ -461,7 +540,8 @@
     font-weight: 600;
     color: var(--text-body);
   }
-  .cf-grid .cf-cell-name .cf-name-text:hover {
+  .cf-grid .cf-cell-name .cf-name-text.has-tooltip { cursor: help; }
+  .cf-grid .cf-cell-name .cf-name-text.has-tooltip:hover {
     color: var(--accent-blue);
   }
   .cf-grid .cf-cell-pills {

@@ -3410,50 +3410,201 @@ export default {
       this.detailSections = updated;
     },
 
+    // ---------------------------------------------------------------
+    // Compare classification — taxonomy + status + sub-tab visibility
+    // ---------------------------------------------------------------
+    // Taxonomy answers: where does this CF live in the guide profile?
+    //   'required'   = formatItem, OR cf.required:true inside a
+    //                  default-on group (locked-on by guide default).
+    //   'default-on' = default-on group + cf.default:true (on by
+    //                  default but unlocked — user can opt out).
+    //   'optional'   = everything else: optional cf-group (regardless
+    //                  of internal flags), OR a non-required/non-
+    //                  default CF inside a default-on group (e.g. MP3
+    //                  inside Audio Formats).
+    // Status overlays the diff vs Arr profile on top of taxonomy.
+    //   'match'       = exists + scoreMatch + in active scope
+    //   'wrong'       = exists + !scoreMatch + in active scope
+    //   'missing'     = guide expects on (taxonomy required/default-on)
+    //                   but Arr has score=0 or CF doesn't exist
+    //   'optional-on' = optional taxonomy + user opted in (scored)
+    //   'optional-off'= optional taxonomy + user has NOT opted in
+    //   'na'          = hidden everywhere (exclusive-group losers)
+    // ---------------------------------------------------------------
+    cfTaxonomy(cf, group) {
+      if (!group) return 'required';
+      if (group.defaultEnabled && cf.required) return 'required';
+      if (group.defaultEnabled && cf.default) return 'default-on';
+      return 'optional';
+    },
+    cfRowStatus(cf, group) {
+      if (group?.exclusive) {
+        // Exclusive groups (Golden Rule HD/UHD, HDR Formats SDR):
+        // user must pick at most one. Unchosen variants at score=0
+        // are correct-per-exclusivity, not a diff — hide via 'na'.
+        const scoredCount = (group.cfs || []).filter(c => c.exists && c.currentScore !== 0).length;
+        if (scoredCount === 0) {
+          // No variant picked. For default-OFF exclusive groups the
+          // user has nothing to fix — they opted out. For default-ON
+          // ones the guide expects ONE pick; surface only the
+          // TRaSH-recommended variant (cf.default) as missing so the
+          // user gets a single actionable signal (not all variants
+          // flashing red, which would over-promote the alternative).
+          if (group.defaultEnabled && cf.default) return 'missing';
+          return 'na';
+        }
+        if (cf.currentScore === 0) return 'na'; // unchosen variant when another is picked
+        if (scoredCount > 1) return 'wrong'; // exclusive violation flag the scored ones
+        return cf.scoreMatch ? 'match' : 'wrong';
+      }
+      const tax = this.cfTaxonomy(cf, group);
+      if (tax === 'required' || tax === 'default-on') {
+        // Guide expects this on. Score=0 or missing-from-Arr is missing.
+        if (!cf.exists) return 'missing';
+        if (cf.currentScore === 0 && cf.desiredScore !== 0) return 'missing';
+        return cf.scoreMatch ? 'match' : 'wrong';
+      }
+      // Optional taxonomy
+      if (cf.exists && cf.currentScore !== 0) {
+        // User opted in — compare vs guide score (which is the
+        // recommended score when on)
+        return cf.scoreMatch ? 'match' : 'wrong';
+      }
+      return 'optional-off';
+    },
+    // Is this CF visible in the current sub-tab pane?
+    cfVisibleIn(cf, group, subTab) {
+      const st = this.cfRowStatus(cf, group);
+      if (st === 'na') return false;
+      const tax = this.cfTaxonomy(cf, group);
+      const inDefault = (tax === 'required' || tax === 'default-on');
+      const optedIn = (tax === 'optional' && st !== 'optional-off');
+      switch (subTab || this.compareFilter) {
+        case 'overview':
+          // Required-by-default rows only (no optional, no opted-in optional)
+          return inDefault;
+        case 'optional':
+          // All optional offerings — opted-in or not (showing the
+          // available menu of TRaSH optionals)
+          return tax === 'optional';
+        case 'all-diffs':
+          // All meaningful diffs across all taxonomies.
+          // 'missing' on default-on/required, 'wrong' anywhere in scope,
+          // and opted-in optionals that are wrong.
+          if (st === 'missing' || st === 'wrong') return true;
+          return false;
+        case 'wrong':
+          // Score mismatches only, scoped to default-on + opted-in.
+          return st === 'wrong';
+        case 'missing':
+          // Missing only — strictly required/default-on bucket.
+          return st === 'missing';
+        case 'all-active':
+          // Arr-perspective: anything actually scored in Arr right now.
+          return !!(cf.exists && cf.currentScore !== 0);
+        case 'extra':
+        case 'general':
+        case 'quality':
+          // These tabs don't render CF rows at all.
+          return false;
+        default:
+          return inDefault;
+      }
+    },
+    // Section-block visibility — show the group header if at least one
+    // of its CFs is visible in the current sub-tab.
+    cmpGroupVisibleIn(group, subTab) {
+      return (group?.cfs || []).some(cf => this.cfVisibleIn(cf, group, subTab));
+    },
+    // Required-CFs section (formatItems) visibility — same idea but
+    // for the synthetic Required CFs block. Synthesise a status using
+    // the always-required taxonomy.
+    cmpRequiredVisibleIn(cr, subTab) {
+      return (cr?.formatItems || []).some(fi => {
+        // formatItems behave like required taxonomy; reuse the same
+        // status logic by treating each fi as a CF with required=true
+        // in a synthetic default-on group context.
+        const st = this.cfRowStatus(fi, null);
+        if (st === 'na') return false;
+        const tab = subTab || this.compareFilter;
+        if (tab === 'overview' || tab === 'all-diffs' || tab === 'wrong' || tab === 'missing') {
+          if (tab === 'wrong') return st === 'wrong';
+          if (tab === 'missing') return st === 'missing';
+          if (tab === 'all-diffs') return st === 'missing' || st === 'wrong';
+          return true; // overview
+        }
+        if (tab === 'all-active') return !!(fi.exists && fi.currentScore !== 0);
+        return false;
+      });
+    },
+    // Group taxonomy badge — 'default-on' or 'optional'.
+    cmpGroupBadge(group) {
+      return group?.defaultEnabled ? 'default-on' : 'optional';
+    },
+    // CF taxonomy short label (for per-row badge).
+    cmpTaxonomyLabel(cf, group) {
+      const t = this.cfTaxonomy(cf, group);
+      if (t === 'required') return 'Required';
+      if (t === 'default-on') return 'Default on';
+      return 'Optional';
+    },
+    // Plain-language pane description shown at the top of each sub-tab.
+    cmpPaneDescription(subTab) {
+      switch (subTab || this.compareFilter) {
+        case 'overview':
+          return 'What the guide turns on by default — Required CFs and the CFs in groups the guide enables out of the box. Shows match, wrong score, or missing for each.';
+        case 'optional':
+          return 'CFs the guide makes available but does not turn on by default. Opt-in only.';
+        case 'general':
+          return 'Top-level profile settings: language, upgrades allowed, min/cutoff scores.';
+        case 'quality':
+          return 'Quality items and cutoff. Shows what is enabled in your profile vs what the guide enables.';
+        case 'all-diffs':
+          return 'Everything that differs from the guide — grouped by Required → Default on → Optional. Optional CFs only appear here if you have enabled them.';
+        case 'wrong':
+          return 'CFs where your Arr score does not match the guide score. Includes optional CFs you have opted into.';
+        case 'extra':
+          return 'CFs scored in your Arr profile that are not part of this guide profile at all.';
+        case 'missing':
+          return 'CFs the guide turns on by default but your Arr profile does not have on (score is 0 or CF is missing).';
+        case 'all-active':
+          return 'Every CF that has a score in your Arr profile, whether or not the guide includes it.';
+        default:
+          return '';
+      }
+    },
     // Compare filter visibility predicates. Called from x-show on CF rows in every diff section.
+    // Legacy helper kept for backwards-compat in other tables (extras,
+    // settings rows). For CF rows, prefer cfVisibleIn(cf, group).
     compareRowVisible(status) {
-      // status: 'match' | 'wrong' | 'missing' | 'extra' | 'optional'
-      // 'optional' = TRaSH activation outside profile defaults
-      // (default-OFF group toggled on, or default:false CF activated in
-      // default-ON group). Visible under 'all', 'diff' (it IS a diff vs
-      // profile-default), and the dedicated 'optional' chip.
+      // status: 'match' | 'wrong' | 'missing' | 'extra' | 'optional-on' | 'optional-off' | 'na'
+      if (status === 'na') return false;
       switch (this.compareFilter) {
-        case 'all': return true;
-        case 'diff': return status !== 'match';
+        case 'overview': return status === 'match' || status === 'wrong' || status === 'missing';
+        case 'optional': return status === 'optional-on' || status === 'optional-off';
+        case 'all-diffs': return status === 'wrong' || status === 'missing';
         case 'wrong': return status === 'wrong';
         case 'missing': return status === 'missing';
         case 'extra': return status === 'extra';
-        case 'optional': return status === 'optional';
-        case 'match': return status === 'match';
+        case 'all-active': return status !== 'optional-off' && status !== 'na';
+        // Defensive fallback for unrecognised filter values (e.g. an
+        // old persisted state value like 'all' / 'diff' / 'match').
+        // Render the row instead of swallowing it — better to over-
+        // show than to display an empty Compare view silently.
         default: return true;
       }
     },
     // Determine status class for a format-item row (required CF or group CF)
+    // A CF with score=0 when the guide expects non-zero is functionally
+    // identical to "not in the profile" — Arr's scoring engine ignores
+    // 0-score entries. Two thin delegations to the unified classifier
+    // so legacy callsites (compareRowVisible, ad-hoc x-show conditions
+    // in older templates) keep working without churn.
     compareFormatItemStatus(fi) {
-      if (!fi.exists) return 'missing';
-      if (!fi.scoreMatch) return 'wrong';
-      return 'match';
+      return this.cfRowStatus(fi, null);
     },
-    // Build a flat list of rows for the CF Groups table. Each entry is a single <tr>:
-    // - { type: 'sub', group } — group header subrow
-    // - { type: 'multi', group } — multi-scored warning subrow (exclusive groups only)
-    // - { type: 'cf', cf, group } — a CF row
-    // Used to keep the table structure HTML-valid (single <tbody>, one row per iteration) while
-    // interleaving subheaders and CF rows.
-    flatCompareGroupRows(cr) {
-      const rows = [];
-      for (const group of (cr?.groups || [])) {
-        if (!(group.cfs || []).some(cf => this.compareRowVisible(this.compareGroupCFStatus(cf, group)))) continue;
-        const isGolden = !!(group.exclusive && group.defaultEnabled);
-        rows.push({ type: 'sub', group, isGolden, key: 'h-' + group.name });
-        if (group.exclusive && group.cfs.filter(c => c.exists && c.currentScore !== 0).length > 1) {
-          rows.push({ type: 'multi', group, key: 'm-' + group.name });
-        }
-        for (const cf of group.cfs) {
-          rows.push({ type: 'cf', cf, group, isGolden, key: 'r-' + group.name + '-' + cf.trashId });
-        }
-      }
-      return rows;
+    compareGroupCFStatus(cf, group) {
+      return this.cfRowStatus(cf, group);
     },
 
     // Strip HTML tags for use as a plain-text tooltip (TRaSH descriptions are HTML fragments)
@@ -3464,83 +3615,56 @@ export default {
       return (tmp.textContent || tmp.innerText || '').trim();
     },
 
-    // Status for a CF inside a group. Exclusive default-enabled groups without any in-use variant
-    // report ALL variants as 'missing' so they show in diff/wrong/missing filters — the user must pick one.
-    // Doesn't rely on group.present (some backends count scored-but-unused); uses cf.inUse directly.
-    compareGroupCFStatus(cf, group) {
-      if (group.exclusive && group.defaultEnabled) {
-        const anyInUse = (group.cfs || []).some(c => c.exists && c.inUse);
-        if (!anyInUse) return 'missing';
-      }
-      if (cf.exists && cf.inUse && !cf.scoreMatch) return 'wrong';
-      // Mirror backend's expectedByTrash logic (instances.go:1656): a CF
-      // missing from Arr counts as 'missing' when it's expected by TRaSH
-      // defaults — required OR default-on in a default-enabled group.
-      // Without `|| cf.default` here, default:true optional CFs (e.g.
-      // Bad Dual Groups / Black and White Editions / Generated Dynamic
-      // HDR / Upscaled in Unwanted Formats SQP) would never surface as
-      // diff rows when missing from Arr — backend's cg.Missing tag
-      // showed the count but the user couldn't drill down to see which.
-      if (!cf.exists && group.defaultEnabled && (cf.required || cf.default)) return 'missing';
-      if (cf.exists && cf.inUse && cf.scoreMatch) {
-        // Active CF that matches profile-spec score. Classify as
-        // 'optional' (= TRaSH customization) when its activation
-        // diverges from the profile defaults: either the parent group is
-        // default-OFF (any member counts) or the CF is `default:false`
-        // inside a default-ON group. Otherwise it's a plain 'match'.
-        if (!group.defaultEnabled) return 'optional';
-        if (!cf.required && !cf.default) return 'optional';
-        return 'match';
-      }
-      return 'match'; // not-in-use / non-required-missing — not a diff for filter purposes
-    },
-
-    // Does this exclusive group have any variant with a diff? Used in CF Groups
-    // table to force ALL variants visible when one has a diff — Golden Rule HD/UHD
-    // groups are "pick one of the two", and hiding the matching variant in
-    // 'Only diffs' lets the user activate the wrong-score variant without
-    // realising they need to deactivate the other to keep the exclusive
-    // invariant. Showing both rows preserves the constraint visually.
-    compareGroupHasDiff(group) {
-      return (group?.cfs || []).some(cf => this.compareGroupCFStatus(cf, group) !== 'match');
-    },
-
-    // Returns compare summary counts for filter chips. Backend already augments Missing with
-    // +1 per exclusive-required group without any inUse variant (see handlers.go:1874-1885), so
-    // this is a thin pass-through with defensive null/undefined coercion.
+    // Returns compare summary counts for the sub-nav. Backend totals
+    // (s.missing / s.wrongScore) classify by name-match only — a CF
+    // with score=0 when guide expects non-zero counts as "wrong score"
+    // there. Frontend reclassifies these as "missing" (they're
+    // functionally absent — Arr ignores 0-score entries), so we
+    // recompute missing + wrong client-side using the per-row helpers
+    // for consistency with what the user sees in the tables.
     compareAdjustedCounts(cr) {
       const s = cr?.summary || {};
-      const missing = s.missing || 0;
-      const wrong = s.wrongScore || 0;
       const extra = s.extra || 0;
       const settings = s.settingsDiffs || 0;
       const quality = s.qualityDiffs || 0;
-      const matching = s.matching || 0;
-      // 'optional' is derived frontend-side from groups + cf flags since
-      // the backend summary doesn't separate it from 'matching' yet.
-      let optional = 0;
+      // Walk both data sources (Required formatItems + Group CFs) and
+      // tally per the helper-driven classification. Mirrors what the
+      // filter renders so sub-nav counts and visible rows agree.
+      let missing = 0, wrong = 0, overview = 0, optional = 0, allActive = 0;
+      for (const fi of (cr?.formatItems || [])) {
+        const st = this.cfRowStatus(fi, null);
+        if (st === 'na') continue;
+        overview++;
+        if (st === 'missing') missing++;
+        else if (st === 'wrong') wrong++;
+        if (fi.exists && fi.currentScore !== 0) allActive++;
+      }
       for (const g of (cr?.groups || [])) {
         for (const cf of (g.cfs || [])) {
-          if (this.compareGroupCFStatus(cf, g) === 'optional') optional++;
+          const st = this.cfRowStatus(cf, g);
+          if (st === 'na') continue;
+          const tax = this.cfTaxonomy(cf, g);
+          if (tax === 'optional') optional++;
+          else overview++;
+          if (st === 'missing') missing++;
+          else if (st === 'wrong') wrong++;
+          if (cf.exists && cf.currentScore !== 0) allActive++;
         }
       }
-      const diffs = wrong + missing + extra + settings + quality + optional;
-      return { missing, wrong, extra, settings, quality, matching, optional, diffs, all: matching + diffs };
+      const allDiffs = wrong + missing;
+      // Legacy aliases (`diffs`, `all`) kept so older callsites that
+      // haven't been migrated to the new sub-nav names still work.
+      // `optional` here = TOTAL optional offerings (count rendered in
+      // the Optional sub-nav), not "user-activated optional" like
+      // the previous semantics. Summary-bar code that wants the old
+      // meaning needs updating, not this helper.
+      return {
+        overview, optional, missing, wrong, extra, settings, quality,
+        allDiffs, allActive,
+        diffs: allDiffs + extra + settings + quality, // legacy alias
+        all: overview + optional, // legacy alias (rough)
+      };
     },
-
-    // Per-group count of optional CFs activated outside profile defaults.
-    // Mirror of pdGroupOptionalCount but reads from compare-result group
-    // structure (cf.inUse / cf.required / cf.default + group.defaultEnabled)
-    // instead of editor state. Used for the small blue dot on each group
-    // sub-header in the Compare's Groups table.
-    compareGroupOptionalCount(group) {
-      let n = 0;
-      for (const cf of (group?.cfs || [])) {
-        if (this.compareGroupCFStatus(cf, group) === 'optional') n++;
-      }
-      return n;
-    },
-
 
     // Effective diff: how many leaf resolutions end up with a different `allowed` state than the
     // TRaSH original after the user's edits. Grouping/rename/reorder alone don't count — only

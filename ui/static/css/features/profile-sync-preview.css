@@ -123,14 +123,16 @@
   flex-shrink: 0;
 }
 .sp-basics-reset:hover { color: var(--accent-red-strong, var(--accent-red)); }
-/* Qualities allowed launcher — looks like a value cell but clickable
-   with an underline-on-hover affordance so it reads as "interactive". */
+/* Qualities allowed launcher — "N changes" button shown when the
+   user has modified the Quality items. Uses --app-color so it
+   follows the active app theme like the other customization
+   indicators (matches .sp-summary-lead / .sp-summary-badge). */
 .sp-basics-quality-launcher {
   background: transparent;
   border: 0;
   padding: 0;
   cursor: pointer;
-  color: var(--accent-blue);
+  color: var(--app-color);
   font-family: inherit;
   font-size: inherit;
   font-weight: 500;
@@ -233,15 +235,19 @@ button.sp-summary-active:focus-visible {
   outline-offset: 2px;
   border-radius: 3px;
 }
+/* Customizations strip "N customizations" lead text + per-section
+   badges — themed via --app-color so Radarr stays yellow and Sonarr
+   stays blue. Hardcoded orange used to read as a warning even though
+   customizations are intentional. */
 .sp-summary-lead {
-  color: var(--accent-orange);
+  color: var(--app-color);
   font-weight: 600;
 }
 .sp-summary-badge {
   font-size: 11px;
-  color: var(--accent-orange);
+  color: var(--app-color);
   padding: 1px 6px;
-  border: 1px solid var(--accent-orange);
+  border: 1px solid var(--app-color);
   border-radius: 10px;
   white-space: nowrap;
 }
@@ -597,6 +603,41 @@ button.sp-summary-active:focus-visible {
   gap: 8px;
   min-width: 0;
 }
+/* Hover-tooltip affordance — cursor: help only when a tooltip is
+   actually wired up (Alpine flips .sp-cf-name-has-tooltip based on
+   whether the CF has description / TRaSH links available). */
+.sp-cf-name-has-tooltip { cursor: help; }
+.sp-cf-name-has-tooltip:hover { color: var(--accent-blue); }
+
+/* Sidebar search — lives at the top of each sub-nav (Profile default,
+   Additional CF, Profile overview). Shared spSearchFilter state filters
+   CF rows in the active pane to ones whose name matches. */
+.sp-sidebar-search-wrap {
+  position: relative;
+  margin-bottom: 8px;
+}
+.sp-sidebar-search {
+  width: 100%;
+  padding: 5px 28px 5px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-body);
+  font-size: 12px; font-family: inherit;
+}
+.sp-sidebar-search:focus { outline: none; border-color: var(--app-color); }
+.sp-sidebar-search::placeholder { color: var(--text-muted); }
+.sp-sidebar-search-clear {
+  position: absolute;
+  right: 4px; top: 50%;
+  transform: translateY(-50%);
+  background: transparent; border: 0;
+  padding: 2px 6px;
+  color: var(--text-muted);
+  cursor: pointer; font-size: 12px;
+  line-height: 1;
+}
+.sp-sidebar-search-clear:hover { color: var(--text-body); }
 /* "recommended" is our UI translation of TRaSH's `cf.default: true`
    — the CF auto-checks when its group is enabled. Rendered as muted
    meta-text rather than a pill so a group like Unwanted Formats with
@@ -891,16 +932,16 @@ button.sp-summary-active:focus-visible {
   font-size: 12px;
   text-align: left;
 }
-/* Customized value (basics or CF score) — orange so it stands out
-   from default values, tooltip on hover reveals the profile default.
-   Cleaner than the inline "default → new" pattern that visually
-   doubled up the value column. */
+/* Customized value (basics or CF score) — themed --app-color so the
+   "modified" highlight follows the active app (yellow Radarr / blue
+   Sonarr). Was hardcoded orange which read like a warning even
+   though customizations are intentional. */
 .sp-ov-basics-row.sp-ov-modified .sp-ov-basics-val {
-  color: var(--accent-orange);
+  color: var(--app-color);
   cursor: help;
 }
 .sp-ov-cf-score.overridden {
-  color: var(--accent-orange);
+  color: var(--app-color);
   cursor: help;
 }
 /* General-section value as a click-to-scroll button when Customize
@@ -919,7 +960,7 @@ button.sp-summary-active:focus-visible {
 }
 .sp-ov-basics-editlink:hover { text-decoration: underline; }
 .sp-ov-basics-editlink.sp-ov-basics-val-modified {
-  color: var(--accent-orange);
+  color: var(--app-color);
 }
 .sp-ov-cf-score.positive { color: var(--accent-green); }
 .sp-ov-cf-score.negative { color: var(--accent-red); }

@@ -462,6 +462,20 @@
            with many groups can scan by section ("STREAMING SERVICES"
            → General / Premium / ...) instead of by truncated full names. -->
       <nav class="sp-sub-nav">
+        <!-- Sidebar search — filters CF rows in the right pane to ones
+             whose name matches. Shared state with the Overview /
+             Additional CF tabs so the filter follows you across them. -->
+        <div class="sp-sidebar-search-wrap">
+          <input type="search" class="sp-sidebar-search"
+                 x-model.debounce.150ms="spSearchFilter"
+                 placeholder="Search CFs…"
+                 autocomplete="off"
+                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
+          <button type="button" class="sp-sidebar-search-clear"
+                  x-show="spSearchFilter"
+                  @click="spSearchFilter = ''"
+                  aria-label="Clear search">&#10005;</button>
+        </div>
         <!-- Required CFs sits outside any category section, so it carries
              its own colored left-border via the cat-required class. -->
         <button class="sp-sub-nav-item sp-sub-nav-standalone cat-required"
@@ -501,13 +515,19 @@
              Profile card before clicking through, so re-rendering it inside
              the editor wastes screen space and pushes the actual CF list
              below the fold. The editor stays focused on configuration. -->
-        <template x-if="spActiveGroup === '__required'">
+        <!-- Required CFs: rendered when active group is __required OR
+             when a search filter is active AND at least one Required CF
+             matches the filter. Without the second guard the section
+             header + intro paragraph would render even when no rows
+             match, leaving an empty card. -->
+        <template x-if="spActiveGroup === '__required' || (!!spSearchFilter && (profileDetail?.detail?.formatItemNames || []).some(fi => fi.name.toLowerCase().includes(spSearchFilter.toLowerCase())))">
           <div>
             <h2 class="sp-content-title">Required CFs</h2>
             <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup — always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
             <div class="sp-cf-list">
               <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
                 <div class="sp-cf-row sp-cf-locked"
+                     x-show="!spSearchFilter || fi.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
                      :class="(selectedOptionalCFs[fi.trashId] === false) ? 'sp-cf-req-excluded' : ''"
                      x-data="{
                        get _def() { return fi.score; },
@@ -544,7 +564,18 @@
                       </template>
                     </button>
                   </template>
-                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': _excluded }" x-text="fi.name"></div>
+                  <!-- Hover-tooltip with description + TRaSH guide / JSON
+                       links — matches the Custom Formats tab pattern.
+                       Tooltip handlers + cursor:help live on an inner
+                       span so the tooltip anchors right after the name
+                       (anchoring on the wrapping div places the tooltip
+                       at the right edge of the flex row). -->
+                  <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': _excluded }">
+                    <span :class="{ 'sp-cf-name-has-tooltip': fi.description || (!fi.isCustom && (trashCFGuideUrl(fi, activeAppType) || trashCFJsonUrl(fi, activeAppType))) }"
+                          x-text="fi.name"
+                          @mouseenter="if (fi.description || (!fi.isCustom && (trashCFGuideUrl(fi, activeAppType) || trashCFJsonUrl(fi, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(fi, activeAppType))"
+                          @mouseleave="hideCFTooltip()"></span>
+                  </div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
                   </template>
@@ -588,7 +619,12 @@
              switching groups re-mounts on demand (small per-switch
              cost, big initial-load win). -->
         <template x-for="g in (profileDetail?.detail?.trashGroups || [])" :key="g.name">
-        <template x-if="spActiveGroup === g.name">
+        <!-- Per-group block: when search is active, mounts ANY group
+             whose CFs match (ignoring spActiveGroup so the currently
+             selected group doesn't render with zero rows when its
+             matches live elsewhere). When search is empty, mount only
+             the active group — preserves lazy-mount perf. -->
+        <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name)">
           <div x-data="{
                  get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
@@ -740,6 +776,7 @@
             <div class="sp-cf-list" x-show="!_singleCF">
               <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
                 <div class="sp-cf-row"
+                     x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
                      :class="{
                        'sp-cf-locked': cf.required,
                        'sp-cf-req-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false,
@@ -761,7 +798,7 @@
                        })()
                      }">
                   <template x-if="cf.required && !pdOverridesEnabled">
-                    <span class="sp-cf-icon" x-tt="'Required by the group — included when the group is on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                    <span class="sp-cf-icon" x-tt="'Required by the guide — included automatically in this profile.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                   </template>
                   <template x-if="cf.required && pdOverridesEnabled">
                     <!-- Customize ON: unlock glyph signals "editable"; the
@@ -782,7 +819,7 @@
                     </button>
                   </template>
                   <template x-if="!cf.required">
-                    <label class="toggle toggle-sm" x-tt="'Include this Custom Format when the group is on.'" @click.stop>
+                    <label class="toggle toggle-sm" x-tt="'Include this Custom Format in the profile.'" @click.stop>
                       <input type="checkbox"
                              :checked="selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]"
                              @change="g.exclusive ? toggleExclusiveCF(cf.trashId, g.cfs) : toggleOptionalCF(cf.trashId)">
@@ -790,7 +827,10 @@
                     </label>
                   </template>
                   <div class="sp-cf-name" :class="{ 'sp-cf-name-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false }">
-                    <span x-text="cf.name"></span>
+                    <span :class="{ 'sp-cf-name-has-tooltip': cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType))) }"
+                          x-text="cf.name"
+                          @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
+                          @mouseleave="hideCFTooltip()"></span>
                     <span class="sp-cf-recommended" x-show="cf.default && !cf.required" x-tt="'TRaSH recommends keeping this on'">recommended</span>
                   </div>
                   <template x-if="!pdOverridesEnabled">
@@ -842,6 +882,21 @@
            class neutralizes the border-left + cat-color rules the
            .sp-sub-nav-* selectors apply by default. -->
       <nav class="sp-sub-nav sp-overview-nav">
+        <!-- Sidebar search — filters CF rows in whatever overview pane
+             is active. Matches CF name (case-insensitive). Same state
+             also used by the Profile default + Additional CF sub-nav
+             search inputs so the filter follows the user across tabs. -->
+        <div class="sp-sidebar-search-wrap">
+          <input type="search" class="sp-sidebar-search"
+                 x-model.debounce.150ms="spSearchFilter"
+                 placeholder="Search CFs…"
+                 autocomplete="off"
+                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
+          <button type="button" class="sp-sidebar-search-clear"
+                  x-show="spSearchFilter"
+                  @click="spSearchFilter = ''"
+                  aria-label="Clear search">&#10005;</button>
+        </div>
         <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'all' }"
                 @click="spOverviewSection = 'all'">
@@ -1241,7 +1296,7 @@
                       x-tt="'Reset every quality change (' + _qChanges + ') back to the profile default.'">&#8634;</button>
             </template>
             <template x-if="pdOverridesEnabled && _qChanges > 0">
-              <span class="sp-ov-card-count" style="color:var(--accent-orange);margin-left:6px"
+              <span class="sp-ov-card-count" style="color:var(--app-color);margin-left:6px"
                     x-text="_qChanges + ' change' + (_qChanges === 1 ? '' : 's')"></span>
             </template>
           </h3>
@@ -1506,6 +1561,18 @@
     <div class="sp-body" x-show="spActiveTab === 'additional' && pdOverridesEnabled"
          x-effect="if (spActiveTab === 'additional' && pdOverridesEnabled && (extraCFGroups || []).length === 0 && profileDetail?.instance?.type) loadExtraCFList()">
       <nav class="sp-sub-nav">
+        <!-- Sidebar search shared with the other tabs. -->
+        <div class="sp-sidebar-search-wrap">
+          <input type="search" class="sp-sidebar-search"
+                 x-model.debounce.150ms="spSearchFilter"
+                 placeholder="Search CFs…"
+                 autocomplete="off"
+                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
+          <button type="button" class="sp-sidebar-search-clear"
+                  x-show="spSearchFilter"
+                  @click="spSearchFilter = ''"
+                  aria-label="Clear search">&#10005;</button>
+        </div>
         <!-- Pre-filter the sub-nav to groups with at least one unique CF
              (a CF whose trashId isn't already in any profile-default
              group). Hides Golden Rule HD when UHD is active (identical
@@ -1538,7 +1605,13 @@
              group panes above. Without this Alpine mounts every
              Additional CF group's content into DOM up front. -->
         <template x-for="g in spAdditionalCFGroups()" :key="g.name">
-        <template x-if="spActiveGroup === g.name && spAdditionalGroupCFs(g).length > 0">
+        <!-- Mount when active OR (search is on AND at least one of the
+             group's unique CFs matches). Same cross-group search model
+             as Profile default's editor. -->
+        <!-- Same cross-group-search model as Profile default: when
+             search is active, mount only matching groups (ignoring
+             spActiveGroup); when empty, mount the active group. -->
+        <template x-if="(!!spSearchFilter ? spAdditionalGroupCFs(g).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name)) && spAdditionalGroupCFs(g).length > 0">
           <div x-data="{
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }
@@ -1601,6 +1674,7 @@
                    fast-path for CFs that also appear in this profile. -->
               <template x-for="cf in spAdditionalGroupCFs(g)" :key="cf.trashId">
                 <div class="sp-cf-row"
+                     x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
                      x-data="{
                        get _def() { const r = resolveCFDefaultScore(cf.trashId); return (typeof r === 'number') ? r : 0; },
                        get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; },
@@ -1610,7 +1684,12 @@
                     <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]" @change="selectedOptionalCFs = { ...selectedOptionalCFs, [cf.trashId]: $event.target.checked }">
                     <span class="slider"></span>
                   </label>
-                  <div class="sp-cf-name" x-text="cf.name"></div>
+                  <div class="sp-cf-name">
+                    <span :class="{ 'sp-cf-name-has-tooltip': cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType))) }"
+                          x-text="cf.name"
+                          @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
+                          @mouseleave="hideCFTooltip()"></span>
+                  </div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
                   </template>
