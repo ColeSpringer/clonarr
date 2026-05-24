@@ -44,15 +44,15 @@ func seedTrashCommit(t *testing.T, ts *TrashStore, commit string) {
 	ts.mu.Unlock()
 }
 
-// TestUpdateWatcher_SkipsWhenTrashCloneEmpty is the most important safety
+// TestProfileSyncRunner_SkipsWhenTrashCloneEmpty is the most important safety
 // test in Phase 2a. Without the guard, an empty local HEAD compared against
 // any non-empty upstream would surface as "everything is new" and spam
 // notifications across every rule (once Phase 2b wires firing).
-func TestUpdateWatcher_SkipsWhenTrashCloneEmpty(t *testing.T) {
+func TestProfileSyncRunner_SkipsWhenTrashCloneEmpty(t *testing.T) {
 	app, _, _ := newWatcherTestApp(t)
 	// CommitHash left empty — Trash clone "not initialised".
 
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			t.Fatal("ls-remote should NOT be called when local clone is empty")
@@ -68,10 +68,10 @@ func TestUpdateWatcher_SkipsWhenTrashCloneEmpty(t *testing.T) {
 	}
 }
 
-// TestUpdateWatcher_NoRemoteCallWhenDisabled verifies the Enabled flag
+// TestProfileSyncRunner_NoRemoteCallWhenDisabled verifies the Enabled flag
 // short-circuits before any remote contact. UpdateWatch must exist (so the
 // flag is reachable) — only ls-remote is skipped.
-func TestUpdateWatcher_NoRemoteCallWhenDisabled(t *testing.T) {
+func TestProfileSyncRunner_NoRemoteCallWhenDisabled(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-head-abcdef0")
 	_ = app.Config.Update(func(c *Config) {
@@ -79,7 +79,7 @@ func TestUpdateWatcher_NoRemoteCallWhenDisabled(t *testing.T) {
 	})
 
 	var called int32
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			atomic.AddInt32(&called, 1)
@@ -94,10 +94,10 @@ func TestUpdateWatcher_NoRemoteCallWhenDisabled(t *testing.T) {
 	}
 }
 
-// TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck verifies the happy path:
+// TestProfileSyncRunner_PersistsHeadsOnSuccessfulCheck verifies the happy path:
 // guard passes, watcher enabled, ls-remote returns a fresh upstream head →
 // LastRun, LocalHead, UpstreamHead all populated and PendingChanges cleared.
-func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
+func TestProfileSyncRunner_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-commit-1111111")
 	_ = app.Config.Update(func(c *Config) {
@@ -107,7 +107,7 @@ func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 		}
 	})
 
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			if remoteURL != "https://example.invalid/repo.git" {
@@ -141,11 +141,11 @@ func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 	}
 }
 
-// TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead verifies a
+// TestProfileSyncRunner_LsRemoteErrorPreservesPriorUpstreamHead verifies a
 // transient remote failure doesn't wipe the last-known-good UpstreamHead.
 // LastRun still bumps so the UI can show "last attempt: 2m ago"; UpstreamHead
 // stays at the prior value so the "X commits ahead" badge isn't lost.
-func TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
+func TestProfileSyncRunner_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-aaaaaaa")
 	_ = app.Config.Update(func(c *Config) {
@@ -158,7 +158,7 @@ func TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
 		}
 	})
 
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			return "", fmt.Errorf("remote unreachable")
@@ -248,10 +248,10 @@ func TestRedactGitError_TruncatesLongStderr(t *testing.T) {
 	}
 }
 
-// TestUpdateWatcher_ErrorReturnedFromRunIsRedacted verifies the end-to-end
+// TestProfileSyncRunner_ErrorReturnedFromRunIsRedacted verifies the end-to-end
 // path: stub gitLsRemote returning a credential-laden error → Run wraps it
 // via redactGitError → returned error to API caller is safe to display.
-func TestUpdateWatcher_ErrorReturnedFromRunIsRedacted(t *testing.T) {
+func TestProfileSyncRunner_ErrorReturnedFromRunIsRedacted(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-commit-aaaa")
 	_ = app.Config.Update(func(c *Config) {
@@ -259,7 +259,7 @@ func TestUpdateWatcher_ErrorReturnedFromRunIsRedacted(t *testing.T) {
 		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
 	})
 
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			// Production gitLsRemoteHead would call redactGitError before
@@ -277,9 +277,9 @@ func TestUpdateWatcher_ErrorReturnedFromRunIsRedacted(t *testing.T) {
 	}
 }
 
-// TestUpdateWatcher_MissingRepoURL surfaces config errors as Run errors
+// TestProfileSyncRunner_MissingRepoURL surfaces config errors as Run errors
 // rather than silently no-oping — operators need to see this.
-func TestUpdateWatcher_MissingRepoURL(t *testing.T) {
+func TestProfileSyncRunner_MissingRepoURL(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-head-xyz1234")
 	_ = app.Config.Update(func(c *Config) {
@@ -287,7 +287,7 @@ func TestUpdateWatcher_MissingRepoURL(t *testing.T) {
 		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
 	})
 
-	uw := &UpdateWatcher{
+	uw := &ProfileSyncRunner{
 		app: app,
 		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
 			t.Fatal("ls-remote should not be called with empty URL")

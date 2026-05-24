@@ -20,7 +20,7 @@ import (
 // isn't sufficient — we have to find any `://userinfo@host` pattern.
 var urlUserinfoRE = regexp.MustCompile(`(https?|git\+ssh|ssh)://[^@\s/]+@`)
 
-// UpdateWatcher polls the TRaSH-Guides upstream for new commits between
+// ProfileSyncRunner polls the TRaSH-Guides upstream for new commits between
 // scheduled Pull runs. Detection-only — never modifies the local clone, never
 // touches Arr. Surfaces "TRaSH update available" badges on rules so users can
 // trigger a manual Pull (or wait for the scheduled one) when they're ready.
@@ -37,7 +37,7 @@ var urlUserinfoRE = regexp.MustCompile(`(https?|git\+ssh|ssh)://[^@\s/]+@`)
 //   - POST /api/watch/update/refresh with rate limiting
 //
 // Spec: dev/docs/layout-v2/feature-watch-and-drift.md (Mode 2)
-type UpdateWatcher struct {
+type ProfileSyncRunner struct {
 	app *App
 
 	// refreshMu serialises concurrent Run calls so a manual refresh + scheduled
@@ -49,11 +49,11 @@ type UpdateWatcher struct {
 	gitLsRemote func(ctx context.Context, remoteURL, branch string) (string, error)
 }
 
-// NewUpdateWatcher constructs an UpdateWatcher with the production
+// NewProfileSyncRunner constructs an ProfileSyncRunner with the production
 // git-ls-remote implementation. Tests should construct directly and override
 // gitLsRemote.
-func NewUpdateWatcher(app *App) *UpdateWatcher {
-	return &UpdateWatcher{
+func NewProfileSyncRunner(app *App) *ProfileSyncRunner {
+	return &ProfileSyncRunner{
 		app:         app,
 		gitLsRemote: gitLsRemoteHead,
 	}
@@ -73,7 +73,7 @@ func NewUpdateWatcher(app *App) *UpdateWatcher {
 // Always returns nil on the "no work to do" cases (empty clone, disabled);
 // returns an error only on actual remote failures so callers can decide
 // whether to surface them.
-func (uw *UpdateWatcher) Run(ctx context.Context) error {
+func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 	uw.refreshMu.Lock()
 	defer uw.refreshMu.Unlock()
 
@@ -84,7 +84,7 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 	// "everything is new", spamming notifications across every rule.
 	localCommit := uw.app.Trash.CurrentCommit()
 	if localCommit == "" {
-		log.Printf("update-watcher: TRaSH clone not initialised — skipping check (next Pull will populate it)")
+		log.Printf("profile-sync: TRaSH clone not initialised — skipping check (next Pull will populate it)")
 		return nil
 	}
 
@@ -98,7 +98,7 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 	remote := cfg.TrashRepo.URL
 	branch := cfg.TrashRepo.Branch
 	if remote == "" {
-		return fmt.Errorf("update-watcher: TRaSH repo URL not configured")
+		return fmt.Errorf("profile-sync: TRaSH repo URL not configured")
 	}
 	if branch == "" {
 		branch = "master"
@@ -122,11 +122,11 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 		c.ProfileSync.LocalHead = localCommit
 		c.ProfileSync.UpstreamHead = upstreamHead
 	}); updErr != nil {
-		return fmt.Errorf("update-watcher: persist result: %w", updErr)
+		return fmt.Errorf("profile-sync: persist result: %w", updErr)
 	}
 
 	if upstreamHead != localCommit {
-		log.Printf("update-watcher: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
+		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 // recordError persists the failure so /api/watch/update can surface it,
 // without contaminating UpstreamHead with stale data. The error must already
 // be URL-redacted by the caller — runErr is logged verbatim.
-func (uw *UpdateWatcher) recordError(localCommit string, runErr error) {
+func (uw *ProfileSyncRunner) recordError(localCommit string, runErr error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := uw.app.Config.Update(func(c *Config) {
 		if c.ProfileSync == nil {
@@ -145,9 +145,9 @@ func (uw *UpdateWatcher) recordError(localCommit string, runErr error) {
 		// Leave UpstreamHead untouched — previous successful value is still
 		// the best signal until the next successful run.
 	}); err != nil {
-		log.Printf("update-watcher: persist error-state failed: %v", err)
+		log.Printf("profile-sync: persist error-state failed: %v", err)
 	}
-	log.Printf("update-watcher: ls-remote failed: %v", runErr)
+	log.Printf("profile-sync: ls-remote failed: %v", runErr)
 }
 
 // gitLsRemoteHead is the production implementation. Resolves the HEAD commit

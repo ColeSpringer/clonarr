@@ -121,10 +121,10 @@ func main() {
 		app.NotifyChangelog(section)
 	})
 
-	// Watch & Drift Phase 2a — UpdateWatcher polls TRaSH upstream for new
+	// Watch & Drift Phase 2a — ProfileSyncRunner polls TRaSH upstream for new
 	// commits between scheduled Pulls. Hourly internal cadence; user controls
 	// only the on/off toggle via Settings → Pull section.
-	app.UpdateWatcher = core.NewUpdateWatcher(app)
+	app.ProfileSyncRunner = core.NewProfileSyncRunner(app)
 
 	// Startup: clean up broken rules (arrProfileId=0). Historical builds
 	// also reset LastSyncCommit here to force every rule to re-evaluate at
@@ -459,7 +459,7 @@ func main() {
 	// Wake-on-config-change is deferred to Phase B (when this scheduler merges
 	// with the existing pull-scheduler). Until then, config changes via API
 	// take effect on the NEXT timer fire (worst case: one Interval delay).
-	// TODO Phase B: rename app.UpdateWatcher → app.ProfileSyncRunner (bundled
+	// TODO Phase B: rename app.ProfileSyncRunner → app.ProfileSyncRunner (bundled
 	// with Pull-scheduler integration that retires this separate goroutine).
 	utils.SafeGo("profile-sync-watcher", func() {
 		var timer *time.Timer
@@ -567,7 +567,7 @@ func main() {
 					}
 				}
 			case <-timerCh:
-				if err := app.UpdateWatcher.Run(ctx); err != nil {
+				if err := app.ProfileSyncRunner.Run(ctx); err != nil {
 					log.Printf("profile-sync-watcher: %v", err)
 				}
 				rearm() // schedule next fire
