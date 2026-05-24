@@ -57,25 +57,20 @@ type PullSchedule struct {
 //   - "detect": surface drift in UI; notify on auto-sync-ON rules; never write
 //   - "fix":    detect + silently reconcile on auto-sync-ON rules
 //
-// Schedule reuses the PullSchedule wire format (mode/time/day fields). When
-// Mode == "off", Schedule fields are ignored.
+// Schedule reuses PullSchedule directly — no current divergence justifies a
+// separate type. Both schedules share validation (DayOfMonth clamp at
+// validatePullSchedule). When Mode == "off", Schedule is ignored.
 //
-// LastRun and LastResult are populated by the DriftWatcher after each run.
-// Tests with a zero-value DriftWatch should treat it as Mode="off".
+// LastRun (RFC3339 string) and NextRun (RFC3339 string) are populated by the
+// scheduler; LastResult by the DriftWatcher after each run. String timestamps
+// match the codebase convention (LastSyncTime / LastSync etc. on
+// AutoSyncRule and SyncHistoryEntry) — keeps JSON output uniform.
 type DriftWatch struct {
-	Mode       string             `json:"mode"`              // "off" | "detect" | "fix"
-	Schedule   DriftWatchSchedule `json:"schedule,omitempty"`
-	LastRun    string             `json:"lastRun,omitempty"`    // RFC3339 timestamp
-	LastResult *DriftRunResult    `json:"lastResult,omitempty"`
-}
-
-// DriftWatchSchedule mirrors PullSchedule's wire format. Kept as a separate
-// type so future schedule-shape divergence doesn't break PullSchedule.
-type DriftWatchSchedule struct {
-	Mode       string `json:"mode"`                 // "daily", "weekly", "monthly"
-	Time       string `json:"time"`                 // "HH:MM" (24h format)
-	DayOfWeek  int    `json:"dayOfWeek"`            // 0=Sunday..6=Saturday (weekly)
-	DayOfMonth int    `json:"dayOfMonth"`           // 1-28 (monthly)
+	Mode       string          `json:"mode"`                 // "off" | "detect" | "fix"
+	Schedule   *PullSchedule   `json:"schedule,omitempty"`
+	LastRun    string          `json:"lastRun,omitempty"`    // RFC3339 timestamp
+	NextRun    string          `json:"nextRun,omitempty"`    // RFC3339 timestamp — set by scheduler so UI can render countdown without recomputing
+	LastResult *DriftRunResult `json:"lastResult,omitempty"`
 }
 
 // DriftRunResult is the summary written by DriftWatcher after each run.
@@ -131,6 +126,10 @@ type DriftResult struct {
 
 // DriftDetail is one field-level diff between current Arr state and the
 // clonarr target. Used to render the per-card expand-on-click summary.
+//
+// NOTE: Current/Target are `any` so they can hold scores (int), names
+// (string), or quality-item lists. On JSON round-trip, numeric values come
+// back as float64 — Phase 3's diff-equality logic must normalize.
 type DriftDetail struct {
 	Field   string `json:"field"`            // "score" | "cf-membership" | "cutoff" | ...
 	CFName  string `json:"cfName,omitempty"` // for CF-related drifts
@@ -556,6 +555,10 @@ func (cs *ConfigStore) Get() Config {
 	}
 	if cs.config.DriftWatch != nil {
 		dw := *cs.config.DriftWatch
+		if cs.config.DriftWatch.Schedule != nil {
+			ds := *cs.config.DriftWatch.Schedule
+			dw.Schedule = &ds
+		}
 		if cs.config.DriftWatch.LastResult != nil {
 			lr := *cs.config.DriftWatch.LastResult
 			if len(cs.config.DriftWatch.LastResult.Errors) > 0 {

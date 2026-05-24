@@ -329,12 +329,13 @@ func TestDriftWatch_PersistsAndRoundTrips(t *testing.T) {
 	cs := NewConfigStore(dir)
 	want := &DriftWatch{
 		Mode: "fix",
-		Schedule: DriftWatchSchedule{
+		Schedule: &PullSchedule{
 			Mode:      "daily",
 			Time:      "03:30",
 			DayOfWeek: 0,
 		},
 		LastRun: "2026-05-24T03:30:00Z",
+		NextRun: "2026-05-25T03:30:00Z",
 		LastResult: &DriftRunResult{
 			DriftsDetected: 3,
 			DriftsFixed:    2,
@@ -355,8 +356,11 @@ func TestDriftWatch_PersistsAndRoundTrips(t *testing.T) {
 	if got == nil {
 		t.Fatal("DriftWatch lost across reload")
 	}
-	if got.Mode != want.Mode || got.Schedule.Time != want.Schedule.Time || got.LastRun != want.LastRun {
+	if got.Mode != want.Mode || got.LastRun != want.LastRun || got.NextRun != want.NextRun {
 		t.Errorf("DriftWatch roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
+	}
+	if got.Schedule == nil || got.Schedule.Time != want.Schedule.Time {
+		t.Errorf("Schedule roundtrip mismatch: got=%+v want=%+v", got.Schedule, want.Schedule)
 	}
 	if got.LastResult == nil || got.LastResult.DriftsDetected != 3 || got.LastResult.DriftsFixed != 2 {
 		t.Errorf("LastResult roundtrip lost: %+v", got.LastResult)
@@ -473,5 +477,85 @@ func TestUpdateWatch_GetReturnsDeepCopy(t *testing.T) {
 	}
 	if again.PendingChanges[0].AffectedRules[0] == "mutated-rule" {
 		t.Error("Get() returned shallow AffectedRules slice — mutation leaked")
+	}
+}
+
+// TestDriftWatch_EmptyButNonNilErrorsDoesNotAlias verifies a slice with
+// cap > 0 and len == 0 — appending to the returned copy must not leak to
+// the store via the shared backing array. The len(...) > 0 guard in Get()
+// skips the make+copy for empty slices, so we test that the resulting
+// caller-side append doesn't grow into the store's backing array.
+func TestDriftWatch_EmptyButNonNilErrorsDoesNotAlias(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	if err := cs.Update(func(cfg *Config) {
+		cfg.DriftWatch = &DriftWatch{
+			Mode: "detect",
+			LastResult: &DriftRunResult{
+				DriftsDetected: 0,
+				Errors:         make([]string, 0, 4), // empty, but cap > 0
+			},
+		}
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+
+	got := cs.Get().DriftWatch
+	got.LastResult.Errors = append(got.LastResult.Errors, "appended-by-caller")
+
+	again := cs.Get().DriftWatch
+	if len(again.LastResult.Errors) != 0 {
+		t.Errorf("caller's append leaked into store: store Errors=%+v", again.LastResult.Errors)
+	}
+}
+
+// TestDriftWatch_MalformedModeLoadsAsIs locks in the current contract:
+// Phase 1 does not validate Mode on Load, so a JSON-edited config with
+// "mode": "garbage" loads successfully and surfaces the raw value. Phase 5
+// (settings UI) will add validation on the Update path; this test catches
+// any accidental tightening here.
+func TestDriftWatch_MalformedModeLoadsAsIs(t *testing.T) {
+	dir := t.TempDir()
+	cfgJSON := `{"instances":[],"pullInterval":"24h","driftWatch":{"mode":"garbage"}}`
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), []byte(cfgJSON), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load() should not reject malformed mode: %v", err)
+	}
+	if got := cs.Get().DriftWatch; got == nil || got.Mode != "garbage" {
+		t.Errorf("want DriftWatch{Mode: garbage}, got %+v", got)
+	}
+}
+
+// TestUpdateWatch_EmptyPendingChangesRoundTrip locks the omitempty
+// behaviour: writing an empty (non-nil) slice should marshal to nothing
+// (per omitempty), and reload should produce either nil OR empty —
+// both are acceptable, just not corrupted.
+func TestUpdateWatch_EmptyPendingChangesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	if err := cs.Update(func(cfg *Config) {
+		cfg.UpdateWatch = &UpdateWatch{
+			Enabled:        true,
+			PendingChanges: []ChangeSummary{},
+		}
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+	cs2 := NewConfigStore(dir)
+	if err := cs2.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	got := cs2.Get().UpdateWatch
+	if got == nil {
+		t.Fatal("UpdateWatch lost across reload with empty PendingChanges")
+	}
+	if !got.Enabled {
+		t.Error("Enabled flag lost across reload")
+	}
+	if len(got.PendingChanges) != 0 {
+		t.Errorf("want empty PendingChanges, got %d entries", len(got.PendingChanges))
 	}
 }
