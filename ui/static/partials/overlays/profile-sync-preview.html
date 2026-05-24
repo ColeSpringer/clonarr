@@ -27,18 +27,18 @@
           Created: <span x-text="syncResult.cfsCreated || 0"></span> CFs,
           Updated: <span x-text="syncResult.cfsUpdated || 0"></span> CFs,
           Scores: <span x-text="syncResult.scoresUpdated || 0"></span> updated,
-          Settings: <span x-text="Math.max((syncResult.settingsDetails || []).length, spOverviewDiffs().modifiedBasics.length)"></span> changed,
-          Quality: <span x-text="(syncResult.qualityDetails || []).length"></span> changes
-          <template x-if="syncResult.errors?.length">
+          Settings: <span x-text="Math.max((syncResult?.settingsDetails || []).length, spOverviewDiffs().modifiedBasics.length)"></span> changed,
+          Quality: <span x-text="(syncResult?.qualityDetails || []).length"></span> changes
+          <template x-if="syncResult?.errors?.length">
             <span> — <span x-text="syncResult.errors.length"></span> errors</span>
           </template>
         </div>
-        <template x-if="[...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])].length > 0">
+        <template x-if="[...(syncResult?.cfDetails || []), ...(syncResult?.scoreDetails || []), ...(syncResult?.qualityDetails || []), ...(syncResult?.settingsDetails || [])].length > 0">
           <div style="margin-top:6px">
             <a style="font-size:12px;color:var(--accent-blue);cursor:pointer;user-select:none" @click="syncResultDetailsOpen = !syncResultDetailsOpen"
-               x-text="syncResultDetailsOpen ? '▾ Hide details' : '▸ Show details (' + [...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])].length + ' changes)'"></a>
+               x-text="syncResultDetailsOpen ? '▾ Hide details' : '▸ Show details (' + [...(syncResult?.cfDetails || []), ...(syncResult?.scoreDetails || []), ...(syncResult?.qualityDetails || []), ...(syncResult?.settingsDetails || [])].length + ' changes)'"></a>
             <div x-show="syncResultDetailsOpen" style="margin-top:4px;font-size:13px;color:var(--text-muted)">
-              <template x-for="(d, i) in [...(syncResult.cfDetails || []), ...(syncResult.scoreDetails || []), ...(syncResult.qualityDetails || []), ...(syncResult.settingsDetails || [])]" :key="i">
+              <template x-for="(d, i) in [...(syncResult?.cfDetails || []), ...(syncResult?.scoreDetails || []), ...(syncResult?.qualityDetails || []), ...(syncResult?.settingsDetails || [])]" :key="i">
                 <div style="padding:1px 0" x-text="d"></div>
               </template>
             </div>
@@ -480,7 +480,7 @@
              its own colored left-border via the cat-required class. -->
         <button class="sp-sub-nav-item sp-sub-nav-standalone cat-required"
                 :class="{ active: spActiveGroup === '__required' }"
-                @click="spActiveGroup = '__required'">
+                @click="spSelectGroup('__required')">
           <span class="sp-sub-nav-label">Required CFs</span>
           <span class="sp-sub-nav-count" x-text="(profileDetail?.detail?.formatItemNames || []).length"></span>
         </button>
@@ -493,17 +493,34 @@
              Category colour now lives on the section header alone; the
              individual items inherit visual grouping from their position
              under the colored header rather than carrying redundant dots. -->
+        <!-- Collapsible parent rows — mirrors Custom Formats sidebar
+             exactly. Split into two click targets so the chevron
+             writes explicit expand state (persisted), while the label
+             jumps to the section's first group (transient auto-expand
+             that collapses when user navigates away). -->
         <template x-for="section in spGroupBySection(profileDetail?.detail?.trashGroups || [])" :key="'def-'+section.section">
-          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
-            <div class="sp-sub-nav-section" x-text="section.section"></div>
-            <template x-for="g in section.items" :key="g.name">
-              <button class="sp-sub-nav-item"
-                      :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
-                      @click="spActiveGroup = g.name">
-                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
-                <span class="sp-sub-nav-count" x-text="(g.cfs || []).length"></span>
+          <div class="sp-sub-nav-group">
+            <div class="sp-sub-nav-section-row">
+              <button type="button" class="sp-sub-nav-section-chevron"
+                      :class="{ open: isSpSidebarSectionExpanded(section.section, section.items) }"
+                      :aria-label="(isSpSidebarSectionExpanded(section.section, section.items) ? 'Collapse ' : 'Expand ') + section.section"
+                      @click="toggleSpSidebarSection(section.section, section.items)">&#9654;</button>
+              <button type="button" class="sp-sub-nav-section-label"
+                      @click="spExpandSectionTransient(section.section, section.items)">
+                <span class="sp-sub-nav-section" x-text="section.section"></span>
+                <span class="sp-sub-nav-section-count" x-text="section.items.length"></span>
               </button>
-            </template>
+            </div>
+            <div class="sp-sub-nav-section-children" x-show="isSpSidebarSectionExpanded(section.section, section.items)" x-cloak>
+              <template x-for="g in section.items" :key="g.name">
+                <button class="sp-sub-nav-item"
+                        :class="{ active: spActiveGroup === g.name, inactive: spGroupActiveCount(g) === 0 }"
+                        @click="spSelectGroup(g.name)">
+                  <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                  <span class="sp-sub-nav-count" x-text="(g.cfs || []).length"></span>
+                </button>
+              </template>
+            </div>
           </div>
         </template>
       </nav>
@@ -1066,7 +1083,7 @@
                  x-data="{ get _d() { return spOverviewDiffs(); } }">
           <h3 class="sp-ov-card-title">
             Diffs from profile default
-            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) + ')'"></span>
+            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) + ')'"></span>
           </h3>
 
           <!-- Modified general — same naming as the "General" sub-nav
@@ -1185,7 +1202,33 @@
             </div>
           </div>
 
-          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length) === 0">
+          <!-- Quality items diffs — leaf-level toggles changed via the
+               Quality Items editor (or legacy flat overrides). Reset
+               clears the entire quality structure back to profile
+               defaults (single confirm — matches Edit Qualities reset
+               button). Per-leaf reset would require structural
+               splicing that's not worth the modal complexity. -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.qualityItems && _d.qualityItems.length > 0">
+            <div class="sp-ov-cf-section-title">Quality items</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="q in _d.qualityItems" :key="'diff-qi-'+q.name">
+                <div class="sp-ov-cf-row sp-ov-diff-row">
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="qsResetAll('edit')"
+                          :aria-label="'Reset quality items'"
+                          x-tt="'Reset all quality item changes to profile default'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="q.name"></span>
+                  </span>
+                  <span class="sp-ov-diff-old" x-text="q.original"></span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new" :class="q.allowed ? 'positive' : 'negative'" x-text="q.current"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) === 0">
             Nothing customized — this profile matches the TRaSH default exactly.
           </div>
         </section>
@@ -1625,21 +1668,30 @@
              active/inactive state of the profile-default group is
              irrelevant to whether an Additional group's CFs are
              "already in the profile". -->
+        <!-- Same chevron+label split as Profile default sidebar above. -->
         <template x-for="section in spGroupBySection(spAdditionalCFGroups().filter(g => spAdditionalGroupCFs(g).length > 0))" :key="'add-'+section.section">
-          <div class="sp-sub-nav-group" :class="getCategoryClass(section.items[0]?.category)">
-            <div class="sp-sub-nav-section" x-text="section.section"></div>
-            <template x-for="g in section.items" :key="g.name">
-              <!-- Additional CF tab uses spAdditionalGroupActiveCount
-                   so the "inactive" dim only lifts when the user has
-                   opted into one of THIS group's UNIQUE CFs (not CFs
-                   already active via a profile-default group). -->
-              <button class="sp-sub-nav-item"
-                      :class="{ active: spActiveGroup === g.name, inactive: spAdditionalGroupActiveCount(g) === 0 }"
-                      @click="spActiveGroup = g.name">
-                <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
-                <span class="sp-sub-nav-count" x-text="spAdditionalGroupCFs(g).length"></span>
+          <div class="sp-sub-nav-group">
+            <div class="sp-sub-nav-section-row">
+              <button type="button" class="sp-sub-nav-section-chevron"
+                      :class="{ open: isSpSidebarSectionExpanded(section.section, section.items) }"
+                      :aria-label="(isSpSidebarSectionExpanded(section.section, section.items) ? 'Collapse ' : 'Expand ') + section.section"
+                      @click="toggleSpSidebarSection(section.section, section.items)">&#9654;</button>
+              <button type="button" class="sp-sub-nav-section-label"
+                      @click="spExpandSectionTransient(section.section, section.items)">
+                <span class="sp-sub-nav-section" x-text="section.section"></span>
+                <span class="sp-sub-nav-section-count" x-text="section.items.length"></span>
               </button>
-            </template>
+            </div>
+            <div class="sp-sub-nav-section-children" x-show="isSpSidebarSectionExpanded(section.section, section.items)" x-cloak>
+              <template x-for="g in section.items" :key="g.name">
+                <button class="sp-sub-nav-item"
+                        :class="{ active: spActiveGroup === g.name, inactive: spAdditionalGroupActiveCount(g) === 0 }"
+                        @click="spSelectGroup(g.name)">
+                  <span class="sp-sub-nav-label" :title="g._shortName" x-text="g._shortName"></span>
+                  <span class="sp-sub-nav-count" x-text="spAdditionalGroupCFs(g).length"></span>
+                </button>
+              </template>
+            </div>
           </div>
         </template>
       </nav>
@@ -1720,8 +1772,14 @@
                      x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
                      x-data="{
                        get _def() { const r = resolveCFDefaultScore(cf.trashId); return (typeof r === 'number') ? r : 0; },
-                       get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; },
-                       get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; }
+                       /* Read extras FIRST then cfScoreOverrides — matches
+                          spOverviewDiffs score-priority order. Additional
+                          CF scores typically live in extras for out-of-
+                          profile CFs; cfScoreOverrides is the fallback
+                          for in-profile or freshly-edited CFs that landed
+                          there. _mod compares effective vs default. */
+                       get _eff() { const e = extraCFs[cf.trashId]; if (e !== undefined) return e; const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; },
+                       get _mod() { return this._eff !== this._def; }
                      }">
                   <label class="toggle toggle-sm" @click.stop>
                     <input type="checkbox" :checked="selectedOptionalCFs[cf.trashId]" @change="selectedOptionalCFs = { ...selectedOptionalCFs, [cf.trashId]: $event.target.checked }">

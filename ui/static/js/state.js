@@ -150,6 +150,20 @@ export default function baseState() {
     // overview). When set, panes filter their CF rows to ones whose
     // name matches case-insensitively.
     spSearchFilter: '',
+    // Sync Preview sidebar collapsed/expanded state per section
+    // (e.g. {"Streaming Services": true, "Audio Formats": false}).
+    // Persistent overrides written by chevron click. localStorage-
+    // persisted so survives reload.
+    spSidebarExpanded: (() => {
+      try { return JSON.parse(window.localStorage.getItem('sp-sidebar-expanded') || '{}'); }
+      catch (_) { return {}; }
+    })(),
+    // Transient sidebar expand from label-click. Single section at a
+    // time. Cleared whenever the user navigates to a specific group
+    // (Required CFs button, group button, etc.) so the section
+    // collapses again. Mirrors CF Management's "click parent label =
+    // transient expand" pattern. Not persisted.
+    spExpandedSection: null,
     spOverviewSort: 'default',   // 'default' | 'name-asc' | 'name-desc' | 'score-desc' | 'score-asc'
     // Show CF section groupings on Overview (true) vs flat list (false).
     // Persisted per-browser via localStorage so the user's choice

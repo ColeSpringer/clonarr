@@ -381,6 +381,74 @@ export default {
       return Array.from(sections, ([section, items]) => ({ section, items }));
     },
 
+    // Sidebar section expand/collapse for the Profile editor sub-nav.
+    // Three sources, in priority order:
+    //   1. Explicit override from chevron click (persisted localStorage)
+    //   2. Transient focus from label click (spExpandedSection) — when
+    //      set, ONLY that section is expanded; auto-expand from active
+    //      group is suppressed. Lets the user "look at section X"
+    //      without main pane following along, and ensures the
+    //      currently-focused section visibly collapses when another
+    //      label is clicked even if it was auto-expanded before.
+    //   3. Default: expand the section that contains spActiveGroup.
+    isSpSidebarSectionExpanded(sectionName, sectionItems) {
+      const explicit = this.spSidebarExpanded?.[sectionName];
+      if (explicit !== undefined) return explicit;
+      if (this.spExpandedSection !== null && this.spExpandedSection !== undefined) {
+        return this.spExpandedSection === sectionName;
+      }
+      if (this.spActiveGroup && this.spActiveGroup !== '__required') {
+        return (sectionItems || []).some(g => g.name === this.spActiveGroup);
+      }
+      return false;
+    },
+    // Chevron click — toggles persistent expand state. Survives across
+    // sessions via localStorage; overrides label-click transient and
+    // auto-expand by being checked first.
+    toggleSpSidebarSection(sectionName, sectionItems) {
+      const next = !this.isSpSidebarSectionExpanded(sectionName, sectionItems);
+      const updated = { ...(this.spSidebarExpanded || {}), [sectionName]: next };
+      this.spSidebarExpanded = updated;
+      try { window.localStorage.setItem('sp-sidebar-expanded', JSON.stringify(updated)); } catch (_) {}
+    },
+    // Label click — toggles transient focus on a section. Clears any
+    // explicit chevron-set override on the same section so the
+    // transient can actually take effect (otherwise a previously-
+    // collapsed section stays collapsed because explicit=false wins
+    // over transient in isSpSidebarSectionExpanded). Doesn't change
+    // spActiveGroup, so main pane stays on whatever group was
+    // selected. Clears via spSelectGroup when user picks a specific
+    // group from the expanded list.
+    //
+    // Single-child shortcut: when the section has exactly one group,
+    // click navigates directly to that group instead of just
+    // expanding (which would force a second click on the single
+    // child). Saves the wasted click for sections like Unwanted
+    // (only Unwanted Formats), Custom (one user-cat), etc.
+    spExpandSectionTransient(sectionName, sectionItems) {
+      if (Array.isArray(sectionItems) && sectionItems.length === 1 && sectionItems[0]?.name) {
+        this.spSelectGroup(sectionItems[0].name);
+        return;
+      }
+      const next = (this.spExpandedSection === sectionName) ? null : sectionName;
+      this.spExpandedSection = next;
+      // Clear chevron-set explicit override on this section so the
+      // transient focus controls visibility.
+      if (this.spSidebarExpanded && Object.prototype.hasOwnProperty.call(this.spSidebarExpanded, sectionName)) {
+        const updated = { ...this.spSidebarExpanded };
+        delete updated[sectionName];
+        this.spSidebarExpanded = updated;
+        try { window.localStorage.setItem('sp-sidebar-expanded', JSON.stringify(updated)); } catch (_) {}
+      }
+    },
+    // Group selection — sets active group + clears transient expand
+    // so the previously label-expanded section collapses. Used by
+    // every group button (Required CFs + per-group + Additional CF).
+    spSelectGroup(name) {
+      this.spActiveGroup = name;
+      this.spExpandedSection = null;
+    },
+
     // Effective active-CF count for a group, mirroring the action-row
     // counter logic but resolving group-state via selectedOptionalCFs +
     // group.defaultEnabled fallback. Used by the sub-nav to render
@@ -706,8 +774,52 @@ export default {
     // diff with original-vs-current side by side. Computed lazily on
     // each access (Alpine reactivity tracks the dependencies).
     spOverviewDiffs() {
-      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [] };
+      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [], qualityItems: [] };
       if (!this.profileDetail) return out;
+      // Quality items diffs — leaf-flatten profile defaults vs user's
+      // qualityStructure (or legacy qualityOverrides flat map) and
+      // emit per-leaf rows for any changed `allowed` flag. Without
+      // this, opening Quality Items editor → toggling a quality →
+      // Save left zero trace in the Diffs view despite header count
+      // reflecting the change.
+      const pdQ = this.profileDetail?.detail?.profile?.items || [];
+      const flattenLeaves = (items) => {
+        const m = new Map();
+        for (const it of (items || [])) {
+          if (it.items && it.items.length > 0) {
+            for (const leaf of it.items) m.set(leaf, !!it.allowed);
+          } else {
+            const name = it.name || it.quality?.name;
+            if (name) m.set(name, !!it.allowed);
+          }
+        }
+        return m;
+      };
+      const origLeaves = flattenLeaves(pdQ);
+      if (this.qualityStructure && this.qualityStructure.length > 0) {
+        const curLeaves = flattenLeaves(this.qualityStructure);
+        for (const [name, allowed] of curLeaves) {
+          const orig = origLeaves.get(name);
+          if (orig === undefined) {
+            out.qualityItems.push({ name, current: allowed ? 'Allowed' : 'Disallowed', original: '—', allowed });
+          } else if (orig !== allowed) {
+            out.qualityItems.push({ name, current: allowed ? 'Allowed' : 'Disallowed', original: orig ? 'Allowed' : 'Disallowed', allowed });
+          }
+        }
+        for (const [name, orig] of origLeaves) {
+          if (!curLeaves.has(name)) {
+            out.qualityItems.push({ name, current: '—', original: orig ? 'Allowed' : 'Disallowed', allowed: false });
+          }
+        }
+      } else if (this.qualityOverrides && Object.keys(this.qualityOverrides).length > 0) {
+        for (const [name, allowed] of Object.entries(this.qualityOverrides)) {
+          const orig = origLeaves.get(name);
+          const a = !!allowed;
+          if (orig !== a) {
+            out.qualityItems.push({ name, current: a ? 'Allowed' : 'Disallowed', original: orig === undefined ? '—' : (orig ? 'Allowed' : 'Disallowed'), allowed: a });
+          }
+        }
+      }
       const sel = this.selectedOptionalCFs || {};
       const overrides = this.cfScoreOverrides || {};
       const pd = this.profileDetail?.detail?.profile;
@@ -1120,9 +1232,22 @@ export default {
     // alone on a reactive proxy can miss).
     pdResetCFScore(trashId) {
       if (!trashId) return;
-      const updated = { ...this.cfScoreOverrides };
-      delete updated[trashId];
-      this.cfScoreOverrides = updated;
+      // Two stores carry overrides: cfScoreOverrides for in-profile
+      // CFs, extraCFs for opted-in Additional CFs (out-of-profile).
+      // Reset must clear from BOTH — pre-fix the extras store kept
+      // its value when the user clicked Reset on the Profile overview
+      // because the action only touched cfScoreOverrides, leaving
+      // the stale value visible everywhere extras is read.
+      if (this.cfScoreOverrides && this.cfScoreOverrides[trashId] !== undefined) {
+        const updated = { ...this.cfScoreOverrides };
+        delete updated[trashId];
+        this.cfScoreOverrides = updated;
+      }
+      if (this.extraCFs && this.extraCFs[trashId] !== undefined) {
+        const updated = { ...this.extraCFs };
+        delete updated[trashId];
+        this.extraCFs = updated;
+      }
     },
 
     // Reset action for the Diffs view's Added Additional CFs row —
@@ -1194,19 +1319,39 @@ export default {
       if (!trashId) return;
       const isEmpty = value === '' || value == null;
       const v = isEmpty ? NaN : Number(value);
-      const updated = { ...this.cfScoreOverrides };
-      if (isEmpty || Number.isNaN(v) || v === Number(defaultScore)) {
-        delete updated[trashId];
-      } else {
-        updated[trashId] = v;
+      const reset = isEmpty || Number.isNaN(v) || v === Number(defaultScore);
+      // Two stores: cfScoreOverrides (in-profile CFs) vs extraCFs
+      // (opted-in Additional CFs, out-of-profile). Determine which
+      // store the CF belongs to so the user's edit lands in the right
+      // place and is visible everywhere. Heuristic: if the CF is in
+      // any profile-default trashGroup or formatItems, it's
+      // in-profile. Otherwise it's an Additional CF.
+      const inProfileGroups = new Set();
+      for (const fi of (this.profileDetail?.detail?.formatItemNames || [])) inProfileGroups.add(fi.trashId);
+      for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+        for (const cf of (g.cfs || [])) inProfileGroups.add(cf.trashId);
       }
-      this.cfScoreOverrides = updated;
+      const isExtra = !inProfileGroups.has(trashId);
+      // ALWAYS clear from the wrong store too — covers cases where
+      // the CF's classification changed (e.g. TRaSH restructure
+      // moved it) or where an older code path wrote to the wrong
+      // map. Without this the stale entry would shadow the new one.
+      const cfScoreOverrides = { ...this.cfScoreOverrides };
+      const extraCFs = { ...this.extraCFs };
+      delete cfScoreOverrides[trashId];
+      delete extraCFs[trashId];
+      if (!reset) {
+        if (isExtra) extraCFs[trashId] = v;
+        else cfScoreOverrides[trashId] = v;
+      }
+      this.cfScoreOverrides = cfScoreOverrides;
+      this.extraCFs = extraCFs;
     },
 
     // Total diff count for the sub-nav badge.
     spOverviewDiffCount() {
       const d = this.spOverviewDiffs();
-      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length + d.excludedRequiredCFs.length;
+      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length + d.excludedRequiredCFs.length + (d.qualityItems?.length || 0);
     },
 
     // Allowed qualities in their qualityStructure order. Falls back to

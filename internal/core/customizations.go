@@ -67,6 +67,32 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 	// without any user customization. FormatItems + default-on groups.
 	defaultCFs := ComputeTrashDefaults(profile, ad)
 
+	// Profile-eligible CF set — every CF that lives in any cf-group
+	// whose quality_profiles.include lists this profile, plus
+	// formatItems. Used to classify an opt-in as "true Additional"
+	// (CF lives in a group OUTSIDE the profile's scope, e.g. HDR
+	// Formats for WEB-1080p) vs "profile opt-in" (CF lives in a
+	// default-off group that IS in the profile's scope, e.g. Streaming
+	// Services UK for WEB-1080p — the group is offered for opt-in by
+	// the profile design, so opting in isn't an "Additional CF").
+	// Matches frontend pdAllCustomizations's inProfileGroups filter.
+	// Without this distinction, opting into a profile-eligible default-
+	// off group inflated the ExtraCFs count vs the editor's view.
+	profileEligibleCFs := make(map[string]bool)
+	for _, tid := range profile.FormatItems {
+		profileEligibleCFs[tid] = true
+	}
+	if ad != nil {
+		for _, g := range ad.CFGroups {
+			if _, ok := g.QualityProfiles.Include[profile.Name]; !ok {
+				continue
+			}
+			for _, cfEntry := range g.CustomFormats {
+				profileEligibleCFs[cfEntry.TrashID] = true
+			}
+		}
+	}
+
 	// Score-set context. Profiles with a TrashScoreSet override pull from
 	// that set; everything else uses "default". Matches sync engine.
 	scoreSet := profile.TrashScoreSet
@@ -74,8 +100,35 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 		scoreSet = "default"
 	}
 
-	// 1. Split ScoreOverrides into ExtraCFs (added beyond defaults) and
-	//    CustomScores (override on default CF where score differs).
+	// 1a. Pure Additional CF opt-ins from SelectedCFs — CFs the user
+	//     opted into via the Additional CF picker WITHOUT also setting
+	//     a custom score. These live in rule.SelectedCFs only; the
+	//     score-overrides loop below wouldn't see them. Without this
+	//     pre-pass, a rule with N opt-ins and no score changes shows
+	//     "0 customizations" in the Sync Rules table — actively
+	//     misleading. Pair with frontend pdAllCustomizations which
+	//     mirrors this logic for the editor-header count.
+	counted := make(map[string]bool, len(rule.SelectedCFs))
+	for _, tid := range rule.SelectedCFs {
+		// Skip if CF lives in any profile-eligible group (including
+		// default-off opt-in groups like Streaming Services UK for
+		// WEB-1080p). Those are "profile opt-ins", not "Additional".
+		// Only count when the CF is truly outside the profile's scope
+		// (e.g. HDR Formats for WEB-1080p).
+		if profileEligibleCFs[tid] {
+			continue
+		}
+		if strings.HasPrefix(tid, "custom:") {
+			if customCFIDs == nil || !customCFIDs[tid] {
+				continue
+			}
+		}
+		out.ExtraCFs++
+		counted[tid] = true
+	}
+
+	// 1b. Split ScoreOverrides into ExtraCFs (added beyond defaults) and
+	//     CustomScores (override on default CF where score differs).
 	for tid, userScore := range rule.ScoreOverrides {
 		// Skip dangling `custom:<id>` orphans — the referenced custom CF
 		// has been deleted from the registry but the rule's override
@@ -87,9 +140,19 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 				continue
 			}
 		}
-		if !defaultCFs[tid] {
-			out.ExtraCFs++
+		if !profileEligibleCFs[tid] {
+			// Truly outside profile scope → Additional. Already counted
+			// as a SelectedCFs opt-in above? Don't double-count.
+			if !counted[tid] {
+				out.ExtraCFs++
+			}
 			continue
+		}
+		if !defaultCFs[tid] {
+			// CF is profile-eligible but not in TRaSH defaults (default-
+			// off opt-in group). Override on it counts as a CustomScore
+			// — user changed the recommended score for an opt-in. Falls
+			// through to the score-vs-default comparison below.
 		}
 		// CF is in defaults — compare to its TRaSH default score. If we
 		// can't resolve the default (unknown CF or no score for set), be

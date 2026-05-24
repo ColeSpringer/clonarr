@@ -57,6 +57,50 @@ Polish + cleanup on top of the May 14 drop:
   and a toast summarises the result — no more clicking through to
   manually dismiss. Errors leave the editor open for re-attempt.
 
+### Update wave — 2026-05-24 (late)
+
+Iterating on the wave 2b feedback. Mostly editor flow + accuracy:
+
+- **Profile editor sidebar matches Custom Formats sidebar.** Each
+  category section now has a chevron (click to lock open/closed,
+  persists across sessions) and a label (click to expand the section
+  temporarily — other transient-expanded sections collapse). Single-
+  group sections (Unwanted → Unwanted Formats etc.) jump straight to
+  that group on label click instead of forcing a second click on the
+  only child. Sidebar colours simplified — active section gets the
+  app-color highlight, no per-category tinting.
+- **Additional CF tab — opt-ins now persist properly.** Opting into
+  Flux / HDR / DV / etc. via the Additional CF picker now survives
+  Apply & Sync → Edit cycles. Opening the rule again shows the same
+  picks checked and the custom-scores intact. Disabling a whole CF
+  group correctly removes its CFs from Arr; toggling the group back
+  on restores the TRaSH-recommended members exactly as expected.
+- **Score field unified.** Changing or resetting an Additional CF's
+  score in either the Profile overview or the Additional CF tab now
+  takes effect everywhere — previously the two views could disagree
+  because they read from different score stores.
+- **Customizations counts include opt-ins.** The Sync Rules table's
+  Customizations column and the editor's header count now both
+  include Additional CF opt-ins. Numbers match across the table, the
+  header, and the Profile overview sub-nav badges. Backend-side, the
+  count distinguishes "Additional CF" (truly outside the profile's
+  scope, e.g. HDR for WEB-1080p) from "opt-in to a profile-eligible
+  default-off group" (e.g. Streaming Services UK for WEB-1080p).
+- **Profile overview Diffs surfaces quality items.** Quality toggle
+  changes (Allowed / Disallowed flips, group reordering) now appear
+  in the Diffs view alongside basics, score overrides, additional
+  CFs, and excluded CFs. Reset button on each row reverts the
+  override stack to the profile default.
+- **Apply & Sync toast shows the result.** Auto-closing the editor
+  used to hide the per-change list. The toast now carries the full
+  list of changes (CFs created / updated, scores set, quality
+  toggles, settings) so you can verify the result before the toast
+  dismisses. 12-second hold when there are changes.
+- **Edit Qualities reset closes the editor.** Resetting from inside
+  the Quality Items editor now closes the modal as well — previously
+  it cleared the structure but left an empty editor up with only the
+  Reset button visible.
+
 #### Fixed
 
 - CF descriptions weren't rendering anywhere (a helper was calling

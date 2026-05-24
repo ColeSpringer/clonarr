@@ -309,36 +309,91 @@ button.sp-summary-active:focus-visible {
   max-height: calc(100vh - 100px);
   overflow-y: auto;
 }
+/* Sidebar layout mirrors Custom Formats sidebar — no per-category
+   colours, neutral text by default, app-color highlight on active.
+   Splits parent row into chevron-button (persists explicit state via
+   localStorage) + label-button (jumps to first group in section =
+   transient auto-expand). Matches `.cf-browse-side-*` semantics. */
 .sp-sub-nav-group {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-top: 4px;
-  /* Category colour lives here — the group inherits its --cat token
-     from the matching cat-* class so the section header + active item
-     pick it up via currentColor / var lookup. */
-  --cat: var(--cat-other);
-  border-left: 2px solid var(--cat);
-  padding-left: 6px;
-  margin-left: 2px;
-}
-.sp-sub-nav-section {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--cat);
-  padding: 3px 6px 2px;
   margin-top: 2px;
 }
-.sp-sub-nav-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.sp-sub-nav-section-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.sp-sub-nav-section-chevron {
+  background: transparent;
+  border: 0;
+  padding: 4px 4px 4px 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s, color 0.12s;
+  flex-shrink: 0;
+}
+.sp-sub-nav-section-chevron:hover { color: var(--text-primary); }
+.sp-sub-nav-section-chevron.open { transform: rotate(90deg); }
+/* Label-button — clickable text + count, sets first group in section
+   active. Same visual language as .cf-browse-side-parent-label. */
+.sp-sub-nav-section-label {
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
   padding: 3px 8px;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.sp-sub-nav-section-label:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.sp-sub-nav-section {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.sp-sub-nav-section-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  background: var(--bg-page);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.sp-sub-nav-section-children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: 18px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border-subtle);
+}
+.sp-sub-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
   font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -350,23 +405,25 @@ button.sp-summary-active:focus-visible {
   color: var(--text-primary);
 }
 .sp-sub-nav-item.active {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-weight: 500;
+  background: var(--app-glow);
+  color: var(--app-color);
+  border-left-color: var(--app-color);
+  font-weight: 600;
 }
+.sp-sub-nav-item.active .sp-sub-nav-count { color: var(--app-color); }
 /* Group has 0 active CFs — dim the whole row so the user can skim
    past unused groups. Active-state styling overrides this so the
    currently-viewed group stays readable even if it's empty. */
 .sp-sub-nav-item.inactive { opacity: 0.5; }
 .sp-sub-nav-item.inactive.active { opacity: 1; }
-/* Required CFs is the lone item that has no section header above it,
-   so it carries its own coloured left-border + label tint to stay
-   visually parallel with the section-grouped items. */
+/* Required CFs sits standalone outside the section structure.
+   Matches "All categories" position from CF Management sidebar — no
+   chevron, no category tint, picks up app-color on active. */
 .sp-sub-nav-standalone {
-  border-left: 2px solid var(--cat-required);
-  padding-left: 6px;
-  margin-left: 2px;
-  color: var(--cat-required);
+  padding: 5px 10px;
+  margin-bottom: 4px;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
 }
 .sp-sub-nav-label {
   white-space: nowrap;
