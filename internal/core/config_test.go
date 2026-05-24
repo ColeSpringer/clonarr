@@ -301,7 +301,11 @@ func TestAddNotificationAgentAllowsMultipleEnabledSameType(t *testing.T) {
 
 // --- Watch & Drift / Profile Sync — config-shape tests ---
 
-func TestDriftWatchAndProfileSync_DefaultNil(t *testing.T) {
+// TestDriftWatch_DefaultNil verifies the un-migrated DriftWatch config
+// remains nil on fresh install. ProfileSync migration runs unconditionally
+// in Load() (see TestProfileSyncMigration_*) but DriftWatch is populated
+// by Phase D, not at load-time.
+func TestDriftWatch_DefaultNil(t *testing.T) {
 	dir := t.TempDir()
 	freshCfg := map[string]any{
 		"instances":    []any{},
@@ -317,10 +321,7 @@ func TestDriftWatchAndProfileSync_DefaultNil(t *testing.T) {
 	}
 	cfg := cs.Get()
 	if cfg.DriftWatch != nil {
-		t.Errorf("DriftWatch should be nil on fresh install, got %+v", cfg.DriftWatch)
-	}
-	if cfg.ProfileSync != nil {
-		t.Errorf("ProfileSync should be nil on fresh install (pre-migration), got %+v", cfg.ProfileSync)
+		t.Errorf("DriftWatch should be nil on fresh install (Phase D populates it), got %+v", cfg.DriftWatch)
 	}
 }
 
@@ -559,6 +560,226 @@ func TestProfileSync_ApplySpecificDeepCopy(t *testing.T) {
 	again := cs.Get().ProfileSync
 	if again.ApplySpecific.Time == "23:59" {
 		t.Error("Get() returned shallow ApplySpecific — mutation leaked to store")
+	}
+}
+
+// --- Profile Sync migration tests ---
+
+// TestProfileSyncMigration_FreshInstall verifies the migration creates a
+// sensible default ProfileSync from defaults (no PullSchedule, no PullInterval
+// → falls back to "24h" + Mode=auto + TRaSH-only). Mirrors today's Pull
+// behaviour.
+func TestProfileSyncMigration_FreshInstall(t *testing.T) {
+	dir := t.TempDir()
+	// Minimal config — no ProfileSync, no PullInterval (so default kicks in)
+	freshCfg := map[string]any{
+		"instances": []any{},
+	}
+	raw, _ := json.Marshal(freshCfg)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil {
+		t.Fatal("migration should populate ProfileSync, got nil")
+	}
+	if ps.Mode != ProfileSyncModeAuto {
+		t.Errorf("Mode = %q, want %q", ps.Mode, ProfileSyncModeAuto)
+	}
+	if !ps.Sources.TrashUpstream {
+		t.Error("Sources.TrashUpstream should be true (matches today's Pull behaviour)")
+	}
+	if ps.Sources.ArrDrift {
+		t.Error("Sources.ArrDrift should be false (new opt-in capability)")
+	}
+	if ps.Interval != "24h" {
+		t.Errorf("Interval = %q, want %q (empty PullInterval → 24h default)", ps.Interval, "24h")
+	}
+}
+
+// TestProfileSyncMigration_InheritsPullInterval verifies a user who had
+// `pullInterval: "6h"` set gets that same cadence on ProfileSync — no
+// silent change in their scheduled-pull frequency.
+func TestProfileSyncMigration_InheritsPullInterval(t *testing.T) {
+	dir := t.TempDir()
+	cfgWith6h := map[string]any{
+		"instances":    []any{},
+		"pullInterval": "6h",
+	}
+	raw, _ := json.Marshal(cfgWith6h)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil || ps.Interval != "6h" {
+		t.Errorf("Interval should inherit existing pullInterval=6h, got %+v", ps)
+	}
+}
+
+// TestProfileSyncMigration_InheritsSpecificSchedule verifies wall-clock
+// schedules (PullInterval=specific + PullSchedule daily 03:00) migrate
+// into ProfileSync.Specific with the same value.
+func TestProfileSyncMigration_InheritsSpecificSchedule(t *testing.T) {
+	dir := t.TempDir()
+	cfgWithSpecific := map[string]any{
+		"instances":    []any{},
+		"pullInterval": "specific",
+		"pullSchedule": map[string]any{
+			"mode":      "daily",
+			"time":      "03:00",
+			"dayOfWeek": 0,
+		},
+	}
+	raw, _ := json.Marshal(cfgWithSpecific)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil {
+		t.Fatal("migration should populate ProfileSync, got nil")
+	}
+	if ps.Interval != "specific" {
+		t.Errorf("Interval = %q, want %q", ps.Interval, "specific")
+	}
+	if ps.Specific == nil || ps.Specific.Mode != "daily" || ps.Specific.Time != "03:00" {
+		t.Errorf("Specific should inherit PullSchedule, got %+v", ps.Specific)
+	}
+}
+
+// TestProfileSyncMigration_PreservesUserConfig verifies migration is a
+// no-op when ProfileSync is already user-configured (e.g. set via API after
+// a previous migration). User Mode=notify must not be reset to Mode=auto.
+func TestProfileSyncMigration_PreservesUserConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPreConfigured := map[string]any{
+		"instances": []any{},
+		"profileSync": map[string]any{
+			"interval": "1h",
+			"mode":     "notify",
+			"sources":  map[string]any{"trashUpstream": true, "arrDrift": false},
+		},
+	}
+	raw, _ := json.Marshal(cfgPreConfigured)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil || ps.Mode != "notify" || ps.Interval != "1h" {
+		t.Errorf("user-configured ProfileSync overwritten by migration: got %+v", ps)
+	}
+}
+
+// TestProfileSyncMigration_NoOpOnReload locks the idempotency contract:
+// once migration has persisted, restarting clonarr (second Load) does not
+// re-run migration or alter persisted state.
+func TestProfileSyncMigration_NoOpOnReload(t *testing.T) {
+	dir := t.TempDir()
+	freshCfg := map[string]any{"instances": []any{}, "pullInterval": "6h"}
+	raw, _ := json.Marshal(freshCfg)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// First Load — migration runs.
+	cs1 := NewConfigStore(dir)
+	if err := cs1.Load(); err != nil {
+		t.Fatalf("Load() 1st: %v", err)
+	}
+	ps1 := cs1.Get().ProfileSync
+	if ps1 == nil || ps1.Interval != "6h" {
+		t.Fatalf("first Load should migrate, got %+v", ps1)
+	}
+
+	// Second Load — must be no-op. The persisted profileSync is read back as-is.
+	cs2 := NewConfigStore(dir)
+	if err := cs2.Load(); err != nil {
+		t.Fatalf("Load() 2nd: %v", err)
+	}
+	ps2 := cs2.Get().ProfileSync
+	if ps2 == nil || ps2.Interval != "6h" || ps2.Mode != ProfileSyncModeAuto {
+		t.Errorf("ProfileSync mutated on second Load: %+v", ps2)
+	}
+}
+
+// TestProfileSyncMigration_DayOfMonthClampInteractsCorrectly verifies that
+// the existing PullSchedule.DayOfMonth clamp at config.go:540-545 runs
+// BEFORE migrateProfileSync — so the migrated Specific inherits the clamped
+// value (28), not the original 0. Catches future Load() refactors that
+// might reorder these two passes.
+func TestProfileSyncMigration_DayOfMonthClampInteractsCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	cfgBadDom := map[string]any{
+		"instances":    []any{},
+		"pullInterval": "specific",
+		"pullSchedule": map[string]any{
+			"mode":       "monthly",
+			"time":       "03:00",
+			"dayOfMonth": 0, // invalid — clamp pass runs first
+		},
+	}
+	raw, _ := json.Marshal(cfgBadDom)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil || ps.Specific == nil {
+		t.Fatal("migration should populate ProfileSync.Specific")
+	}
+	if ps.Specific.DayOfMonth != 28 {
+		t.Errorf("DayOfMonth should be clamped to 28 BEFORE migration runs, got %d", ps.Specific.DayOfMonth)
+	}
+}
+
+// TestProfileSyncMigration_SpecificWithoutSchedule covers the weird
+// hand-edit case: pullInterval="specific" but pullSchedule=null. Migration
+// should still populate ProfileSync (Interval="specific", Specific=nil),
+// and the scheduler will treat it as Manual-mode equivalent (nextDelay
+// returns !armed). Lock the contract so future refactors don't promote
+// this edge case to a Mode=auto fire-immediately bug.
+func TestProfileSyncMigration_SpecificWithoutSchedule(t *testing.T) {
+	dir := t.TempDir()
+	cfgSpecificNoSchedule := map[string]any{
+		"instances":    []any{},
+		"pullInterval": "specific",
+		// pullSchedule omitted entirely → null in Go after unmarshal
+	}
+	raw, _ := json.Marshal(cfgSpecificNoSchedule)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	ps := cs.Get().ProfileSync
+	if ps == nil {
+		t.Fatal("ProfileSync should still be populated even when PullSchedule is nil")
+	}
+	if ps.Interval != "specific" {
+		t.Errorf("Interval = %q, want %q", ps.Interval, "specific")
+	}
+	if ps.Specific != nil {
+		t.Errorf("Specific should remain nil when source PullSchedule is nil, got %+v", ps.Specific)
 	}
 }
 

@@ -577,7 +577,62 @@ func (cs *ConfigStore) Load() error {
 			log.Printf("Warning: failed to persist sync history migration: %v", err)
 		}
 	}
+
+	// Profile Sync migration — populate ProfileSync from existing
+	// PullInterval/PullSchedule the first time we load after upgrade. Idempotent
+	// via the nil sentinel: once populated, subsequent loads skip this block.
+	//
+	// Defaults: Mode=auto + Sources={TrashUpstream:true, ArrDrift:false} —
+	// reproduces today's Pull-and-sync behaviour. ArrDrift is opt-in (new
+	// capability, off by default). Zero functional change for existing users
+	// after the migration runs.
+	if cs.migrateProfileSync() {
+		if err := cs.saveLocked(); err != nil {
+			log.Printf("Warning: failed to persist ProfileSync migration: %v", err)
+		}
+	}
 	return nil
+}
+
+// migrateProfileSync populates cs.config.ProfileSync from the legacy
+// PullInterval + PullSchedule pair when ProfileSync is nil. Returns true if
+// a migration was performed (caller persists). False on re-runs or when
+// the user has already configured ProfileSync via the API.
+func (cs *ConfigStore) migrateProfileSync() bool {
+	if cs.config.ProfileSync != nil {
+		return false // already migrated or user-configured — leave alone
+	}
+	ps := &ProfileSync{
+		Mode: ProfileSyncModeAuto,
+		Sources: ProfileSyncSources{
+			TrashUpstream: true,  // matches today's Pull-then-sync flow
+			ArrDrift:      false, // new capability — opt-in via UI
+		},
+	}
+	// Inherit today's pull cadence directly. PullInterval semantics carry
+	// over 1:1 (empty → "24h" default, "0" → manual, "specific" → use Specific).
+	if cs.config.PullInterval != "" {
+		ps.Interval = cs.config.PullInterval
+	} else {
+		ps.Interval = "24h"
+	}
+	if cs.config.PullSchedule != nil {
+		schedCopy := *cs.config.PullSchedule
+		ps.Specific = &schedCopy
+	}
+	cs.config.ProfileSync = ps
+
+	intervalDesc := ps.Interval
+	switch ps.Interval {
+	case "", "0":
+		intervalDesc = "manual"
+	case "specific":
+		if ps.Specific != nil {
+			intervalDesc = fmt.Sprintf("specific (%s)", ps.Specific.Mode)
+		}
+	}
+	log.Printf("Migrated to ProfileSync (mode=%s, sources=TRaSH-only, interval=%s)", ps.Mode, intervalDesc)
+	return true
 }
 
 // saveLocked writes config to disk. Must be called with mu held.
