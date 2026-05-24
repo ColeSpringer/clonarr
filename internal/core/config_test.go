@@ -299,9 +299,9 @@ func TestAddNotificationAgentAllowsMultipleEnabledSameType(t *testing.T) {
 	}
 }
 
-// --- Watch & Drift (Phase 1) — config-shape tests ---
+// --- Watch & Drift / Profile Sync — config-shape tests ---
 
-func TestDriftWatchAndUpdateWatch_DefaultNil(t *testing.T) {
+func TestDriftWatchAndProfileSync_DefaultNil(t *testing.T) {
 	dir := t.TempDir()
 	freshCfg := map[string]any{
 		"instances":    []any{},
@@ -319,8 +319,8 @@ func TestDriftWatchAndUpdateWatch_DefaultNil(t *testing.T) {
 	if cfg.DriftWatch != nil {
 		t.Errorf("DriftWatch should be nil on fresh install, got %+v", cfg.DriftWatch)
 	}
-	if cfg.UpdateWatch != nil {
-		t.Errorf("UpdateWatch should be nil on fresh install, got %+v", cfg.UpdateWatch)
+	if cfg.ProfileSync != nil {
+		t.Errorf("ProfileSync should be nil on fresh install (pre-migration), got %+v", cfg.ProfileSync)
 	}
 }
 
@@ -402,31 +402,31 @@ func TestDriftWatch_GetReturnsDeepCopy(t *testing.T) {
 	}
 }
 
-func TestUpdateWatch_PersistsAndRoundTrips(t *testing.T) {
+func TestProfileSync_PersistsAndRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	cs := NewConfigStore(dir)
-	want := &UpdateWatch{
-		Enabled:      true,
+	want := &ProfileSync{
+		Interval: "specific",
+		Specific: &PullSchedule{
+			Mode:      "weekly",
+			Time:      "03:00",
+			DayOfWeek: 3, // Wednesday
+		},
+		Sources: ProfileSyncSources{TrashUpstream: true, ArrDrift: false},
+		Mode:    "auto",
 		LastRun:      "2026-05-24T12:00:00Z",
 		UpstreamHead: "abc1234",
 		LocalHead:    "def5678",
-		PendingChanges: []ChangeSummary{
-			{
-				Type:          "cf",
-				TrashID:       "trash-id-1",
-				Name:          "DD+",
-				AffectedRules: []string{"rule-A", "rule-B"},
-			},
-			{
-				Type:            "qs",
-				TrashID:         "qs-movie",
-				Name:            "Movie QS",
-				AffectedQSTypes: []string{"movie"},
-			},
+		LastResult: &ProfileSyncRunResult{
+			TriggeredBy:        "scheduled",
+			RanAt:              "2026-05-24T12:00:00Z",
+			RulesChecked:       4,
+			PendingDetected:    2,
+			NotificationsFired: 1,
 		},
 	}
 	if err := cs.Update(func(cfg *Config) {
-		cfg.UpdateWatch = want
+		cfg.ProfileSync = want
 	}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
@@ -435,48 +435,53 @@ func TestUpdateWatch_PersistsAndRoundTrips(t *testing.T) {
 	if err := cs2.Load(); err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
-	got := cs2.Get().UpdateWatch
+	got := cs2.Get().ProfileSync
 	if got == nil {
-		t.Fatal("UpdateWatch lost across reload")
+		t.Fatal("ProfileSync lost across reload")
 	}
-	if got.Enabled != want.Enabled || got.UpstreamHead != want.UpstreamHead {
-		t.Errorf("UpdateWatch roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
+	if got.Interval != want.Interval || got.Mode != want.Mode || got.UpstreamHead != want.UpstreamHead {
+		t.Errorf("ProfileSync roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
 	}
-	if len(got.PendingChanges) != 2 {
-		t.Fatalf("want 2 PendingChanges, got %d", len(got.PendingChanges))
+	if !got.Sources.TrashUpstream || got.Sources.ArrDrift {
+		t.Errorf("Sources roundtrip mismatch: got=%+v want=%+v", got.Sources, want.Sources)
 	}
-	if got.PendingChanges[0].Name != "DD+" || len(got.PendingChanges[0].AffectedRules) != 2 {
-		t.Errorf("PendingChanges[0] roundtrip lost: %+v", got.PendingChanges[0])
+	if got.Specific == nil || got.Specific.Time != want.Specific.Time || got.Specific.DayOfWeek != want.Specific.DayOfWeek {
+		t.Errorf("Specific roundtrip mismatch: got=%+v want=%+v", got.Specific, want.Specific)
 	}
-	if got.PendingChanges[1].Type != "qs" || got.PendingChanges[1].AffectedQSTypes[0] != "movie" {
-		t.Errorf("PendingChanges[1] roundtrip lost: %+v", got.PendingChanges[1])
+	if got.LastResult == nil || got.LastResult.RulesChecked != 4 || got.LastResult.PendingDetected != 2 {
+		t.Errorf("LastResult roundtrip lost: %+v", got.LastResult)
 	}
 }
 
-func TestUpdateWatch_GetReturnsDeepCopy(t *testing.T) {
+func TestProfileSync_GetReturnsDeepCopy(t *testing.T) {
 	dir := t.TempDir()
 	cs := NewConfigStore(dir)
 	if err := cs.Update(func(cfg *Config) {
-		cfg.UpdateWatch = &UpdateWatch{
-			Enabled: true,
-			PendingChanges: []ChangeSummary{
-				{Type: "cf", TrashID: "original", AffectedRules: []string{"rule-1"}},
+		cfg.ProfileSync = &ProfileSync{
+			Interval: "6h",
+			Mode:     "auto",
+			Sources:  ProfileSyncSources{TrashUpstream: true},
+			Specific: &PullSchedule{Mode: "daily", Time: "03:00"},
+			LastResult: &ProfileSyncRunResult{
+				TriggeredBy: "scheduled",
+				Errors:      []string{"original-error"},
 			},
 		}
 	}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 
-	got := cs.Get().UpdateWatch
-	got.PendingChanges[0].TrashID = "mutated"
-	got.PendingChanges[0].AffectedRules[0] = "mutated-rule"
+	got := cs.Get().ProfileSync
+	// Pointer + slice mutations — these would leak with a shallow copy.
+	got.Specific.Time = "23:59"
+	got.LastResult.Errors[0] = "mutated"
 
-	again := cs.Get().UpdateWatch
-	if again.PendingChanges[0].TrashID == "mutated" {
-		t.Error("Get() returned shallow PendingChanges — TrashID mutation leaked")
+	again := cs.Get().ProfileSync
+	if again.Specific.Time == "23:59" {
+		t.Error("Get() returned shallow Specific — mutating Time leaked to store")
 	}
-	if again.PendingChanges[0].AffectedRules[0] == "mutated-rule" {
-		t.Error("Get() returned shallow AffectedRules slice — mutation leaked")
+	if again.LastResult.Errors[0] == "mutated" {
+		t.Error("Get() returned shallow LastResult.Errors — mutating slice leaked to store")
 	}
 }
 
@@ -529,33 +534,48 @@ func TestDriftWatch_MalformedModeLoadsAsIs(t *testing.T) {
 	}
 }
 
-// TestUpdateWatch_EmptyPendingChangesRoundTrip locks the omitempty
-// behaviour: writing an empty (non-nil) slice should marshal to nothing
-// (per omitempty), and reload should produce either nil OR empty —
-// both are acceptable, just not corrupted.
-func TestUpdateWatch_EmptyPendingChangesRoundTrip(t *testing.T) {
+// (TestUpdateWatch_EmptyPendingChangesRoundTrip removed — PendingChanges
+// moved from subsystem-level UpdateWatch to per-rule storage in Phase C.)
+
+// TestProfileSync_ApplySpecificDeepCopy verifies the second pointer field
+// (ApplySpecific) is also deep-copied, not aliased. Easy to miss when
+// adding new pointer fields — this locks the contract.
+func TestProfileSync_ApplySpecificDeepCopy(t *testing.T) {
 	dir := t.TempDir()
 	cs := NewConfigStore(dir)
 	if err := cs.Update(func(cfg *Config) {
-		cfg.UpdateWatch = &UpdateWatch{
-			Enabled:        true,
-			PendingChanges: []ChangeSummary{},
+		cfg.ProfileSync = &ProfileSync{
+			Mode:          ProfileSyncModeDelayed,
+			ApplyInterval: "specific",
+			ApplySpecific: &PullSchedule{Mode: "daily", Time: "03:00"},
 		}
 	}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
-	cs2 := NewConfigStore(dir)
-	if err := cs2.Load(); err != nil {
-		t.Fatalf("Load(): %v", err)
+
+	got := cs.Get().ProfileSync
+	got.ApplySpecific.Time = "23:59"
+
+	again := cs.Get().ProfileSync
+	if again.ApplySpecific.Time == "23:59" {
+		t.Error("Get() returned shallow ApplySpecific — mutation leaked to store")
 	}
-	got := cs2.Get().UpdateWatch
-	if got == nil {
-		t.Fatal("UpdateWatch lost across reload with empty PendingChanges")
+}
+
+// TestIsValidProfileSyncMode locks the allowed Mode values. Adding a new
+// mode requires updating both the constant block and this test, so the
+// validation can't silently drift from the spec.
+func TestIsValidProfileSyncMode(t *testing.T) {
+	valid := []string{ProfileSyncModeAuto, ProfileSyncModeNotify, ProfileSyncModeDelayed}
+	invalid := []string{"", "off", "AUTO", "Auto", "hot_dog", " auto "}
+	for _, m := range valid {
+		if !IsValidProfileSyncMode(m) {
+			t.Errorf("expected %q to be valid", m)
+		}
 	}
-	if !got.Enabled {
-		t.Error("Enabled flag lost across reload")
-	}
-	if len(got.PendingChanges) != 0 {
-		t.Errorf("want empty PendingChanges, got %d entries", len(got.PendingChanges))
+	for _, m := range invalid {
+		if IsValidProfileSyncMode(m) {
+			t.Errorf("expected %q to be invalid", m)
+		}
 	}
 }

@@ -28,7 +28,7 @@ var urlUserinfoRE = regexp.MustCompile(`(https?|git\+ssh|ssh)://[^@\s/]+@`)
 // Phase 2a (MVP) implemented here:
 //   - Empty-clone safety guard (Trash.CurrentCommit() == "" → skip)
 //   - git ls-remote against the configured TRaSH branch
-//   - Compare local HEAD vs upstream HEAD; update UpdateWatch persistence
+//   - Compare local HEAD vs upstream HEAD; update ProfileSync persistence
 //
 // Phase 2b will add:
 //   - Detailed commit-range walk + file-to-rule mapping
@@ -67,8 +67,8 @@ func NewUpdateWatcher(app *App) *UpdateWatcher {
 //     return without contacting remote. Single most-important safety guard
 //     per the spec — without it, an empty-clone state would surface as
 //     "every commit upstream is new" and spam notifications.
-//   - If UpdateWatch is disabled → return without contacting remote.
-//   - Otherwise → git ls-remote, update UpdateWatch with both heads + LastRun.
+//   - If ProfileSync.Sources.TrashUpstream is false → return without contacting remote.
+//   - Otherwise → git ls-remote, update ProfileSync with both heads + LastRun.
 //
 // Always returns nil on the "no work to do" cases (empty clone, disabled);
 // returns an error only on actual remote failures so callers can decide
@@ -88,8 +88,10 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// Disabled → no remote contact.
-	if cfg.UpdateWatch == nil || !cfg.UpdateWatch.Enabled {
+	// Disabled → no remote contact. ProfileSync nil means migration hasn't run
+	// (pre-upgrade state); Sources.TrashUpstream false means user hasn't enabled
+	// TRaSH-side detection.
+	if cfg.ProfileSync == nil || !cfg.ProfileSync.Sources.TrashUpstream {
 		return nil
 	}
 
@@ -113,15 +115,12 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if updErr := uw.app.Config.Update(func(c *Config) {
-		if c.UpdateWatch == nil {
+		if c.ProfileSync == nil {
 			return // disabled between snapshot + apply; just drop
 		}
-		c.UpdateWatch.LastRun = now
-		c.UpdateWatch.LocalHead = localCommit
-		c.UpdateWatch.UpstreamHead = upstreamHead
-		// Clear PendingChanges on Phase 2a — Phase 2b will populate it with
-		// per-rule mapping. Keeping it cleared avoids stale data leaking.
-		c.UpdateWatch.PendingChanges = nil
+		c.ProfileSync.LastRun = now
+		c.ProfileSync.LocalHead = localCommit
+		c.ProfileSync.UpstreamHead = upstreamHead
 	}); updErr != nil {
 		return fmt.Errorf("update-watcher: persist result: %w", updErr)
 	}
@@ -138,11 +137,11 @@ func (uw *UpdateWatcher) Run(ctx context.Context) error {
 func (uw *UpdateWatcher) recordError(localCommit string, runErr error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := uw.app.Config.Update(func(c *Config) {
-		if c.UpdateWatch == nil {
+		if c.ProfileSync == nil {
 			return
 		}
-		c.UpdateWatch.LastRun = now
-		c.UpdateWatch.LocalHead = localCommit
+		c.ProfileSync.LastRun = now
+		c.ProfileSync.LocalHead = localCommit
 		// Leave UpstreamHead untouched — previous successful value is still
 		// the best signal until the next successful run.
 	}); err != nil {

@@ -26,8 +26,8 @@ type Config struct {
 	SyncHistory          []SyncHistoryEntry               `json:"syncHistory,omitempty"`
 	CleanupKeep          map[string][]string              `json:"cleanupKeep,omitempty"` // instanceID → CF names to keep during delete-all
 	AutoSync             AutoSyncConfig                   `json:"autoSync,omitempty"`
-	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Watch & Drift sprint — Arr-side drift detection (nil = never-initialised; default Mode "off" populated on first save)
-	UpdateWatch          *UpdateWatch                     `json:"updateWatch,omitempty"`          // Watch & Drift sprint — TRaSH-side upstream change detection between pulls (nil = never-initialised; default Enabled=false)
+	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Watch & Drift sprint — Arr-side drift detection (still used; populated by migration in Phase D)
+	ProfileSync          *ProfileSync                     `json:"profileSync,omitempty"`          // Unified Profile Sync subsystem (spec: dev/docs/layout-v2/feature-watch-and-drift.md). Populated via migration from PullInterval/PullSchedule on first load after upgrade. nil = pre-migration state.
 	Prowlarr             ProwlarrConfig                   `json:"prowlarr,omitempty"`
 	// Authentication — matches Radarr/Sonarr Security panel model.
 	// Credentials (bcrypt password hash, API key) live separately in
@@ -82,35 +82,98 @@ type DriftRunResult struct {
 	Errors         []string `json:"errors,omitempty"`
 }
 
-// UpdateWatch holds the configuration for the TRaSH-upstream change-detection
-// subsystem. Runs hourly (internal cadence — no user-facing frequency knob,
-// per spec Decision 3), checks if TRaSH-Guides has new commits between
-// scheduled pulls. Surfaces "update available" badges on affected rules.
+// ProfileSync is the unified Profile Sync subsystem — supersedes the
+// short-lived UpdateWatch (Phase 2a) and folds in today's Pull-and-sync
+// behaviour. Single subsystem that detects changes (TRaSH upstream and/or
+// Arr-side drift) on a user-chosen schedule and acts on them per Mode.
 //
-// Default Enabled=false for all installs — opt-in via Settings → Pull section.
+// Full spec: dev/docs/layout-v2/feature-watch-and-drift.md (2026-05-24 rewrite).
 //
-// LastRun, UpstreamHead, LocalHead, and PendingChanges are populated by the
-// watcher after each run.
-type UpdateWatch struct {
-	Enabled        bool            `json:"enabled"`
-	LastRun        string          `json:"lastRun,omitempty"`        // RFC3339 timestamp
-	UpstreamHead   string          `json:"upstreamHead,omitempty"`   // commit hash from git ls-remote
-	LocalHead      string          `json:"localHead,omitempty"`      // our current HEAD
-	PendingChanges []ChangeSummary `json:"pendingChanges,omitempty"` // computed at last run; cleared by next Pull
+// Scenario coverage:
+//   Mode=auto + Sources.TrashUpstream → today's Pull-and-sync (default)
+//   Mode=notify + Sources.TrashUpstream → notify only, never apply
+//   Mode=delayed + ApplySchedule → notify now, apply at separate cadence
+//   Sources.ArrDrift → adds Arr-side direct-edit detection (Phase D)
+//
+// Migration: populated on first load from existing PullInterval + PullSchedule
+// with Mode=auto, Sources=TRaSH only. Zero functional change for existing
+// users — same schedule, same behaviour. New capabilities are opt-in via UI.
+type ProfileSync struct {
+	// Schedule reuses the existing pull-schedule shape. PullInterval-style
+	// duration ("5m", "1h", "24h"; minimum 1m via ParsePullInterval clamp) OR
+	// wall-clock specification via the embedded PullSchedule pointer when
+	// IntervalKind == "specific".
+	//
+	// One-of:
+	//   Interval == "0"        → Manual only
+	//   Interval == "specific" → use Specific (wall-clock daily/weekly/monthly)
+	//   Interval == <duration> → recurring interval
+	Interval string        `json:"interval"`           // matches today's PullInterval semantics
+	Specific *PullSchedule `json:"specific,omitempty"` // matches today's PullSchedule; populated only when Interval == "specific"
+
+	// Sources controls what kind of changes the runner looks for. At least one
+	// must be true for scheduled detection to do anything (manual button still
+	// works regardless).
+	Sources ProfileSyncSources `json:"sources"`
+
+	// Mode controls what happens when detection finds changes:
+	//   "auto"    — apply immediately for auto-sync ON rules; notify auto-sync OFF rules
+	//   "notify"  — never apply automatically; notify all rules
+	//   "delayed" — notify immediately; apply queued for ApplySchedule
+	Mode string `json:"mode"`
+
+	// ApplyInterval / ApplySpecific are ONLY consulted when Mode == "delayed".
+	// In any other Mode the runner ignores them, so empty/nil is fine.
+	// Same value-space as Interval/Specific above.
+	ApplyInterval string        `json:"applyInterval,omitempty"`
+	ApplySpecific *PullSchedule `json:"applySpecific,omitempty"`
+
+	// Runner telemetry — written by ProfileSyncRunner after each run.
+	LastRun      string                `json:"lastRun,omitempty"`      // RFC3339 timestamp
+	NextRun      string                `json:"nextRun,omitempty"`      // RFC3339 timestamp; set by scheduler
+	UpstreamHead string                `json:"upstreamHead,omitempty"` // commit hash from last successful ls-remote
+	LocalHead    string                `json:"localHead,omitempty"`    // local HEAD at time of last run
+	LastResult   *ProfileSyncRunResult `json:"lastResult,omitempty"`
 }
 
-// ChangeSummary records one TRaSH-side change that affects one or more
-// existing sync rules or quality-size sets. Built by UpdateWatcher from the
-// commit range between LocalHead and UpstreamHead, filtered by relevance
-// (only changes that touch a CF / cf-group / profile / qs referenced by a
-// created sync rule — Decision 6 in spec).
-type ChangeSummary struct {
-	Type            string   `json:"type"`                      // "cf" | "cf-group" | "profile" | "qs"
-	TrashID         string   `json:"trashId"`
-	Name            string   `json:"name"`
-	AffectedRules   []string `json:"affectedRules,omitempty"`   // rule IDs
-	AffectedQSTypes []string `json:"affectedQsTypes,omitempty"`
+// ProfileSyncSources captures which detection axes the runner walks each tick.
+type ProfileSyncSources struct {
+	TrashUpstream bool `json:"trashUpstream"` // git ls-remote + fetch-to-side-ref + diff walk
+	ArrDrift      bool `json:"arrDrift"`      // per-rule Arr live state vs ComputeArrTarget diff (Phase D)
 }
+
+// ProfileSyncRunResult is the per-run telemetry surfaced via the API so the UI
+// can render "last run: 4 minutes ago — 3 changes detected" without recomputing.
+type ProfileSyncRunResult struct {
+	TriggeredBy        string   `json:"triggeredBy"`         // ProfileSyncTriggerScheduled | ProfileSyncTriggerManual
+	RanAt              string   `json:"ranAt"`               // RFC3339
+	RulesChecked       int      `json:"rulesChecked"`        // populated in Phase B (currently always 0)
+	PendingDetected    int      `json:"pendingDetected"`     // populated in Phase C (per-rule PendingChange accumulator)
+	NotificationsFired int      `json:"notificationsFired"`  // populated in Phase C (post-dedup count)
+	Errors             []string `json:"errors,omitempty"`    // per-rule errors (instance unreachable, etc.)
+}
+
+// ProfileSync mode constants. Mode determines what happens when detection
+// finds changes. Defined as constants so the runner + API + tests share one
+// vocabulary (typo at one site = compile error, not runtime mystery).
+const (
+	ProfileSyncModeAuto    = "auto"    // apply inline for auto-sync-ON rules
+	ProfileSyncModeNotify  = "notify"  // never apply; notify all rules
+	ProfileSyncModeDelayed = "delayed" // notify now; apply on ApplySchedule
+)
+
+// IsValidProfileSyncMode reports whether the given string is one of the
+// known modes. Empty string is intentionally INVALID — fresh installs without
+// migration have Mode="" and the runner treats that as off.
+func IsValidProfileSyncMode(m string) bool {
+	return m == ProfileSyncModeAuto || m == ProfileSyncModeNotify || m == ProfileSyncModeDelayed
+}
+
+// ProfileSyncRunResult.TriggeredBy constants.
+const (
+	ProfileSyncTriggerScheduled = "scheduled"
+	ProfileSyncTriggerManual    = "manual"
+)
 
 // DriftResult is the per-rule (or per-QS-set) outcome from one DriftWatcher
 // run. Stored in the watcher's in-memory cache, surfaced via /api/watch/drift.
@@ -569,23 +632,25 @@ func (cs *ConfigStore) Get() Config {
 		}
 		cfg.DriftWatch = &dw
 	}
-	if cs.config.UpdateWatch != nil {
-		uw := *cs.config.UpdateWatch
-		if len(cs.config.UpdateWatch.PendingChanges) > 0 {
-			uw.PendingChanges = make([]ChangeSummary, len(cs.config.UpdateWatch.PendingChanges))
-			for i, pc := range cs.config.UpdateWatch.PendingChanges {
-				uw.PendingChanges[i] = pc
-				if len(pc.AffectedRules) > 0 {
-					uw.PendingChanges[i].AffectedRules = make([]string, len(pc.AffectedRules))
-					copy(uw.PendingChanges[i].AffectedRules, pc.AffectedRules)
-				}
-				if len(pc.AffectedQSTypes) > 0 {
-					uw.PendingChanges[i].AffectedQSTypes = make([]string, len(pc.AffectedQSTypes))
-					copy(uw.PendingChanges[i].AffectedQSTypes, pc.AffectedQSTypes)
-				}
-			}
+	if cs.config.ProfileSync != nil {
+		ps := *cs.config.ProfileSync
+		if cs.config.ProfileSync.Specific != nil {
+			sp := *cs.config.ProfileSync.Specific
+			ps.Specific = &sp
 		}
-		cfg.UpdateWatch = &uw
+		if cs.config.ProfileSync.ApplySpecific != nil {
+			asp := *cs.config.ProfileSync.ApplySpecific
+			ps.ApplySpecific = &asp
+		}
+		if cs.config.ProfileSync.LastResult != nil {
+			lr := *cs.config.ProfileSync.LastResult
+			if len(cs.config.ProfileSync.LastResult.Errors) > 0 {
+				lr.Errors = make([]string, len(cs.config.ProfileSync.LastResult.Errors))
+				copy(lr.Errors, cs.config.ProfileSync.LastResult.Errors)
+			}
+			ps.LastResult = &lr
+		}
+		cfg.ProfileSync = &ps
 	}
 	cfg.Instances = make([]Instance, len(cs.config.Instances))
 	copy(cfg.Instances, cs.config.Instances)

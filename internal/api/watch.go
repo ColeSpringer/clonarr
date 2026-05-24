@@ -6,46 +6,71 @@ import (
 	"clonarr/internal/core"
 )
 
-// --- Watch & Drift (Phase 2a) — UpdateWatch endpoints ---
+// --- Profile Sync — config + telemetry endpoints ---
 
-// handleGetUpdateWatch returns the current UpdateWatch state. When the
-// subsystem has never run (UpdateWatch == nil in config), returns a default
-// shape so the frontend can render a consistent layout.
-func (s *Server) handleGetUpdateWatch(w http.ResponseWriter, r *http.Request) {
+// handleGetProfileSync returns the current ProfileSync state (settings +
+// runner telemetry). When the subsystem has never been initialised by
+// migration (ProfileSync == nil), returns a sensible default shape so
+// frontend can render consistently.
+func (s *Server) handleGetProfileSync(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
-	if cfg.UpdateWatch == nil {
-		writeJSON(w, map[string]any{
-			"enabled":      false,
-			"lastRun":      "",
-			"upstreamHead": "",
-			"localHead":    "",
-		})
+	if cfg.ProfileSync == nil {
+		// Return all fields with zero values so frontend doesn't need
+		// optional-chaining on every read. Matches the shape Phase B will
+		// populate via migration.
+		writeJSON(w, core.ProfileSync{})
 		return
 	}
-	writeJSON(w, cfg.UpdateWatch)
+	writeJSON(w, cfg.ProfileSync)
 }
 
-// handlePutUpdateWatch toggles the Enabled flag. Other fields (LastRun, heads,
-// pending changes) are managed by UpdateWatcher.Run — clients cannot set them
-// directly to avoid drifting display state.
-func (s *Server) handlePutUpdateWatch(w http.ResponseWriter, r *http.Request) {
+// handlePutProfileSync updates user-controlled settings: Sources, Mode,
+// Interval/Specific (Schedule), ApplyInterval/ApplySpecific (Apply schedule).
+// Runner-managed fields (LastRun, UpstreamHead, LocalHead, LastResult) are
+// read-only via API to prevent drifting display state.
+func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeJSON[struct {
-		Enabled *bool `json:"enabled,omitempty"`
-	}](w, r, 4096)
+		Interval      *string                     `json:"interval,omitempty"`
+		Specific      *core.PullSchedule          `json:"specific,omitempty"`
+		Sources       *core.ProfileSyncSources    `json:"sources,omitempty"`
+		Mode          *string                     `json:"mode,omitempty"`
+		ApplyInterval *string                     `json:"applyInterval,omitempty"`
+		ApplySpecific *core.PullSchedule          `json:"applySpecific,omitempty"`
+	}](w, r, 8192)
 	if !ok {
 		return
 	}
-	if req.Enabled == nil {
-		writeError(w, 400, "enabled field required")
+	// Boundary validation — reject invalid values now rather than letting
+	// the runner silently no-op on garbage Mode strings or trip on bad
+	// schedule durations.
+	if req.Mode != nil && *req.Mode != "" && !core.IsValidProfileSyncMode(*req.Mode) {
+		writeError(w, 400, "invalid mode (must be empty, 'auto', 'notify', or 'delayed')")
 		return
 	}
 	if err := s.Core.Config.Update(func(cfg *core.Config) {
-		if cfg.UpdateWatch == nil {
-			cfg.UpdateWatch = &core.UpdateWatch{}
+		if cfg.ProfileSync == nil {
+			cfg.ProfileSync = &core.ProfileSync{}
 		}
-		cfg.UpdateWatch.Enabled = *req.Enabled
+		if req.Interval != nil {
+			cfg.ProfileSync.Interval = *req.Interval
+		}
+		if req.Specific != nil {
+			cfg.ProfileSync.Specific = req.Specific
+		}
+		if req.Sources != nil {
+			cfg.ProfileSync.Sources = *req.Sources
+		}
+		if req.Mode != nil {
+			cfg.ProfileSync.Mode = *req.Mode
+		}
+		if req.ApplyInterval != nil {
+			cfg.ProfileSync.ApplyInterval = *req.ApplyInterval
+		}
+		if req.ApplySpecific != nil {
+			cfg.ProfileSync.ApplySpecific = req.ApplySpecific
+		}
 	}); err != nil {
-		writeError(w, 500, "failed to save update-watch setting")
+		writeError(w, 500, "failed to save profile-sync settings")
 		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})

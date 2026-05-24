@@ -62,9 +62,9 @@ func TestUpdateWatcher_SkipsWhenTrashCloneEmpty(t *testing.T) {
 	if err := uw.Run(context.Background()); err != nil {
 		t.Errorf("Run() with empty clone should return nil, got %v", err)
 	}
-	// UpdateWatch state must remain untouched (nil-default).
-	if got := app.Config.Get().UpdateWatch; got != nil {
-		t.Errorf("UpdateWatch should stay nil when guard fires, got %+v", got)
+	// ProfileSync state must remain untouched (nil-default).
+	if got := app.Config.Get().ProfileSync; got != nil {
+		t.Errorf("ProfileSync should stay nil when guard fires, got %+v", got)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestUpdateWatcher_NoRemoteCallWhenDisabled(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-head-abcdef0")
 	_ = app.Config.Update(func(c *Config) {
-		c.UpdateWatch = &UpdateWatch{Enabled: false}
+		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: false}}
 	})
 
 	var called int32
@@ -101,11 +101,9 @@ func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-commit-1111111")
 	_ = app.Config.Update(func(c *Config) {
-		c.UpdateWatch = &UpdateWatch{
-			Enabled: true,
-			// Stale PendingChanges from a prior tick — Phase 2a clears these
-			// since per-rule mapping doesn't ship until Phase 2b.
-			PendingChanges: []ChangeSummary{{Type: "cf", TrashID: "stale", Name: "stale"}},
+		c.ProfileSync = &ProfileSync{
+			Sources: ProfileSyncSources{TrashUpstream: true},
+			Mode:    "auto",
 		}
 	})
 
@@ -125,9 +123,9 @@ func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 		t.Fatalf("Run(): %v", err)
 	}
 
-	got := app.Config.Get().UpdateWatch
+	got := app.Config.Get().ProfileSync
 	if got == nil {
-		t.Fatal("UpdateWatch missing after Run")
+		t.Fatal("ProfileSync missing after Run")
 	}
 	if got.LocalHead != "local-commit-1111111" {
 		t.Errorf("LocalHead = %q, want local-commit-1111111", got.LocalHead)
@@ -141,9 +139,6 @@ func TestUpdateWatcher_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, got.LastRun); err != nil {
 		t.Errorf("LastRun not RFC3339: %q (%v)", got.LastRun, err)
 	}
-	if len(got.PendingChanges) != 0 {
-		t.Errorf("PendingChanges should be cleared on Phase 2a, got %d", len(got.PendingChanges))
-	}
 }
 
 // TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead verifies a
@@ -154,8 +149,9 @@ func TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-aaaaaaa")
 	_ = app.Config.Update(func(c *Config) {
-		c.UpdateWatch = &UpdateWatch{
-			Enabled:      true,
+		c.ProfileSync = &ProfileSync{
+			Sources:      ProfileSyncSources{TrashUpstream: true},
+			Mode:         "auto",
 			LocalHead:    "stale-local",
 			UpstreamHead: "prior-good-upstream",
 			LastRun:      "2026-01-01T00:00:00Z",
@@ -173,9 +169,9 @@ func TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
 		t.Error("Run() should propagate ls-remote error")
 	}
 
-	got := app.Config.Get().UpdateWatch
+	got := app.Config.Get().ProfileSync
 	if got == nil {
-		t.Fatal("UpdateWatch lost")
+		t.Fatal("ProfileSync lost")
 	}
 	if got.UpstreamHead != "prior-good-upstream" {
 		t.Errorf("UpstreamHead should be preserved on error, got %q", got.UpstreamHead)
@@ -260,7 +256,7 @@ func TestUpdateWatcher_ErrorReturnedFromRunIsRedacted(t *testing.T) {
 	seedTrashCommit(t, ts, "local-commit-aaaa")
 	_ = app.Config.Update(func(c *Config) {
 		c.TrashRepo.URL = "https://oauth2:ghp_supersecret@github.com/owner/repo.git"
-		c.UpdateWatch = &UpdateWatch{Enabled: true}
+		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
 	})
 
 	uw := &UpdateWatcher{
@@ -288,7 +284,7 @@ func TestUpdateWatcher_MissingRepoURL(t *testing.T) {
 	seedTrashCommit(t, ts, "local-head-xyz1234")
 	_ = app.Config.Update(func(c *Config) {
 		c.TrashRepo.URL = ""
-		c.UpdateWatch = &UpdateWatch{Enabled: true}
+		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
 	})
 
 	uw := &UpdateWatcher{
