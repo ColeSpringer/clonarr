@@ -303,6 +303,27 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			cfg.PullSchedule = &sched
 			scheduleChanged = true
 		}
+		// Propagate Pull config changes to ProfileSync.Interval/Specific so the
+		// Profile Sync scheduler picks up edits from today's Pull UI. Until
+		// Phase E ships a dedicated ProfileSync settings panel, the existing
+		// Pull-fane in Settings is the only way users configure cadence —
+		// without this propagation, ProfileSync.Interval stays at its migrated
+		// value and the scheduler ignores user edits.
+		if pullChanged || scheduleChanged {
+			if cfg.ProfileSync == nil {
+				cfg.ProfileSync = &core.ProfileSync{
+					Mode:    core.ProfileSyncModeAuto,
+					Sources: core.ProfileSyncSources{TrashUpstream: true},
+				}
+			}
+			cfg.ProfileSync.Interval = cfg.PullInterval
+			if cfg.PullSchedule != nil {
+				sched := *cfg.PullSchedule
+				cfg.ProfileSync.Specific = &sched
+			} else {
+				cfg.ProfileSync.Specific = nil
+			}
+		}
 		if req.SyncSchedule != nil {
 			sched := *req.SyncSchedule
 			cfg.SyncSchedule = &sched

@@ -56,9 +56,17 @@ type App struct {
 	CleanupMu      sync.Mutex
 	AutoSyncEvents []AutoSyncEvent
 	AutoSyncMu     sync.Mutex
-	// ProfileSyncRunner polls TRaSH upstream for new commits between scheduled
-	// Pulls. Wired by main.go at startup; nil during tests that don't need it.
+	// ProfileSyncRunner runs the unified Profile Sync subsystem — detection
+	// (TRaSH ls-remote) and apply (Pull-and-sync when Mode=auto). Wired by
+	// main.go at startup; nil during tests that don't need it.
 	ProfileSyncRunner *ProfileSyncRunner
+
+	// AfterPullCallback runs after a successful TRaSH pull (commit advanced
+	// or not), before AutoSyncAfterPull. Lets main.go register server-level
+	// helpers like api.Server.AutoSyncQualitySizes — which lives in the api
+	// package and is not callable from core — without core depending on api.
+	// Nil-safe.
+	AfterPullCallback func()
 }
 
 // IsShuttingDown returns true once ShutdownCh has been closed (graceful

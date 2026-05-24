@@ -27,7 +27,7 @@ type Config struct {
 	CleanupKeep          map[string][]string              `json:"cleanupKeep,omitempty"` // instanceID → CF names to keep during delete-all
 	AutoSync             AutoSyncConfig                   `json:"autoSync,omitempty"`
 	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Watch & Drift sprint — Arr-side drift detection (still used; populated by migration in Phase D)
-	ProfileSync          *ProfileSync                     `json:"profileSync,omitempty"`          // Unified Profile Sync subsystem (spec: dev/docs/layout-v2/feature-watch-and-drift.md). Populated via migration from PullInterval/PullSchedule on first load after upgrade. nil = pre-migration state.
+	ProfileSync          *ProfileSync                     `json:"profileSync,omitempty"`          // Unified Profile Sync subsystem. Populated via migration from PullInterval/PullSchedule on first load after upgrade. nil = pre-migration state.
 	Prowlarr             ProwlarrConfig                   `json:"prowlarr,omitempty"`
 	// Authentication — matches Radarr/Sonarr Security panel model.
 	// Credentials (bcrypt password hash, API key) live separately in
@@ -50,7 +50,7 @@ type PullSchedule struct {
 }
 
 // DriftWatch holds the configuration for the Arr-side drift detection
-// subsystem (Watch & Drift sprint, spec at dev/docs/layout-v2/feature-watch-and-drift.md).
+// subsystem.
 //
 // Mode controls how the detected drift is handled:
 //   - "off":    no drift checks performed
@@ -87,7 +87,6 @@ type DriftRunResult struct {
 // behaviour. Single subsystem that detects changes (TRaSH upstream and/or
 // Arr-side drift) on a user-chosen schedule and acts on them per Mode.
 //
-// Full spec: dev/docs/layout-v2/feature-watch-and-drift.md (2026-05-24 rewrite).
 //
 // Scenario coverage:
 //   Mode=auto + Sources.TrashUpstream → today's Pull-and-sync (default)

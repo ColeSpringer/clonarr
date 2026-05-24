@@ -36,7 +36,6 @@ var urlUserinfoRE = regexp.MustCompile(`(https?|git\+ssh|ssh)://[^@\s/]+@`)
 //   - Per-rule notification firing for auto-sync-ON rules
 //   - POST /api/watch/update/refresh with rate limiting
 //
-// Spec: dev/docs/layout-v2/feature-watch-and-drift.md (Mode 2)
 type ProfileSyncRunner struct {
 	app *App
 
@@ -78,21 +77,45 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 	defer uw.refreshMu.Unlock()
 
 	cfg := uw.app.Config.Get()
+	if cfg.ProfileSync == nil {
+		return nil // pre-migration state; never happens after first Load()
+	}
 
-	// Empty-clone safety guard — first thing. Without this, an empty local
-	// HEAD would compare against any non-empty upstream HEAD and report
-	// "everything is new", spamming notifications across every rule.
-	localCommit := uw.app.Trash.CurrentCommit()
-	if localCommit == "" {
-		log.Printf("profile-sync: TRaSH clone not initialised — skipping check (next Pull will populate it)")
+	// Sources gate — at least one detection source must be on. Manual Pull
+	// (via api endpoint) bypasses this check and always does a full pull;
+	// the scheduled run only acts on configured sources.
+	if !cfg.ProfileSync.Sources.TrashUpstream && !cfg.ProfileSync.Sources.ArrDrift {
 		return nil
 	}
 
-	// Disabled → no remote contact. ProfileSync nil means migration hasn't run
-	// (pre-upgrade state); Sources.TrashUpstream false means user hasn't enabled
-	// TRaSH-side detection.
-	if cfg.ProfileSync == nil || !cfg.ProfileSync.Sources.TrashUpstream {
+	// Mode dispatch. Unknown / empty Mode falls through to the
+	// detection-only path so a hand-edited bad config can't accidentally
+	// trigger Arr writes.
+	switch cfg.ProfileSync.Mode {
+	case ProfileSyncModeAuto:
+		// Pull-and-sync (= today's Pull behaviour). Empty-clone is a
+		// valid initial state here — Trash.CloneOrPull will populate it.
+		return uw.runPullAndSync(ctx)
+	default:
+		// Notify-only / Delayed modes use the ls-remote-only path for
+		// detection. Notification firing + per-rule mapping land in Phase C.
+		return uw.runDetectionOnly(ctx)
+	}
+}
+
+// runDetectionOnly performs the ls-remote-only check. Empty-clone guard
+// applies — comparing against an empty local HEAD would surface every
+// upstream commit as "new" once Phase C wires notification firing.
+func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
+	cfg := uw.app.Config.Get()
+
+	localCommit := uw.app.Trash.CurrentCommit()
+	if localCommit == "" {
+		log.Printf("profile-sync: TRaSH clone not initialised — skipping detection (next Pull will populate it)")
 		return nil
+	}
+	if !cfg.ProfileSync.Sources.TrashUpstream {
+		return nil // ArrDrift-only path lands in Phase D; nothing to do here yet
 	}
 
 	remote := cfg.TrashRepo.URL
@@ -106,8 +129,6 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 
 	upstreamHead, err := uw.gitLsRemote(ctx, remote, branch)
 	if err != nil {
-		// Redact remote URL from the error before persisting / returning —
-		// users may have credentials embedded (https://user:token@host/...).
 		safeErr := fmt.Errorf("git ls-remote on branch %q failed: %w", branch, err)
 		uw.recordError(localCommit, safeErr)
 		return safeErr
@@ -116,7 +137,7 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if updErr := uw.app.Config.Update(func(c *Config) {
 		if c.ProfileSync == nil {
-			return // disabled between snapshot + apply; just drop
+			return
 		}
 		c.ProfileSync.LastRun = now
 		c.ProfileSync.LocalHead = localCommit
@@ -129,6 +150,16 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
 	}
 	return nil
+}
+
+// runPullAndSync dispatches to the canonical App.RunPullAndSync flow with
+// the scheduled-pull source tag. All telemetry (DebugLog op-trace,
+// SetPullError, ProfileSync state persistence, DiffPull detail lines,
+// AfterPullCallback, AutoSyncAfterPull) is unified there — manual Pull
+// (handleTrashPull) goes through the same method.
+func (uw *ProfileSyncRunner) runPullAndSync(_ context.Context) error {
+	log.Printf("profile-sync: scheduled pull-and-sync starting (mode=auto)")
+	return uw.app.RunPullAndSync(SourceAutoPullInterval)
 }
 
 // recordError persists the failure so /api/watch/update can surface it,

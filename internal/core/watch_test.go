@@ -103,7 +103,7 @@ func TestProfileSyncRunner_PersistsHeadsOnSuccessfulCheck(t *testing.T) {
 	_ = app.Config.Update(func(c *Config) {
 		c.ProfileSync = &ProfileSync{
 			Sources: ProfileSyncSources{TrashUpstream: true},
-			Mode:    "auto",
+			Mode:    "notify",
 		}
 	})
 
@@ -151,7 +151,7 @@ func TestProfileSyncRunner_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T)
 	_ = app.Config.Update(func(c *Config) {
 		c.ProfileSync = &ProfileSync{
 			Sources:      ProfileSyncSources{TrashUpstream: true},
-			Mode:         "auto",
+			Mode:         "notify",
 			LocalHead:    "stale-local",
 			UpstreamHead: "prior-good-upstream",
 			LastRun:      "2026-01-01T00:00:00Z",
@@ -256,7 +256,7 @@ func TestProfileSyncRunner_ErrorReturnedFromRunIsRedacted(t *testing.T) {
 	seedTrashCommit(t, ts, "local-commit-aaaa")
 	_ = app.Config.Update(func(c *Config) {
 		c.TrashRepo.URL = "https://oauth2:ghp_supersecret@github.com/owner/repo.git"
-		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
+		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "notify"}
 	})
 
 	uw := &ProfileSyncRunner{
@@ -284,7 +284,7 @@ func TestProfileSyncRunner_MissingRepoURL(t *testing.T) {
 	seedTrashCommit(t, ts, "local-head-xyz1234")
 	_ = app.Config.Update(func(c *Config) {
 		c.TrashRepo.URL = ""
-		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "auto"}
+		c.ProfileSync = &ProfileSync{Sources: ProfileSyncSources{TrashUpstream: true}, Mode: "notify"}
 	})
 
 	uw := &ProfileSyncRunner{

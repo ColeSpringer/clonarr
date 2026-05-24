@@ -157,6 +157,12 @@ func main() {
 	server := &api.Server{Core: app}
 	server.RegisterRoutes(mux)
 
+	// Wire post-pull callback: ProfileSyncRunner.runPullAndSync calls this
+	// after CloneOrPull succeeds, so server-level helpers (which live in api
+	// package and aren't reachable from core) still run on every scheduled
+	// pull. Same call-site as today's pull-scheduler closure.
+	app.AfterPullCallback = server.AutoSyncQualitySizes
+
 	// Background: clone/pull TRaSH repo on startup.
 	//
 	// Respect PullInterval=Disabled when the repo is already cloned: users who
@@ -207,133 +213,10 @@ func main() {
 		}
 	})
 
-	// Scheduled TRaSH pull. One goroutine owns either a fixed-interval ticker
-	// or a one-shot wall-clock timer; config changes wake it to rebuild from
-	// the saved config.
-	utils.SafeGo("trash-pull-scheduler", func() {
-		var ticker *time.Ticker
-		var tickCh <-chan time.Time
-		var timer *time.Timer
-		var timerCh <-chan time.Time
-		var currentInterval time.Duration
-
-		stopSchedule := func() {
-			if ticker != nil {
-				ticker.Stop()
-				ticker = nil
-			}
-			tickCh = nil
-			if timer != nil {
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				timer = nil
-			}
-			timerCh = nil
-			currentInterval = 0
-			app.SetNextPullAt(time.Time{})
-		}
-
-		runScheduledPull := func() {
-			cfg := cfgStore.Get()
-			prevCommit := trashStore.CurrentCommit()
-			log.Printf("Scheduled TRaSH pull starting...")
-			if err := trashStore.CloneOrPull(cfg.TrashRepo.URL, cfg.TrashRepo.Branch); err != nil {
-				log.Printf("Scheduled TRaSH pull failed: %v", err)
-				return
-			}
-
-			newCommit := trashStore.CurrentCommit()
-			if prevCommit != "" && newCommit != prevCommit {
-				log.Printf("TRaSH repo updated: %s → %s", prevCommit, newCommit)
-				app.NotifyRepoUpdate(prevCommit, newCommit)
-			} else {
-				log.Printf("Scheduled TRaSH pull completed (no changes)")
-			}
-			server.AutoSyncQualitySizes()
-			app.AutoSyncAfterPull(core.SourceAutoPullInterval)
-		}
-
-		// Track whether we've already warned about the TZ-unset case, so the
-		// log doesn't spam on every config-change rearm.
-		tzUnsetWarned := false
-
-		armFromConfig := func() {
-			stopSchedule()
-
-			cfg := cfgStore.Get()
-			if cfg.PullInterval == "specific" {
-				if cfg.PullSchedule == nil {
-					log.Printf("Scheduled TRaSH pull disabled (specific schedule missing)")
-					return
-				}
-				// One-shot heads-up: if the user picks a wall-clock schedule
-				// but TZ is unset, Go falls back to UTC silently and "Daily
-				// 03:00" fires at 03:00 UTC. Most container platforms set TZ
-				// (Unraid templates ship it by default), but bare-Docker
-				// users running without --env TZ=... can be surprised.
-				if !tzUnsetWarned && os.Getenv("TZ") == "" {
-					log.Printf("warning: pullSchedule uses 'specific' but TZ env var is unset — schedule will fire in UTC. Set TZ in your container (e.g. America/New_York) for local-time scheduling.")
-					tzUnsetWarned = true
-				}
-				next := core.NextPullTime(*cfg.PullSchedule)
-				if next.IsZero() {
-					log.Printf("Scheduled TRaSH pull disabled (invalid specific schedule)")
-					return
-				}
-				delay := time.Until(next)
-				if delay <= 0 {
-					// The scheduled time has already passed (typically because
-					// the container was down across it). Catch-up: fire on the
-					// next loop iteration so the missed pull still runs once.
-					// Documented here so the immediate-fire isn't surprising.
-					log.Printf("Scheduled TRaSH pull: next time %s is in the past (container was likely down across it) — running catch-up immediately", next.Format(time.RFC3339))
-					delay = time.Millisecond
-				}
-				timer = time.NewTimer(delay)
-				timerCh = timer.C
-				app.SetNextPullAt(next)
-				log.Printf("Scheduled TRaSH pull at %s", next.Format(time.RFC3339))
-				return
-			}
-
-			interval := core.ParsePullInterval(cfg.PullInterval)
-			if interval > 0 {
-				ticker = time.NewTicker(interval)
-				tickCh = ticker.C
-				currentInterval = interval
-				next := time.Now().Add(interval)
-				app.SetNextPullAt(next)
-				log.Printf("Scheduled TRaSH pull every %s (next at %s)", interval, next.Format(time.RFC3339))
-				return
-			}
-
-			log.Printf("Scheduled TRaSH pull disabled")
-		}
-		armFromConfig()
-
-		for {
-			select {
-			case tickAt := <-tickCh:
-				runScheduledPull()
-				if currentInterval > 0 {
-					// Ticker values are scheduled times, so this avoids drifting by the pull duration.
-					app.SetNextPullAt(tickAt.Add(currentInterval))
-				}
-			case <-timerCh:
-				runScheduledPull()
-				armFromConfig()
-			case <-app.PullUpdateCh:
-				armFromConfig()
-			case <-ctx.Done():
-				stopSchedule()
-				return
-			}
-		}
-	})
+	// (Legacy trash-pull-scheduler goroutine retired in Phase B commit 2.
+	// Scheduled Pull-and-sync now runs through the profile-sync-watcher
+	// goroutine below, which reads ProfileSync.Interval/Specific and
+	// dispatches to ProfileSyncRunner.runPullAndSync when Mode=auto.)
 
 	// ==== Authentication =====================================================
 	authStore := api.InitAuth(ctx, cfgStore, Version, basePath, configDir, mux)
@@ -452,15 +335,10 @@ func main() {
 	//   Interval == "specific" → wall-clock via core.NextPullTime
 	//   Interval == <duration> → recurring (1m minimum via ParsePullInterval clamp)
 	//
-	// Runner.Run() short-circuits when ProfileSync.Sources.TrashUpstream is
-	// false (gate) or when TRaSH clone is empty (safety guard), so this loop
-	// is safe to fire even when the user has detection off — it's a fast no-op.
-	//
-	// Wake-on-config-change is deferred to Phase B (when this scheduler merges
-	// with the existing pull-scheduler). Until then, config changes via API
-	// take effect on the NEXT timer fire (worst case: one Interval delay).
-	// TODO Phase B: rename app.ProfileSyncRunner → app.ProfileSyncRunner (bundled
-	// with Pull-scheduler integration that retires this separate goroutine).
+	// Phase B commit 2: this is the SOLE scheduler for Profile Sync. The
+	// legacy trash-pull-scheduler goroutine has been retired. PullUpdateCh
+	// wakes the loop on user config changes so cadence edits take effect
+	// without waiting for the 60s poll-tick fallback.
 	utils.SafeGo("profile-sync-watcher", func() {
 		var timer *time.Timer
 		var timerCh <-chan time.Time
@@ -470,6 +348,11 @@ func main() {
 		// existing long timer to expire.
 		var armedAt time.Time
 		var armedDuration time.Duration
+		// One-shot TZ warning: when Interval="specific" but TZ env is empty,
+		// Go falls back to UTC silently. Unraid templates ship TZ; bare-Docker
+		// users without --env TZ=... can be surprised by "Daily 03:00" firing
+		// at 03:00 UTC. Warn at first arm so the misconfig is visible.
+		var tzUnsetWarned bool
 
 		stopTimer := func() {
 			if timer != nil {
@@ -496,12 +379,19 @@ func main() {
 				if cfg.ProfileSync.Specific == nil {
 					return 0, false
 				}
+				if !tzUnsetWarned && os.Getenv("TZ") == "" {
+					log.Printf("WARNING: profile-sync uses wall-clock schedule but TZ env var is unset — fires in UTC. Set TZ in your container (e.g. America/New_York) for local-time scheduling.")
+					tzUnsetWarned = true
+				}
 				next := core.NextPullTime(*cfg.ProfileSync.Specific)
 				if next.IsZero() {
 					return 0, false
 				}
 				d := time.Until(next)
 				if d < time.Millisecond {
+					// Scheduled time already passed (typically because the
+					// container was down across it). Fire catch-up immediately.
+					log.Printf("profile-sync: next scheduled time %s is in the past — firing catch-up now", next.Format(time.RFC3339))
 					d = time.Millisecond
 				}
 				return d, true
@@ -525,22 +415,23 @@ func main() {
 			// !armed — e.g. when user toggled Interval to "0" mid-fire.
 			d, armed := nextDelay()
 			if !armed {
+				app.SetNextPullAt(time.Time{}) // /api/trash/status countdown clears
 				return
 			}
 			timer = time.NewTimer(d)
 			timerCh = timer.C
 			armedAt = time.Now()
 			armedDuration = d
+			app.SetNextPullAt(armedAt.Add(d))
 		}
 
-		// Lightweight poll so config changes via API take effect without a
-		// dedicated wake channel. 60s resolution is fine — the watcher itself
-		// typically fires at minutes-or-hours cadence, so a 60s lag on
-		// config-change pickup is invisible. Phase B will add a wake channel
-		// when this scheduler merges with the existing pull-scheduler.
+		// Lightweight poll picks up config changes the wake channel might
+		// miss (e.g. wall-clock schedules that don't push to PullUpdateCh).
+		// 60s resolution is invisible at typical detection cadences.
 		pollTick := time.NewTicker(60 * time.Second)
 		defer pollTick.Stop()
 		defer stopTimer()
+		defer app.SetNextPullAt(time.Time{})
 
 		rearm() // initial arm based on migrated config
 
@@ -548,11 +439,15 @@ func main() {
 			select {
 			case <-ctx.Done():
 				return
+			case <-app.PullUpdateCh:
+				// User changed config via API — re-arm from the new state.
+				rearm()
 			case <-pollTick.C:
 				d, armed := nextDelay()
 				switch {
 				case !armed && timer != nil:
 					stopTimer()
+					app.SetNextPullAt(time.Time{})
 				case armed && timer == nil:
 					rearm()
 				case armed && timer != nil:

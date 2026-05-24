@@ -4,7 +4,6 @@ import (
 	"clonarr/internal/core"
 	"clonarr/internal/utils"
 	"errors"
-	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -64,61 +63,14 @@ func nextSpecificPull(cfg core.Config) time.Time {
 }
 
 func (s *Server) handleTrashPull(w http.ResponseWriter, r *http.Request) {
-	cfg := s.Core.Config.Get()
 	utils.SafeGo("manual-trash-pull", func() {
-		op := s.Core.DebugLog.BeginOp(core.OpTrash, core.SourceManualPull, "url="+cfg.TrashRepo.URL+" branch="+cfg.TrashRepo.Branch)
-		endResult := "error: unknown"
-		defer func() { op.End(endResult) }()
-		prevCommit := s.Core.Trash.CurrentCommit()
-		if err := s.Core.Trash.CloneOrPull(cfg.TrashRepo.URL, cfg.TrashRepo.Branch); err != nil {
-			log.Printf("TRaSH pull failed: %v", err)
-			s.Core.DebugLog.Logf(core.LogError, "TRaSH pull failed: %v", err)
-			s.Core.Trash.SetPullError(err.Error())
-			endResult = "error: pull failed"
-			return
-		}
-		newCommit := s.Core.Trash.CurrentCommit()
-		commitChanged := prevCommit != "" && newCommit != prevCommit
-		if commitChanged {
-			s.Core.NotifyRepoUpdate(prevCommit, newCommit)
-			// Surface what actually changed in the upstream repo so users can verify
-			// pulls did what they expected (added CFs, removed orphans, etc.). One
-			// summary line per app + up to 15 detail lines, then "...and N more".
-			if diff, err := s.Core.Trash.DiffPull(prevCommit, newCommit); err != nil {
-				s.Core.DebugLog.Logf(core.LogTrash, "Pull diff failed: %v (commit %s → %s)", err, shortCommit(prevCommit), shortCommit(newCommit))
-			} else {
-				s.Core.DebugLog.Logf(core.LogTrash, "Pull completed — commit %s → %s", shortCommit(prevCommit), shortCommit(newCommit))
-				if len(diff.Changes) == 0 {
-					s.Core.DebugLog.Logf(core.LogTrash, "No JSON file changes in this commit (only includes/cf-descriptions or other non-data files)")
-				} else {
-					for _, app := range []string{"radarr", "sonarr"} {
-						if sum := diff.SummaryByApp(app); sum != "" {
-							appLabel := "Radarr"
-							if app == "sonarr" {
-								appLabel = "Sonarr"
-							}
-							s.Core.DebugLog.Logf(core.LogTrash, "%s — %s", appLabel, sum)
-						}
-					}
-					for _, line := range diff.DetailLines(15) {
-						s.Core.DebugLog.Logf(core.LogTrash, "  %s", line)
-					}
-				}
-			}
-		} else {
-			s.Core.DebugLog.Logf(core.LogTrash, "Pull completed — no upstream changes")
-		}
-		s.Core.DebugLog.Logf(core.LogAutoSync, "Running auto-sync")
-		s.AutoSyncQualitySizes()
-		// AutoSyncAfterPull opens its own AUTOSYNC operation; it is not a
-		// child of this TRASH op so the trace clearly separates the pull
-		// from the rules it triggers.
-		s.Core.AutoSyncAfterPull(core.SourceManualPull)
-		if commitChanged {
-			endResult = "ok | new commit " + shortCommit(newCommit)
-		} else {
-			endResult = "ok | no change"
-		}
+		// All Pull-and-sync logic (DebugLog tracing, SetPullError on
+		// failure, ProfileSync state persistence, DiffPull detail lines,
+		// AfterPullCallback, AutoSyncAfterPull) lives in App.RunPullAndSync
+		// so manual and scheduled paths can't drift apart. The error is
+		// already logged inside RunPullAndSync — we don't need to surface
+		// it again at this call site.
+		_ = s.Core.RunPullAndSync(core.SourceManualPull)
 	})
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]string{"status": "pulling"})

@@ -238,3 +238,83 @@ func TestPullScheduleSundayRoundTripsInConfigJSON(t *testing.T) {
 		t.Fatalf("dayOfWeek = %s, want 0", v)
 	}
 }
+
+// TestUpdateConfig_PropagatesPullScheduleToProfileSync verifies that when
+// the user edits the legacy Pull schedule via the existing Settings UI
+// (PUT /api/config), the change ALSO writes through to
+// ProfileSync.Interval/Specific so the new scheduler picks it up.
+//
+// Without this, ProfileSync stays at its post-migration value and the
+// scheduler ignores user edits until container restart re-runs migration
+// (which itself is a no-op because ProfileSync != nil). This test locks
+// the propagation contract.
+func TestUpdateConfig_PropagatesPullScheduleToProfileSync(t *testing.T) {
+	// Start with config that has ProfileSync already populated (post-migration
+	// state). User edits the Pull schedule via the UI.
+	startCfg := core.DefaultConfig()
+	startCfg.PullInterval = "6h"
+	startCfg.ProfileSync = &core.ProfileSync{
+		Interval: "6h",
+		Mode:     core.ProfileSyncModeAuto,
+		Sources:  core.ProfileSyncSources{TrashUpstream: true},
+	}
+	server, app := setupConfigScheduleServer(t, startCfg)
+
+	// User edits Pull schedule to "specific" with daily 18:25
+	body := `{"pullInterval":"specific","pullSchedule":{"mode":"daily","time":"18:25","dayOfWeek":0,"dayOfMonth":1}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.handleUpdateConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT /api/config = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// ProfileSync.Interval must have updated to "specific"
+	ps := app.Config.Get().ProfileSync
+	if ps == nil {
+		t.Fatal("ProfileSync went nil after PUT /api/config — propagation broken")
+	}
+	if ps.Interval != "specific" {
+		t.Errorf("ProfileSync.Interval = %q, want %q (Pull change not propagated)", ps.Interval, "specific")
+	}
+	if ps.Specific == nil || ps.Specific.Time != "18:25" {
+		t.Errorf("ProfileSync.Specific not propagated: got %+v", ps.Specific)
+	}
+	// User-set Mode + Sources must NOT be reset by propagation
+	if ps.Mode != core.ProfileSyncModeAuto {
+		t.Errorf("propagation overwrote user Mode: got %q, want %q", ps.Mode, core.ProfileSyncModeAuto)
+	}
+	if !ps.Sources.TrashUpstream {
+		t.Error("propagation overwrote user Sources")
+	}
+}
+
+// TestUpdateConfig_PropagationCreatesProfileSyncIfNil covers a defence-in-
+// depth path: if ProfileSync somehow doesn't exist when a Pull edit comes
+// in (shouldn't happen post-migration, but if it does), propagation
+// lazy-creates it with sensible defaults.
+func TestUpdateConfig_PropagationCreatesProfileSyncIfNil(t *testing.T) {
+	startCfg := core.DefaultConfig()
+	startCfg.ProfileSync = nil // shouldn't happen post-migration, but defensive
+	server, app := setupConfigScheduleServer(t, startCfg)
+
+	body := `{"pullInterval":"12h"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.handleUpdateConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT /api/config = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	ps := app.Config.Get().ProfileSync
+	if ps == nil {
+		t.Fatal("ProfileSync should be lazy-created by propagation")
+	}
+	if ps.Interval != "12h" || ps.Mode != core.ProfileSyncModeAuto || !ps.Sources.TrashUpstream {
+		t.Errorf("lazy-created ProfileSync has wrong defaults: %+v", ps)
+	}
+}
