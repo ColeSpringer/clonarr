@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -184,6 +185,99 @@ func TestUpdateWatcher_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T) {
 	}
 	if got.LastRun == "2026-01-01T00:00:00Z" {
 		t.Error("LastRun should bump even on error (attempt-recording semantics)")
+	}
+}
+
+// TestRedactURL verifies userinfo (credentials embedded in URL) is stripped
+// before any URL is logged or returned in an error. Without this, a user
+// who configures TrashRepo.URL as "https://oauth2:ghp_xxx@github.com/..."
+// would see their token in container logs and API error responses.
+func TestRedactURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"https-no-creds", "https://github.com/TRaSH-Guides/Guides.git", "https://github.com/TRaSH-Guides/Guides.git"},
+		{"https-with-token", "https://oauth2:ghp_secrettoken@github.com/owner/repo.git", "https://github.com/owner/repo.git"},
+		{"https-user-only", "https://username@github.com/owner/repo.git", "https://github.com/owner/repo.git"},
+		{"http-with-creds", "http://admin:hunter2@internal.example.invalid:3000/repo.git", "http://internal.example.invalid:3000/repo.git"},
+		{"ssh-form-unchanged", "git@github.com:owner/repo.git", "git@github.com:owner/repo.git"},
+		{"malformed-returned-as-is", "not a url at all", "not a url at all"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := redactURL(tc.in)
+			if got != tc.want {
+				t.Errorf("redactURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRedactGitError_StripsCredentialsFromOutput verifies that when git's
+// stderr echoes the configured URL back (common on auth failures), the
+// returned error has the credential portion redacted. Critical because
+// this error string flows from Run() → API response → tester logs.
+func TestRedactGitError_StripsCredentialsFromOutput(t *testing.T) {
+	remote := "https://oauth2:ghp_supersecret@github.com/owner/repo.git"
+	stderr := "fatal: could not read Password for 'https://oauth2:ghp_supersecret@github.com': terminal prompts disabled"
+	rawErr := fmt.Errorf("exit status 128")
+
+	got := redactGitError(remote, "master", stderr, rawErr).Error()
+
+	if strings.Contains(got, "ghp_supersecret") {
+		t.Errorf("redacted error still contains token: %q", got)
+	}
+	if !strings.Contains(got, "github.com/owner/repo.git") {
+		t.Errorf("redacted error lost the host (should still tell user which repo failed): %q", got)
+	}
+	if !strings.Contains(got, "master") {
+		t.Errorf("redacted error lost the branch: %q", got)
+	}
+}
+
+// TestRedactGitError_TruncatesLongStderr keeps logs sane when git emits
+// a multi-line stderr (e.g. server error pages echoed from a misconfigured
+// HTTP remote).
+func TestRedactGitError_TruncatesLongStderr(t *testing.T) {
+	stderr := strings.Repeat("x", 500)
+	got := redactGitError("https://example.invalid/repo.git", "master", stderr, fmt.Errorf("exit 1")).Error()
+	if !strings.Contains(got, "...") {
+		t.Errorf("expected truncation marker in long stderr, got %q", got)
+	}
+	if len(got) > 400 {
+		t.Errorf("error message too long after truncation: %d chars", len(got))
+	}
+}
+
+// TestUpdateWatcher_ErrorReturnedFromRunIsRedacted verifies the end-to-end
+// path: stub gitLsRemote returning a credential-laden error → Run wraps it
+// via redactGitError → returned error to API caller is safe to display.
+func TestUpdateWatcher_ErrorReturnedFromRunIsRedacted(t *testing.T) {
+	app, ts, _ := newWatcherTestApp(t)
+	seedTrashCommit(t, ts, "local-commit-aaaa")
+	_ = app.Config.Update(func(c *Config) {
+		c.TrashRepo.URL = "https://oauth2:ghp_supersecret@github.com/owner/repo.git"
+		c.UpdateWatch = &UpdateWatch{Enabled: true}
+	})
+
+	uw := &UpdateWatcher{
+		app: app,
+		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
+			// Production gitLsRemoteHead would call redactGitError before
+			// returning; the stub mimics that contract.
+			return "", redactGitError(remoteURL, branch, "fatal: authentication required for "+remoteURL, fmt.Errorf("exit 128"))
+		},
+	}
+	err := uw.Run(context.Background())
+	if err == nil {
+		t.Fatal("Run() should propagate ls-remote error")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "ghp_supersecret") {
+		t.Errorf("Run() error leaked credential token: %q", msg)
 	}
 }
 
