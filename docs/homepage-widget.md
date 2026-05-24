@@ -6,20 +6,23 @@ Show Clonarr stats on your [gethomepage](https://gethomepage.dev) dashboard.
 
 ![Clonarr widget in homepage](images/homepage-widget.png)
 
-## 1. Get your API key
+## What you need
 
-In Clonarr: **Settings → API → copy the key.**
+1. Your Clonarr address (e.g. `http://192.168.1.10:6060`)
+2. Your Clonarr **API key** — copy it from **Settings → API**
 
-## 2. Add to `services.yaml`
+## Add to your `services.yaml`
+
+Replace `CLONARR_URL` and `YOUR_API_KEY` with your own values:
 
 ```yaml
 - TRaSH Automation:
     - Clonarr:
         icon: https://raw.githubusercontent.com/ProphetSe7en/clonarr/main/ui/static/icons/clonarr.png
-        href: http://CLONARR_HOST:6060/
+        href: CLONARR_URL
         widget:
             type: customapi
-            url: http://CLONARR_HOST:6060/api/widget/summary
+            url: CLONARR_URL/api/widget/summary
             method: GET
             headers:
               X-Api-Key: YOUR_API_KEY
@@ -38,10 +41,11 @@ In Clonarr: **Settings → API → copy the key.**
                 label: Next sync
                 format: relativeDate
                 defaultValue: "Off"
+
     - Radarr Profiles:
         widget:
             type: customapi
-            url: http://CLONARR_HOST:6060/api/widget/summary
+            url: CLONARR_URL/api/widget/summary
             headers:
               X-Api-Key: YOUR_API_KEY
             refreshInterval: 30000
@@ -49,14 +53,16 @@ In Clonarr: **Settings → API → copy the key.**
             mappings:
               - field: { rules: radarrTotal }
                 label: Total
+              # One row per profile you want to show. Add or remove rows as needed.
               - field: { rules: { radarrList: { 0: arrProfileName } } }
                 label: " "
               - field: { rules: { radarrList: { 1: arrProfileName } } }
                 label: " "
+
     - Sonarr Profiles:
         widget:
             type: customapi
-            url: http://CLONARR_HOST:6060/api/widget/summary
+            url: CLONARR_URL/api/widget/summary
             headers:
               X-Api-Key: YOUR_API_KEY
             refreshInterval: 30000
@@ -64,34 +70,38 @@ In Clonarr: **Settings → API → copy the key.**
             mappings:
               - field: { rules: sonarrTotal }
                 label: Total
+              # One row per profile you want to show. Add or remove rows as needed.
               - field: { rules: { sonarrList: { 0: arrProfileName } } }
                 label: " "
               - field: { rules: { sonarrList: { 1: arrProfileName } } }
                 label: " "
 ```
 
-Swap `CLONARR_HOST`, `YOUR_API_KEY`. Add more `2: arrProfileName`, `3: arrProfileName` rows to show more profiles per type.
+## Showing more (or fewer) profiles
 
-## What you can show
+Each `radarrList`/`sonarrList` row shows **one** profile. Counting starts at `0`:
 
-| Field | What it is |
-|---|---|
-| `instances.total` | How many Arr instances are configured |
-| `instances.radarr` / `sonarr` / `paused` | Per-type and paused counts |
-| `rules.total` / `active` / `withErrors` | Sync rule counts |
-| `rules.radarrTotal` / `sonarrTotal` | Profile count per app type |
-| `rules.radarrList[n].arrProfileName` | Nth Radarr profile name |
-| `rules.sonarrList[n].arrProfileName` | Nth Sonarr profile name |
-| `trash.nextPull` | When TRaSH-Guides will pull next |
-| `trash.lastPull` | When TRaSH-Guides was last pulled |
-| `autoSync.nextSync` | When the force-sync schedule fires next |
-| `autoSync.lastSync` | When any rule last synced |
-| `autoSync.lastError` | First error from any rule (empty when clean) |
+- 1 profile  → keep just `0`
+- 2 profiles → `0` and `1`
+- 3 profiles → `0`, `1`, `2`
+- and so on
 
-## Verify the endpoint works
+If you list a number higher than how many profiles you actually have, that row just stays empty — nothing breaks.
+
+## Keep your API key private
+
+The Clonarr API key gives **full read and write access** to your install. Treat it like a password — never commit `services.yaml` to a public git repo with your real key in it.
+
+## Verify it works
+
+From a terminal:
 
 ```bash
-curl -H "X-Api-Key: YOUR_KEY" http://CLONARR_HOST:6060/api/widget/summary
+curl -H "X-Api-Key: YOUR_API_KEY" CLONARR_URL/api/widget/summary
 ```
 
-You should get a JSON response. If you get `401 Unauthorized`, the key is wrong. If you get `404`, you're on `:latest` — upgrade to `:dev` or `:preview`.
+You should get a long JSON response. If you get:
+
+- `401 Unauthorized` — wrong API key
+- `404` — your Clonarr is on `:latest`. Upgrade to `:dev` or `:preview`.
+- Connection refused — wrong URL or port.
