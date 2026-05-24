@@ -274,6 +274,8 @@ or as a query parameter (legacy — leaks to access logs and browser history):
 
 Use this for Homepage widgets, Uptime Kuma, and scripts. API-key auth bypasses both the login requirement and CSRF protection.
 
+See [docs/homepage-widget.md](docs/homepage-widget.md) for a ready-to-paste [gethomepage](https://gethomepage.dev) config (`:dev` / `:preview` only — ships to `:latest` next release).
+
 ### Reverse-proxy deployment
 
 Behind SWAG / Authelia / Traefik / Caddy that terminates TLS:

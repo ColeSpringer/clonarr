@@ -6,6 +6,16 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave — 2026-05-24 (homepage widget)
+
+- **Homepage dashboard integration.** New read-only endpoint
+  `GET /api/widget/summary` returns instance counts, sync-rule counts,
+  per-app profile lists, next pull, and next sync — everything a
+  dashboard needs in one call. Auth via the existing `X-Api-Key`
+  header (Settings → API). Paste-ready
+  [gethomepage](https://gethomepage.dev) config in
+  [`docs/homepage-widget.md`](docs/homepage-widget.md).
+
 ### Update wave — 2026-05-24
 
 Polish + cleanup on top of the May 14 drop:

@@ -113,6 +113,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/auto-sync/rules/{id}", s.handleDeleteAutoSyncRule)
 	mux.HandleFunc("POST /api/auto-sync/rules/{id}/restore", s.handleRestoreAutoSyncRule)
 
+	// External widget summary (homepage, glance, etc.) — stable contract
+	mux.HandleFunc("GET /api/widget/summary", s.handleWidgetSummary)
+
 	// Cleanup events
 	mux.HandleFunc("GET /api/cleanup-events", s.handleCleanupEvents)
 	mux.HandleFunc("GET /api/auto-sync/events", s.handleAutoSyncEvents)
