@@ -327,9 +327,10 @@
   .cf-browse-view-toggle button:last-child { border-right: 0; }
   .cf-browse-view-toggle button:hover { background: var(--bg-elevated); color: var(--text-body); }
   .cf-browse-view-toggle button.active {
-    background: var(--app-color);
-    color: var(--text-on-accent);
+    background: var(--bg-card);
+    color: var(--app-color);
     font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--app-color);
   }
   /* Description cell content — replaces the condition pills when view
      mode is "description". High-specificity selector so the per-row
