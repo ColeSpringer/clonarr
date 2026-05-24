@@ -444,21 +444,133 @@ func main() {
 		}
 	})
 
-	// Watch & Drift Phase 2a — hourly TRaSH-upstream HEAD check. Fires only
-	// when UpdateWatch.Enabled is true; otherwise Run is a fast no-op.
-	// Empty-clone safety guard lives inside Run so we never spam notifications
-	// for a fresh container that hasn't pulled yet.
-	utils.SafeGo("update-watcher", func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
+	// Profile Sync watcher — fires on ProfileSync.Interval (user-configurable
+	// via /api/profile-sync). One-shot timer pattern: arm based on current
+	// config, fire once, recompute next, re-arm. Handles:
+	//   Interval == "0" / "" → Manual only (no automatic fire; manual button
+	//                          via /api/profile-sync/run will land in Phase B)
+	//   Interval == "specific" → wall-clock via core.NextPullTime
+	//   Interval == <duration> → recurring (1m minimum via ParsePullInterval clamp)
+	//
+	// Runner.Run() short-circuits when ProfileSync.Sources.TrashUpstream is
+	// false (gate) or when TRaSH clone is empty (safety guard), so this loop
+	// is safe to fire even when the user has detection off — it's a fast no-op.
+	//
+	// Wake-on-config-change is deferred to Phase B (when this scheduler merges
+	// with the existing pull-scheduler). Until then, config changes via API
+	// take effect on the NEXT timer fire (worst case: one Interval delay).
+	// TODO Phase B: rename app.UpdateWatcher → app.ProfileSyncRunner (bundled
+	// with Pull-scheduler integration that retires this separate goroutine).
+	utils.SafeGo("profile-sync-watcher", func() {
+		var timer *time.Timer
+		var timerCh <-chan time.Time
+		// armedAt + armedDuration track the current timer's expected fire time
+		// so the poll-tick can detect when the user has changed Interval to a
+		// shorter value and re-arm immediately instead of waiting for the
+		// existing long timer to expire.
+		var armedAt time.Time
+		var armedDuration time.Duration
+
+		stopTimer := func() {
+			if timer != nil {
+				timer.Stop()
+				timer = nil
+			}
+			timerCh = nil
+			armedDuration = 0
+		}
+
+		// Compute delay until next fire. Returns (0, false) to mean
+		// "Manual mode — don't arm a timer". Defense-in-depth: any path
+		// that yields a non-positive duration returns false so we never
+		// busy-loop on time.NewTimer(0).
+		nextDelay := func() (time.Duration, bool) {
+			cfg := cfgStore.Get()
+			if cfg.ProfileSync == nil {
+				return 0, false
+			}
+			switch cfg.ProfileSync.Interval {
+			case "", "0":
+				return 0, false
+			case "specific":
+				if cfg.ProfileSync.Specific == nil {
+					return 0, false
+				}
+				next := core.NextPullTime(*cfg.ProfileSync.Specific)
+				if next.IsZero() {
+					return 0, false
+				}
+				d := time.Until(next)
+				if d < time.Millisecond {
+					d = time.Millisecond
+				}
+				return d, true
+			default:
+				d := core.ParsePullInterval(cfg.ProfileSync.Interval)
+				if d <= 0 {
+					// Defense-in-depth: ParsePullInterval can return 0 for
+					// "0"/"specific" (already handled above) but also if a
+					// future caller passes whitespace or other edge input.
+					// Refusing to arm prevents a tight busy-loop on
+					// time.NewTimer(0).
+					return 0, false
+				}
+				return d, true
+			}
+		}
+
+		rearm := func() {
+			stopTimer()
+			// rearm() returns to manual mode (no timer) when nextDelay reports
+			// !armed — e.g. when user toggled Interval to "0" mid-fire.
+			d, armed := nextDelay()
+			if !armed {
+				return
+			}
+			timer = time.NewTimer(d)
+			timerCh = timer.C
+			armedAt = time.Now()
+			armedDuration = d
+		}
+
+		// Lightweight poll so config changes via API take effect without a
+		// dedicated wake channel. 60s resolution is fine — the watcher itself
+		// typically fires at minutes-or-hours cadence, so a 60s lag on
+		// config-change pickup is invisible. Phase B will add a wake channel
+		// when this scheduler merges with the existing pull-scheduler.
+		pollTick := time.NewTicker(60 * time.Second)
+		defer pollTick.Stop()
+		defer stopTimer()
+
+		rearm() // initial arm based on migrated config
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				if err := app.UpdateWatcher.Run(ctx); err != nil {
-					log.Printf("update-watcher tick: %v", err)
+			case <-pollTick.C:
+				d, armed := nextDelay()
+				switch {
+				case !armed && timer != nil:
+					stopTimer()
+				case armed && timer == nil:
+					rearm()
+				case armed && timer != nil:
+					// User changed cadence. Compute remaining on current
+					// timer and compare to new desired delay. Re-arm if the
+					// new delay is shorter — otherwise let the current timer
+					// run out (avoids resetting the timer on every poll for
+					// no functional gain).
+					remaining := armedDuration - time.Since(armedAt)
+					if d < remaining {
+						rearm()
+					}
 				}
+			case <-timerCh:
+				if err := app.UpdateWatcher.Run(ctx); err != nil {
+					log.Printf("profile-sync-watcher: %v", err)
+				}
+				rearm() // schedule next fire
 			}
 		}
 	})

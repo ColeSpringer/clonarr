@@ -6,6 +6,23 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave — 2026-05-24 (Profile Sync groundwork)
+
+Behind-the-scenes setup for a coming feature. **Your pull behaviour
+is unchanged** — same schedule, same auto-sync, same UI.
+
+- On first start your `clonarr.json` gets a new `profileSync` block,
+  populated automatically from your existing Pull settings. You don't
+  need to do anything — this is groundwork for the upcoming "notify
+  me when TRaSH publishes new updates" feature.
+- A new read-only endpoint `/api/profile-sync` exposes the same
+  state. The clonarr UI does not call this yet (the Settings page
+  for it lands in a later wave). Curious testers can poke it with
+  curl + their API key.
+- A background process checks the TRaSH-Guides repo for new commits
+  on your configured cadence. It only reads — no pulls, no syncs, no
+  notifications fire. Lays the wiring for the next wave.
+
 ### Update wave — 2026-05-24 (homepage widget)
 
 - **Homepage dashboard integration.** New read-only endpoint
