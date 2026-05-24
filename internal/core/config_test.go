@@ -298,3 +298,180 @@ func TestAddNotificationAgentAllowsMultipleEnabledSameType(t *testing.T) {
 		t.Fatalf("want 2 agents after reload, got %d", len(reloaded))
 	}
 }
+
+// --- Watch & Drift (Phase 1) — config-shape tests ---
+
+func TestDriftWatchAndUpdateWatch_DefaultNil(t *testing.T) {
+	dir := t.TempDir()
+	freshCfg := map[string]any{
+		"instances":    []any{},
+		"pullInterval": "24h",
+	}
+	raw, _ := json.Marshal(freshCfg)
+	if err := os.WriteFile(filepath.Join(dir, "clonarr.json"), raw, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cs := NewConfigStore(dir)
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	cfg := cs.Get()
+	if cfg.DriftWatch != nil {
+		t.Errorf("DriftWatch should be nil on fresh install, got %+v", cfg.DriftWatch)
+	}
+	if cfg.UpdateWatch != nil {
+		t.Errorf("UpdateWatch should be nil on fresh install, got %+v", cfg.UpdateWatch)
+	}
+}
+
+func TestDriftWatch_PersistsAndRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	want := &DriftWatch{
+		Mode: "fix",
+		Schedule: DriftWatchSchedule{
+			Mode:      "daily",
+			Time:      "03:30",
+			DayOfWeek: 0,
+		},
+		LastRun: "2026-05-24T03:30:00Z",
+		LastResult: &DriftRunResult{
+			DriftsDetected: 3,
+			DriftsFixed:    2,
+			Errors:         []string{"radarr-4k: instance unreachable"},
+		},
+	}
+	if err := cs.Update(func(cfg *Config) {
+		cfg.DriftWatch = want
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+
+	cs2 := NewConfigStore(dir)
+	if err := cs2.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	got := cs2.Get().DriftWatch
+	if got == nil {
+		t.Fatal("DriftWatch lost across reload")
+	}
+	if got.Mode != want.Mode || got.Schedule.Time != want.Schedule.Time || got.LastRun != want.LastRun {
+		t.Errorf("DriftWatch roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
+	}
+	if got.LastResult == nil || got.LastResult.DriftsDetected != 3 || got.LastResult.DriftsFixed != 2 {
+		t.Errorf("LastResult roundtrip lost: %+v", got.LastResult)
+	}
+	if len(got.LastResult.Errors) != 1 || got.LastResult.Errors[0] != want.LastResult.Errors[0] {
+		t.Errorf("LastResult.Errors roundtrip lost: %+v", got.LastResult.Errors)
+	}
+}
+
+func TestDriftWatch_GetReturnsDeepCopy(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	if err := cs.Update(func(cfg *Config) {
+		cfg.DriftWatch = &DriftWatch{
+			Mode: "detect",
+			LastResult: &DriftRunResult{
+				DriftsDetected: 1,
+				Errors:         []string{"original"},
+			},
+		}
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+
+	got := cs.Get().DriftWatch
+	got.Mode = "fix"
+	got.LastResult.DriftsDetected = 99
+	got.LastResult.Errors[0] = "mutated"
+
+	again := cs.Get().DriftWatch
+	if again.Mode == "fix" {
+		t.Error("Get() returned shallow copy — mutating Mode leaked to store")
+	}
+	if again.LastResult.DriftsDetected == 99 {
+		t.Error("Get() returned shallow LastResult — mutating DriftsDetected leaked to store")
+	}
+	if again.LastResult.Errors[0] == "mutated" {
+		t.Error("Get() returned shallow LastResult.Errors — mutating slice leaked to store")
+	}
+}
+
+func TestUpdateWatch_PersistsAndRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	want := &UpdateWatch{
+		Enabled:      true,
+		LastRun:      "2026-05-24T12:00:00Z",
+		UpstreamHead: "abc1234",
+		LocalHead:    "def5678",
+		PendingChanges: []ChangeSummary{
+			{
+				Type:          "cf",
+				TrashID:       "trash-id-1",
+				Name:          "DD+",
+				AffectedRules: []string{"rule-A", "rule-B"},
+			},
+			{
+				Type:            "qs",
+				TrashID:         "qs-movie",
+				Name:            "Movie QS",
+				AffectedQSTypes: []string{"movie"},
+			},
+		},
+	}
+	if err := cs.Update(func(cfg *Config) {
+		cfg.UpdateWatch = want
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+
+	cs2 := NewConfigStore(dir)
+	if err := cs2.Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	got := cs2.Get().UpdateWatch
+	if got == nil {
+		t.Fatal("UpdateWatch lost across reload")
+	}
+	if got.Enabled != want.Enabled || got.UpstreamHead != want.UpstreamHead {
+		t.Errorf("UpdateWatch roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
+	}
+	if len(got.PendingChanges) != 2 {
+		t.Fatalf("want 2 PendingChanges, got %d", len(got.PendingChanges))
+	}
+	if got.PendingChanges[0].Name != "DD+" || len(got.PendingChanges[0].AffectedRules) != 2 {
+		t.Errorf("PendingChanges[0] roundtrip lost: %+v", got.PendingChanges[0])
+	}
+	if got.PendingChanges[1].Type != "qs" || got.PendingChanges[1].AffectedQSTypes[0] != "movie" {
+		t.Errorf("PendingChanges[1] roundtrip lost: %+v", got.PendingChanges[1])
+	}
+}
+
+func TestUpdateWatch_GetReturnsDeepCopy(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewConfigStore(dir)
+	if err := cs.Update(func(cfg *Config) {
+		cfg.UpdateWatch = &UpdateWatch{
+			Enabled: true,
+			PendingChanges: []ChangeSummary{
+				{Type: "cf", TrashID: "original", AffectedRules: []string{"rule-1"}},
+			},
+		}
+	}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+
+	got := cs.Get().UpdateWatch
+	got.PendingChanges[0].TrashID = "mutated"
+	got.PendingChanges[0].AffectedRules[0] = "mutated-rule"
+
+	again := cs.Get().UpdateWatch
+	if again.PendingChanges[0].TrashID == "mutated" {
+		t.Error("Get() returned shallow PendingChanges — TrashID mutation leaked")
+	}
+	if again.PendingChanges[0].AffectedRules[0] == "mutated-rule" {
+		t.Error("Get() returned shallow AffectedRules slice — mutation leaked")
+	}
+}

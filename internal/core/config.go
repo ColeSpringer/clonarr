@@ -26,6 +26,8 @@ type Config struct {
 	SyncHistory          []SyncHistoryEntry               `json:"syncHistory,omitempty"`
 	CleanupKeep          map[string][]string              `json:"cleanupKeep,omitempty"` // instanceID → CF names to keep during delete-all
 	AutoSync             AutoSyncConfig                   `json:"autoSync,omitempty"`
+	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Watch & Drift sprint — Arr-side drift detection (nil = never-initialised; default Mode "off" populated on first save)
+	UpdateWatch          *UpdateWatch                     `json:"updateWatch,omitempty"`          // Watch & Drift sprint — TRaSH-side upstream change detection between pulls (nil = never-initialised; default Enabled=false)
 	Prowlarr             ProwlarrConfig                   `json:"prowlarr,omitempty"`
 	// Authentication — matches Radarr/Sonarr Security panel model.
 	// Credentials (bcrypt password hash, API key) live separately in
@@ -45,6 +47,95 @@ type PullSchedule struct {
 	Time       string `json:"time"`       // "HH:MM" (24h format)
 	DayOfWeek  int    `json:"dayOfWeek"`  // 0=Sunday..6=Saturday (weekly)
 	DayOfMonth int    `json:"dayOfMonth"` // 1-28 (monthly)
+}
+
+// DriftWatch holds the configuration for the Arr-side drift detection
+// subsystem (Watch & Drift sprint, spec at dev/docs/layout-v2/feature-watch-and-drift.md).
+//
+// Mode controls how the detected drift is handled:
+//   - "off":    no drift checks performed
+//   - "detect": surface drift in UI; notify on auto-sync-ON rules; never write
+//   - "fix":    detect + silently reconcile on auto-sync-ON rules
+//
+// Schedule reuses the PullSchedule wire format (mode/time/day fields). When
+// Mode == "off", Schedule fields are ignored.
+//
+// LastRun and LastResult are populated by the DriftWatcher after each run.
+// Tests with a zero-value DriftWatch should treat it as Mode="off".
+type DriftWatch struct {
+	Mode       string             `json:"mode"`              // "off" | "detect" | "fix"
+	Schedule   DriftWatchSchedule `json:"schedule,omitempty"`
+	LastRun    string             `json:"lastRun,omitempty"`    // RFC3339 timestamp
+	LastResult *DriftRunResult    `json:"lastResult,omitempty"`
+}
+
+// DriftWatchSchedule mirrors PullSchedule's wire format. Kept as a separate
+// type so future schedule-shape divergence doesn't break PullSchedule.
+type DriftWatchSchedule struct {
+	Mode       string `json:"mode"`                 // "daily", "weekly", "monthly"
+	Time       string `json:"time"`                 // "HH:MM" (24h format)
+	DayOfWeek  int    `json:"dayOfWeek"`            // 0=Sunday..6=Saturday (weekly)
+	DayOfMonth int    `json:"dayOfMonth"`           // 1-28 (monthly)
+}
+
+// DriftRunResult is the summary written by DriftWatcher after each run.
+// Persists to clonarr.json so UI can render "last check: X ago" without an
+// in-memory cache that resets on restart.
+type DriftRunResult struct {
+	DriftsDetected int      `json:"driftsDetected"`
+	DriftsFixed    int      `json:"driftsFixed"`
+	Errors         []string `json:"errors,omitempty"`
+}
+
+// UpdateWatch holds the configuration for the TRaSH-upstream change-detection
+// subsystem. Runs hourly (internal cadence — no user-facing frequency knob,
+// per spec Decision 3), checks if TRaSH-Guides has new commits between
+// scheduled pulls. Surfaces "update available" badges on affected rules.
+//
+// Default Enabled=false for all installs — opt-in via Settings → Pull section.
+//
+// LastRun, UpstreamHead, LocalHead, and PendingChanges are populated by the
+// watcher after each run.
+type UpdateWatch struct {
+	Enabled        bool            `json:"enabled"`
+	LastRun        string          `json:"lastRun,omitempty"`        // RFC3339 timestamp
+	UpstreamHead   string          `json:"upstreamHead,omitempty"`   // commit hash from git ls-remote
+	LocalHead      string          `json:"localHead,omitempty"`      // our current HEAD
+	PendingChanges []ChangeSummary `json:"pendingChanges,omitempty"` // computed at last run; cleared by next Pull
+}
+
+// ChangeSummary records one TRaSH-side change that affects one or more
+// existing sync rules or quality-size sets. Built by UpdateWatcher from the
+// commit range between LocalHead and UpstreamHead, filtered by relevance
+// (only changes that touch a CF / cf-group / profile / qs referenced by a
+// created sync rule — Decision 6 in spec).
+type ChangeSummary struct {
+	Type            string   `json:"type"`                      // "cf" | "cf-group" | "profile" | "qs"
+	TrashID         string   `json:"trashId"`
+	Name            string   `json:"name"`
+	AffectedRules   []string `json:"affectedRules,omitempty"`   // rule IDs
+	AffectedQSTypes []string `json:"affectedQsTypes,omitempty"`
+}
+
+// DriftResult is the per-rule (or per-QS-set) outcome from one DriftWatcher
+// run. Stored in the watcher's in-memory cache, surfaced via /api/watch/drift.
+// Not persisted to clonarr.json — recomputed on next watcher tick.
+type DriftResult struct {
+	RuleID        string        `json:"ruleId,omitempty"`
+	QSType        string        `json:"qsType,omitempty"` // for QS drift
+	CheckedAt     string        `json:"checkedAt"`        // RFC3339
+	DriftDetected bool          `json:"driftDetected"`
+	DriftSummary  []string      `json:"driftSummary,omitempty"` // human-readable
+	Details       []DriftDetail `json:"details,omitempty"`
+}
+
+// DriftDetail is one field-level diff between current Arr state and the
+// clonarr target. Used to render the per-card expand-on-click summary.
+type DriftDetail struct {
+	Field   string `json:"field"`            // "score" | "cf-membership" | "cutoff" | ...
+	CFName  string `json:"cfName,omitempty"` // for CF-related drifts
+	Current any    `json:"current"`
+	Target  any    `json:"target"`
 }
 
 // SyncSchedule holds the optional periodic force-sync schedule. When Enabled,
@@ -462,6 +553,36 @@ func (cs *ConfigStore) Get() Config {
 	if cs.config.SyncSchedule != nil {
 		ss := *cs.config.SyncSchedule
 		cfg.SyncSchedule = &ss
+	}
+	if cs.config.DriftWatch != nil {
+		dw := *cs.config.DriftWatch
+		if cs.config.DriftWatch.LastResult != nil {
+			lr := *cs.config.DriftWatch.LastResult
+			if len(cs.config.DriftWatch.LastResult.Errors) > 0 {
+				lr.Errors = make([]string, len(cs.config.DriftWatch.LastResult.Errors))
+				copy(lr.Errors, cs.config.DriftWatch.LastResult.Errors)
+			}
+			dw.LastResult = &lr
+		}
+		cfg.DriftWatch = &dw
+	}
+	if cs.config.UpdateWatch != nil {
+		uw := *cs.config.UpdateWatch
+		if len(cs.config.UpdateWatch.PendingChanges) > 0 {
+			uw.PendingChanges = make([]ChangeSummary, len(cs.config.UpdateWatch.PendingChanges))
+			for i, pc := range cs.config.UpdateWatch.PendingChanges {
+				uw.PendingChanges[i] = pc
+				if len(pc.AffectedRules) > 0 {
+					uw.PendingChanges[i].AffectedRules = make([]string, len(pc.AffectedRules))
+					copy(uw.PendingChanges[i].AffectedRules, pc.AffectedRules)
+				}
+				if len(pc.AffectedQSTypes) > 0 {
+					uw.PendingChanges[i].AffectedQSTypes = make([]string, len(pc.AffectedQSTypes))
+					copy(uw.PendingChanges[i].AffectedQSTypes, pc.AffectedQSTypes)
+				}
+			}
+		}
+		cfg.UpdateWatch = &uw
 	}
 	cfg.Instances = make([]Instance, len(cs.config.Instances))
 	copy(cfg.Instances, cs.config.Instances)
