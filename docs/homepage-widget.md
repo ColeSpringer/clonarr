@@ -88,6 +88,31 @@ Each `radarrList`/`sonarrList` row shows **one** profile. Counting starts at `0`
 
 If you list a number higher than how many profiles you actually have, that row just stays empty — nothing breaks.
 
+## What else you can show
+
+The YAML above is a starter set. You can swap in or add any of these:
+
+| What it shows | Field to put in `field: { ... }` |
+|---|---|
+| Number of Arr instances configured | `{ instances: total }` |
+| Number of Radarr instances | `{ instances: radarr }` |
+| Number of Sonarr instances | `{ instances: sonarr }` |
+| Number of paused instances | `{ instances: paused }` |
+| Total number of sync rules | `{ rules: total }` |
+| Number of active sync rules | `{ rules: active }` |
+| Number of Radarr profiles synced | `{ rules: radarrTotal }` |
+| Number of Sonarr profiles synced | `{ rules: sonarrTotal }` |
+| Number of rules with an error | `{ rules: withErrors }` |
+| When TRaSH-Guides last pulled | `{ trash: lastPull }` |
+| When TRaSH-Guides will pull next | `{ trash: nextPull }` |
+| When any rule last synced | `{ autoSync: lastSync }` |
+| When the force-sync schedule fires next | `{ autoSync: nextSync }` |
+| First error message from any rule | `{ autoSync: lastError }` |
+| Name of a specific Radarr profile | `{ rules: { radarrList: { 0: arrProfileName } } }` |
+| Name of a specific Sonarr profile | `{ rules: { sonarrList: { 0: arrProfileName } } }` |
+
+For time fields (`lastPull`, `nextPull`, `lastSync`, `nextSync`), add `format: relativeDate` so homepage shows "in 12 minutes" instead of the raw timestamp, and `defaultValue: "Off"` so the tile reads "Off" when that schedule isn't set.
+
 ## Keep your API key private
 
 The Clonarr API key gives **full read and write access** to your install. Treat it like a password — never commit `services.yaml` to a public git repo with your real key in it.
