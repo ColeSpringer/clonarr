@@ -121,6 +121,11 @@ func main() {
 		app.NotifyChangelog(section)
 	})
 
+	// Watch & Drift Phase 2a — UpdateWatcher polls TRaSH upstream for new
+	// commits between scheduled Pulls. Hourly internal cadence; user controls
+	// only the on/off toggle via Settings → Pull section.
+	app.UpdateWatcher = core.NewUpdateWatcher(app)
+
 	// Startup: clean up broken rules (arrProfileId=0). Historical builds
 	// also reset LastSyncCommit here to force every rule to re-evaluate at
 	// next pull, but that conflicts with the v2.5.8 intent of skipping
@@ -435,6 +440,25 @@ func main() {
 				return
 			case <-ticker.C:
 				authStore.CleanupExpiredSessions()
+			}
+		}
+	})
+
+	// Watch & Drift Phase 2a — hourly TRaSH-upstream HEAD check. Fires only
+	// when UpdateWatch.Enabled is true; otherwise Run is a fast no-op.
+	// Empty-clone safety guard lives inside Run so we never spam notifications
+	// for a fresh container that hasn't pulled yet.
+	utils.SafeGo("update-watcher", func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := app.UpdateWatcher.Run(ctx); err != nil {
+					log.Printf("update-watcher tick: %v", err)
+				}
 			}
 		}
 	})

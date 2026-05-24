@@ -116,6 +116,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// External widget summary (homepage, glance, etc.) — stable contract
 	mux.HandleFunc("GET /api/widget/summary", s.handleWidgetSummary)
 
+	// Watch & Drift — UpdateWatch (Phase 2a: state + toggle)
+	mux.HandleFunc("GET /api/watch/update", s.handleGetUpdateWatch)
+	mux.HandleFunc("PUT /api/watch/update", s.handlePutUpdateWatch)
+
 	// Cleanup events
 	mux.HandleFunc("GET /api/cleanup-events", s.handleCleanupEvents)
 	mux.HandleFunc("GET /api/auto-sync/events", s.handleAutoSyncEvents)

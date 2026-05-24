@@ -56,6 +56,9 @@ type App struct {
 	CleanupMu      sync.Mutex
 	AutoSyncEvents []AutoSyncEvent
 	AutoSyncMu     sync.Mutex
+	// UpdateWatcher polls TRaSH upstream for new commits between scheduled
+	// Pulls. Wired by main.go at startup; nil during tests that don't need it.
+	UpdateWatcher *UpdateWatcher
 }
 
 // IsShuttingDown returns true once ShutdownCh has been closed (graceful
