@@ -175,20 +175,20 @@
            clears, so closing Sync Preview can't leak selectedOptionalCFs
            / groupExpanded / pdOverrides into the next overlay open. -->
       <div class="sp-action-buttons">
-        <button class="btn btn-sm" @click="closeProfileEditor()">Cancel</button>
+        <button class="btn btn-sm" @click="closeProfileEditor()" x-tt="'Close the profile editor. Any unsaved changes will be lost — use Apply or Apply &amp; Sync to keep them.'">Close</button>
         <template x-if="profileDetail?.detail?.imported">
           <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
             <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
-            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
-            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openImportedSyncModalAsNew()" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>
         </template>
         <template x-if="!profileDetail?.detail?.imported">
           <span class="sp-action-buttons-native" style="display:flex;gap:8px">
-            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Saving…' : 'Save'" x-tt="'Save changes without syncing. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
-            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Save settings and sync to existing Arr profile'">Save &amp; Sync</button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>
         </template>
@@ -587,9 +587,15 @@
                                 :aria-label="'Reset ' + fi.name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
                                 x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                       </template>
+                      <!-- Required CF: disabled when Phase 2c excluded
+                           (lock-icon click set sel===false). Score edit
+                           on an excluded CF used to leak into the sync
+                           payload via the safety net in getSelectedCFIds. -->
                       <input type="number" class="sp-cf-score-input"
                              :value="_eff"
+                             :disabled="_excluded"
                              :aria-label="'Score for ' + fi.name"
+                             :title="_excluded ? 'Re-include this CF first to edit its score' : ''"
                              @change="spApplyCFScore(fi.trashId, $el.value, _def)">
                     </div>
                   </template>
@@ -704,9 +710,15 @@
                               :aria-label="'Reset ' + g.cfs[0].name + ' score to ' + ((_def > 0 ? '+' : '') + _def)"
                               x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                     </template>
+                    <!-- Single-CF group: score editable only when the
+                         CF is effectively on (group on AND not Phase 2c
+                         excluded for required, or explicit-on for
+                         non-required). -->
                     <input type="number" class="sp-cf-score-input"
                            :value="_eff"
+                           :disabled="(() => { const cf = g.cfs[0]; if (!_hasToggle) return selectedOptionalCFs[cf.trashId] === undefined ? !cf.default : !selectedOptionalCFs[cf.trashId]; if (cf.required) return !(_groupOn && selectedOptionalCFs[cf.trashId] !== false); return !(_groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId])); })()"
                            :aria-label="'Score for ' + g.cfs[0].name"
+                           :title="(() => { const cf = g.cfs[0]; const on = (!_hasToggle ? (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]) : (cf.required ? (_groupOn && selectedOptionalCFs[cf.trashId] !== false) : (_groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId])))); return on ? '' : 'Enable this CF first to edit its score'; })()"
                            @change="spApplyCFScore(g.cfs[0].trashId, $el.value, _def)" @click.stop>
                   </span>
                 </template>
@@ -741,13 +753,21 @@
                         })()"></span>
                 </label>
               </template>
-              <template x-if="!g.cfs.every(cf => cf.required) && !g.exclusive && g.cfs.length >= 3 && (_groupOn || !_hasToggle)">
+              <!-- "All optional CFs" only touches the non-default opt-ins
+                   (cf.default === false). cf.default === true members are
+                   "default-on within the group" and are governed by the
+                   group toggle above — flipping them here would either be
+                   a no-op (already on) or sneakily turn off recommended
+                   CFs the group toggle said should be on. cf.required is
+                   always skipped. The action only renders when the group
+                   actually has cf.default=false members to toggle. -->
+              <template x-if="!g.exclusive && g.cfs.some(cf => !cf.required && !cf.default) && (_groupOn || !_hasToggle)">
                 <label class="sp-action-row toggle-row">
                   <span class="toggle toggle-sm"
-                        x-tt="'Toggle every optional CF in this group on or off. Required CFs (locked) stay on regardless.'"
+                        x-tt="'Toggle the non-default optional CFs in this group on or off. Required and default-on CFs stay as they are.'"
                         @click.stop>
                     <input type="checkbox"
-                           :checked="g.cfs.filter(cf => !cf.required).every(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId])"
+                           :checked="g.cfs.filter(cf => !cf.required && !cf.default).every(cf => !!selectedOptionalCFs[cf.trashId])"
                            @change="(() => {
                              /* Route through toggleOptionalCF so cross-group
                                 conflicts (conflicts.json) deactivate when a CF
@@ -757,7 +777,8 @@
                              const enabling = $event.target.checked;
                              for (const cf of g.cfs) {
                                if (cf.required) continue;
-                               const currentlyOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                               if (cf.default) continue;
+                               const currentlyOn = !!selectedOptionalCFs[cf.trashId];
                                if (enabling !== currentlyOn) toggleOptionalCF(cf.trashId);
                              }
                            })()">
@@ -766,8 +787,8 @@
                   <span class="sp-action-label">All optional CFs</span>
                   <span class="sp-action-count"
                         x-text="(() => {
-                          const opt = g.cfs.filter(cf => !cf.required);
-                          const optOn = opt.filter(cf => selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]).length;
+                          const opt = g.cfs.filter(cf => !cf.required && !cf.default);
+                          const optOn = opt.filter(cf => !!selectedOptionalCFs[cf.trashId]).length;
                           return optOn + ' of ' + opt.length + ' optional on';
                         })()"></span>
                 </label>
@@ -839,8 +860,28 @@
                          x-text="(() => { const s = cfScoreOverrides[cf.trashId] ?? cf.score; return s != null ? ((s > 0 ? '+' : '') + s) : ''; })()"></div>
                   </template>
                   <template x-if="pdOverridesEnabled">
+                    <!-- _effectivelyOn: matches the render-side "is this CF
+                         actually in the synced profile" check. Required CFs:
+                         on when group is on AND not Phase 2c excluded.
+                         Optional CFs: on when group is on AND (explicit true,
+                         or undefined-with-cf.default). Score editing only
+                         makes sense when the CF is actually being synced —
+                         changing the score of an off CF used to push the
+                         override into the sync payload anyway (the safety
+                         net in getSelectedCFIds picked it up). -->
                     <div class="sp-cf-score-edit"
-                         x-data="{ get _def() { return cf.score; }, get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; }, get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; } }">
+                         x-data="{
+                           get _def() { return cf.score; },
+                           get _eff() { const o = cfScoreOverrides[cf.trashId]; return o !== undefined ? o : this._def; },
+                           get _mod() { return cfScoreOverrides[cf.trashId] !== undefined && cfScoreOverrides[cf.trashId] !== this._def; },
+                           get _effectivelyOn() {
+                             if (!_hasToggle) {
+                               return selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
+                             }
+                             if (cf.required) return _groupOn && selectedOptionalCFs[cf.trashId] !== false;
+                             return _groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]);
+                           }
+                         }">
                       <template x-if="_mod">
                         <button class="sp-basics-reset sp-cf-score-reset"
                                 @click="pdResetCFScore(cf.trashId)"
@@ -849,7 +890,9 @@
                       </template>
                       <input type="number" class="sp-cf-score-input"
                              :value="_eff"
+                             :disabled="!_effectivelyOn"
                              :aria-label="'Score for ' + cf.name"
+                             :title="_effectivelyOn ? '' : 'Enable this CF first to edit its score'"
                              @change="spApplyCFScore(cf.trashId, $el.value, _def)">
                     </div>
                   </template>
@@ -1698,7 +1741,15 @@
                       <template x-if="_mod">
                         <button class="sp-basics-reset sp-cf-score-reset" @click="pdResetCFScore(cf.trashId)" x-tt="'Reset to ' + ((_def > 0 ? '+' : '') + _def)">&#8634;</button>
                       </template>
-                      <input type="number" class="sp-cf-score-input" :value="_eff" @change="spApplyCFScore(cf.trashId, $el.value, _def)">
+                      <!-- Additional CF: opted-in iff sel[cf.trashId] === true.
+                           Otherwise the CF isn't being synced, so editing
+                           its score would just leak into the payload via
+                           the safety net. Disabled until opt-in is on. -->
+                      <input type="number" class="sp-cf-score-input"
+                             :value="_eff"
+                             :disabled="!selectedOptionalCFs[cf.trashId]"
+                             :title="!selectedOptionalCFs[cf.trashId] ? 'Enable this CF first to edit its score' : ''"
+                             @change="spApplyCFScore(cf.trashId, $el.value, _def)">
                     </div>
                   </template>
                 </div>

@@ -98,20 +98,65 @@ export default {
       return defaults;
     },
 
-    // Excluded CFs: trash_ids the user has explicitly toggled OFF that
-    // ARE in TRaSH defaults — opt-outs. Sent alongside selectedCFs in
-    // the sync payload so the engine subtracts them from the effective
-    // synced set. Required CFs in default-on groups still get filtered
-    // out here (they can't be opted out via the toggle UI — the editor
-    // hides their checkbox).
+    // Excluded CFs: trash_ids the user has opted OUT of from the TRaSH
+    // defaults set. Sent alongside selectedCFs in the sync payload so
+    // the engine zeroes them in the Arr profile even when they were
+    // previously synced.
+    //
+    // Two sources:
+    //   1. Phase 2c lock-clicks — sel[tid] === false on a CF that's in
+    //      TRaSH defaults (spToggleRequiredCF writes this).
+    //   2. Group-level opt-out — when the user disables a default-on
+    //      group via pdToggleGroup, the group flag flips to false but
+    //      per-CF state stays untouched (preserves Phase 2c
+    //      exclusions). Without this branch, backend would see the
+    //      group's required+default CFs missing from selectedCFs but
+    //      not in excludedCFs either — it treats that as "still
+    //      default-on" and never zeroes them in the Arr profile.
+    //
+    // Mirror in restoreFromSyncHistory (~line 803): the rehydrate
+    // heuristic "all required+default CFs of a default-on group are
+    // excluded → group flag is false" must stay in sync with what we
+    // emit here.
     getExcludedCFIds() {
-      const defaults = this.computeTrashDefaults();
       const sel = this.selectedOptionalCFs || {};
-      const excluded = [];
-      for (const tid of defaults) {
-        if (sel[tid] === false) excluded.push(tid);
+      const excluded = new Set();
+      // FormatItem-level Phase 2c locks (CFs not in any group).
+      const formatItems = this.profileDetail?.detail?.formatItemNames || [];
+      for (const fi of formatItems) {
+        if (sel[fi.trashId] === false) excluded.add(fi.trashId);
       }
-      return excluded;
+      // Group-level handling — branch on whether the group is currently
+      // active in the user's selection (defaultEnabled if no override).
+      const groups = this.profileDetail?.detail?.trashGroups || [];
+      for (const group of groups) {
+        const flag = sel['__grp_' + group.name];
+        const grpOn = flag === undefined ? group.defaultEnabled : flag;
+        if (!grpOn) {
+          // Group off. For default-on groups we MUST emit required+
+          // default CFs so backend zeros them out of the existing Arr
+          // profile (otherwise trash_defaults brings them back and the
+          // disable signal is lost). Default-off groups that are off
+          // are the default state — defaults don't include them, so
+          // nothing to subtract.
+          if (!group.defaultEnabled) continue;
+          for (const cf of (group.cfs || [])) {
+            if (cf.required || cf.default) excluded.add(cf.trashId);
+          }
+        } else {
+          // Group on. Surface Phase 2c lock-clicks on required+default
+          // CFs (sel[cf]===false). Covers both default-on lock-clicks
+          // AND default-off opt-in lock-clicks (the latter aren't in
+          // computeTrashDefaults so the formatItems loop misses them).
+          // Set dedupes if the CF is already added via the defaults
+          // first-loop or the formatItems loop above.
+          for (const cf of (group.cfs || [])) {
+            if (!(cf.required || cf.default)) continue;
+            if (sel[cf.trashId] === false) excluded.add(cf.trashId);
+          }
+        }
+      }
+      return [...excluded];
     },
 
     // True when tid is a custom: ID that no longer resolves to a live
@@ -776,33 +821,61 @@ export default {
       }
       // selectedCFs → selectedOptionalCFs map. v2.5.8 split: selectedCFs
       // are PURE opt-ins (CFs not in TRaSH defaults), excludedCFs are
-      // explicit opt-outs from TRaSH defaults. CFs not in either map fall
-      // back to cf.default at render time (handled by the toggle template).
-      const selOpt = { ...(this.selectedOptionalCFs || {}) };
-      for (const tid of (rule.selectedCFs || [])) selOpt[tid] = true;
-      for (const tid of (rule.excludedCFs || [])) selOpt[tid] = false;
-      // Group on/off flags. With v2.5.8 semantics:
-      //   - default-off group + any CF in selectedCFs → user opted in → on
-      //   - default-on group + every CF in excludedCFs → user opted out of
-      //     the whole group → off
-      //   - otherwise leave undefined → display falls back to
-      //     group.defaultEnabled
-      // The pre-v2.5.8 heuristic that flipped default-on groups off when
-      // selectedCFs lacked any group member is wrong here: post-migration
-      // selectedCFs is mostly empty (defaults moved out), and we'd
-      // mis-flag every default-on group as user-off.
+      // explicit opt-outs from TRaSH defaults. CFs not in either map
+      // fall back to cf.default at render time.
+      //
+      // Ordering matters: infer group flags FIRST, then apply per-CF
+      // entries. This lets the per-CF loop skip writing sel=false for
+      // CFs that are already covered by a group-off flag — without that,
+      // a rule saved on v2.5.9 (where group-disable bulk-wrote false
+      // for every CF in the group) would rehydrate with sel=false
+      // entries that LOOK like Phase 2c locks. The user toggling the
+      // group back on then wouldn't restore defaults because the per-CF
+      // locks would shadow the group flag's "back to defaults" intent.
       const ruleSelSet = new Set(rule.selectedCFs || []);
       const ruleExcSet = new Set(rule.excludedCFs || []);
+      const selOpt = { ...(this.selectedOptionalCFs || {}) };
+
+      // Step 1: group flag inference.
+      //   - default-off group + any CF in selectedCFs → user opted in → on
+      //   - default-on group + every required+default CF in excludedCFs
+      //     → user opted out of the group's defaults → off
+      //   - otherwise leave undefined → render falls back to defaultEnabled
+      // "required+default" (not "every CF") matches what getExcludedCFIds
+      // emits when disabling a default-on group: optional members the
+      // user never opted into aren't in excludedCFs even when group off.
       for (const g of (detail.trashGroups || [])) {
         const cfTids = (g.cfs || []).map(cf => cf.trashId);
         const anyInSelected = cfTids.some(tid => ruleSelSet.has(tid));
-        const allExcluded = cfTids.length > 0 && cfTids.every(tid => ruleExcSet.has(tid));
+        const defaultsInGroup = (g.cfs || []).filter(cf => cf.required || cf.default).map(cf => cf.trashId);
+        const allDefaultsExcluded = defaultsInGroup.length > 0 && defaultsInGroup.every(tid => ruleExcSet.has(tid));
         const grpKey = '__grp_' + g.name;
         if (!g.defaultEnabled && anyInSelected) {
           selOpt[grpKey] = true;
-        } else if (g.defaultEnabled && allExcluded) {
+        } else if (g.defaultEnabled && allDefaultsExcluded) {
           selOpt[grpKey] = false;
         }
+      }
+
+      // Step 2: build the set of CFs covered by a group-off flag —
+      // their excludedCFs entry is redundant (group flag carries the
+      // signal) and writing sel=false on them would inhibit re-enable.
+      const groupOffCFs = new Set();
+      for (const g of (detail.trashGroups || [])) {
+        if (selOpt['__grp_' + g.name] === false) {
+          for (const cf of (g.cfs || [])) {
+            if (cf.required || cf.default) groupOffCFs.add(cf.trashId);
+          }
+        }
+      }
+
+      // Step 3: apply per-CF state. Skip the group-off-covered CFs in
+      // the excludedCFs loop so they end up sel=undefined (group flag
+      // cascades) instead of sel=false (looks like a Phase 2c lock).
+      for (const tid of (rule.selectedCFs || [])) selOpt[tid] = true;
+      for (const tid of (rule.excludedCFs || [])) {
+        if (groupOffCFs.has(tid)) continue;
+        selOpt[tid] = false;
       }
       this.selectedOptionalCFs = selOpt;
       // scoreOverrides split: in-profile → cfScoreOverrides, out-of-profile → extraCFs.
@@ -1248,21 +1321,46 @@ export default {
 
     getSelectedCFIds() {
       const idSet = new Set();
-      // Include individually toggled optional CFs
-      for (const [k, v] of Object.entries(this.selectedOptionalCFs)) {
-        if (v && !k.startsWith('__grp_')) idSet.add(k);
-      }
-      // Include required CFs from active TRaSH groups
+      const sel = this.selectedOptionalCFs || {};
       const groups = this.profileDetail?.detail?.trashGroups || [];
+      // Build cf-to-groups index so we can ask "does this CF live in
+      // any active group?" in O(1) per CF instead of nested O(N*M).
+      const cfGroups = new Map();
+      for (const g of groups) {
+        for (const cf of (g.cfs || [])) {
+          const arr = cfGroups.get(cf.trashId);
+          if (arr) arr.push(g); else cfGroups.set(cf.trashId, [g]);
+        }
+      }
+      const isGroupOn = (g) => {
+        const flag = sel['__grp_' + g.name];
+        return flag === undefined ? g.defaultEnabled : flag;
+      };
+      // Include individually toggled optional CFs — but ONLY if at
+      // least one parent group is currently active. Otherwise the
+      // per-CF=true entry is stale state from when the group was on
+      // (or from rehydrating a prior rule); the user has since
+      // disabled the group and expects those CFs out of the profile.
+      // CFs that aren't in any group at all (extras / customs added
+      // via Additional CF picker) always count.
+      for (const [k, v] of Object.entries(sel)) {
+        if (!v || k.startsWith('__grp_')) continue;
+        const homes = cfGroups.get(k);
+        if (!homes || homes.length === 0) { idSet.add(k); continue; }
+        if (homes.some(g => isGroupOn(g))) idSet.add(k);
+      }
+      // Required CFs from active TRaSH groups — but skip when the
+      // user has explicitly locked the CF out via Phase 2c (sel===false).
+      // Pre-fix the required loop added unconditionally, so a lock
+      // click on a required CF inside a default-OFF group the user
+      // had opted into got silently overridden — sync still pushed
+      // the CF to the Arr profile.
       for (const group of groups) {
-        const grpOn = this.selectedOptionalCFs['__grp_' + group.name] !== undefined
-          ? this.selectedOptionalCFs['__grp_' + group.name]
-          : group.defaultEnabled;
-        if (!grpOn) continue;
+        if (!isGroupOn(group)) continue;
         for (const cf of group.cfs) {
-          if (cf.required) {
-            idSet.add(cf.trashId);
-          }
+          if (!cf.required) continue;
+          if (sel[cf.trashId] === false) continue; // Phase 2c lock
+          idSet.add(cf.trashId);
         }
       }
       // Include any CF that has a score override. Without this, a user-overridden
@@ -1271,9 +1369,20 @@ export default {
       // override would be silently dropped. (restoreFromSyncHistory filters
       // cfScoreOverrides down to in-profile CFs, so this loop is normally a
       // no-op for restored rules; it's the safety net for live edits.)
+      //
+      // Skip CFs the user has explicitly opted out of (sel===false) OR
+      // CFs whose only home is in groups that are currently off. ALL
+      // overrides — even ones with sel===true from rehydrating an older
+      // rule — must respect group state, otherwise toggling a group off
+      // doesn't actually remove its CFs from sync when they carry an
+      // override (the bug 4OD-with-score-55000 hit).
       if (this.cfScoreOverrides) {
         for (const trashId of Object.keys(this.cfScoreOverrides)) {
-          idSet.add(trashId);
+          if (idSet.has(trashId)) continue; // already in scope (formatItem or active group required)
+          if (sel[trashId] === false) continue; // explicit opt-out
+          const homes = cfGroups.get(trashId);
+          if (!homes || homes.length === 0) { idSet.add(trashId); continue; }
+          if (homes.some(g => isGroupOn(g))) idSet.add(trashId);
         }
       }
       return [...idSet];
@@ -1942,6 +2051,33 @@ export default {
         const existingRule = arrId > 0
           ? this.autoSyncRules.find(r => r.instanceId === this.syncForm.instanceId && r.arrProfileId === arrId)
           : null;
+        // Native profile sync success — surface a result toast and
+        // close the editor (Apply & Sync UX: one-click commit, return
+        // to where you came from). Imported profile flow already has
+        // its own toast above; this branch handles the rule-attached
+        // flow that previously left the user staring at a result
+        // banner they had to dismiss via Close. Errors leave the
+        // editor open so the user can see what failed + re-attempt.
+        const closeEditorAfterApply = !this.syncForm.importedProfileId && !hadErrors;
+        if (closeEditorAfterApply) {
+          const details = [
+            ...(result.cfDetails || []),
+            ...(result.scoreDetails || []),
+            ...(result.qualityDetails || []),
+            ...(result.settingsDetails || [])
+          ];
+          this.showToast({
+            title: `"${this.syncForm.profileName}" synced`,
+            message: details.length > 0 ? `${details.length} change${details.length === 1 ? '' : 's'} applied — see History for details.` : 'No changes — profile already in sync.',
+            type: 'info',
+            duration: details.length > 0 ? 6000 : 4000,
+            // Dedupe key so rapid Apply & Sync clicks (e.g. user
+            // double-tapping or running through several rules in a row)
+            // don't stack duplicate "synced" toasts. Mirrors the
+            // imported-sync toast key pattern above.
+            key: this.toastKey('sync-native', this.syncForm.instanceId, this.syncForm.profileName, details.length),
+          });
+        }
         if (existingRule && !hadErrors) {
           const updated = {
             ...existingRule,
@@ -1983,6 +2119,14 @@ export default {
             });
             await this.loadAutoSyncRules();
           } catch (e) { console.error('updateAutoSyncRule:', e); }
+        }
+        // Close editor after all post-sync work (rule PUT + reloads)
+        // completes — guarantees the back-list reflects the persisted
+        // state by the time the user sees it. Gated on the same
+        // condition as the success toast above so error paths leave
+        // the editor open for re-attempt.
+        if (closeEditorAfterApply) {
+          this.closeProfileEditor();
         }
       } catch (e) {
         console.error('apply:', e);
@@ -2072,15 +2216,19 @@ export default {
           return;
         }
         await this.loadAutoSyncRules();
-        // Issue #52 — Save success: re-snapshot the baseline so the
-        // freshly-saved state becomes the new "clean" reference.
-        // Future edits diverge from this; navigation guards stop
-        // tripping on the just-saved-and-clean state.
-        this._captureProfileBaseline();
-        this.showToast('Settings saved. Will sync on next Sync All / Sync Now / Auto-Sync.', 'success', 6000);
+        this.showToast('Changes applied. Will sync on next Sync All / Sync Now / Auto-Sync.', 'success', 6000);
+        // Auto-close the editor after a clean Apply — leaves the user
+        // back where they came from (Sync Rules tab / TRaSH Profiles
+        // grid). Pre-fix the user had to manually click Cancel to leave
+        // even though they'd already committed their changes, which
+        // also made "Cancel" read as "discard" right after a save.
+        // (No _captureProfileBaseline() before close — closeProfileEditor
+        // calls _clearProfileBaseline() first thing, so the capture
+        // would be immediately wiped.)
+        this.closeProfileEditor();
       } catch (e) {
         console.error('saveRuleOnly:', e);
-        this.showToast('Save failed: ' + e.message, 'error', 8000);
+        this.showToast('Apply failed: ' + e.message, 'error', 8000);
       } finally {
         this.savingRule = false;
       }
@@ -4582,44 +4730,30 @@ export default {
       this.selectedOptionalCFs = updated;
     },
 
-    // Profile Detail group on/off toggle. Sets the `__grp_<name>` flag for
-    // group enabled/disabled state and updates per-CF selections according
-    // to the TRaSH group data:
-    //   - Enable + non-exclusive: pre-select required CFs and CFs marked
-    //     `default: true` in the group definition. Non-default optional CFs
-    //     remain visible (group is expanded) but unchecked — user can tick
-    //     them individually.
-    //   - Enable + exclusive: don't auto-pick anything; user picks one
-    //     (Golden Rule HD x265 vs no-HDR-DV, HDR Formats variant, etc.).
-    //   - Disable: clear all per-CF selections in the group.
-    // Replaces the inline @change handler that used to live in the template
-    // — moved here so the cf.default fix only has to live in one place.
+    // Profile Detail group on/off toggle. Flag-only: flips the
+    // `__grp_<name>` entry and nothing else. The render layer and
+    // getSelectedCFIds both cascade group state via _groupOn +
+    // (sel[id] === undefined ? cf.default : sel[id]), so:
+    //   - Disable: render dims everything, sync skips the group's
+    //     required CFs (gated by !grpOn in getSelectedCFIds line ~1261).
+    //   - Enable: cf.required + cf.default=true members come back via
+    //     the undefined → cf.default / cf.required fallback. cf.default
+    //     =false stays off unless user explicitly opted in.
+    // Phase 2c lock-click exclusions (sel[id] === false written by
+    // spToggleRequiredCF) and user-explicit opt-ins (sel[id] === true
+    // from individual toggles) both survive untouched.
+    //
+    // Earlier version bulk-wrote false for every CF on disable AND
+    // had a "skip if === false" guard on enable to preserve Phase 2c.
+    // The two interacted: the bulk-false from disable looked identical
+    // to a Phase 2c exclusion on re-enable, so the guard skipped every
+    // CF and required+default members never came back. Flag-only
+    // removes the bulk write entirely and the conflict with it.
     pdToggleGroup(group, enabled) {
-      const updated = { ...this.selectedOptionalCFs };
-      updated['__grp_' + group.name] = enabled;
-      if (enabled) {
-        if (!group.exclusive) {
-          for (const cf of (group.cfs || [])) {
-            // Preserve Phase 2c required-CF exclusions. Without this
-            // guard, toggling a group off then back on within the same
-            // edit session silently wipes any explicit user opt-out
-            // (sel[id] === false) for required CFs in the group —
-            // exclusion entries are lost on save.
-            if (updated[cf.trashId] === false) continue;
-            if (cf.required) {
-              updated[cf.trashId] = true;
-            } else if (cf.default) {
-              updated[cf.trashId] = true;
-            }
-            // else: leave as-is (unchecked by default), user can tick later
-          }
-        }
-      } else {
-        for (const cf of (group.cfs || [])) {
-          updated[cf.trashId] = false;
-        }
-      }
-      this.selectedOptionalCFs = updated;
+      this.selectedOptionalCFs = {
+        ...this.selectedOptionalCFs,
+        ['__grp_' + group.name]: enabled,
+      };
     },
 
   },

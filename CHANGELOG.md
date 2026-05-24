@@ -37,6 +37,25 @@ Polish + cleanup on top of the May 14 drop:
   "N changes", modified values, and the Note strip on Compare now
   use yellow for Radarr and cyan-blue for Sonarr. Orange stays
   reserved for actual warnings.
+- **Group toggle now properly respected.** Disabling a CF group in
+  the profile editor (e.g. Streaming Services UK, Unwanted Formats)
+  now removes its CFs from sync as expected — including CFs that
+  carry a custom score override. Toggling the group back on restores
+  defaults cleanly. The lock-icon on required CFs still works for
+  per-CF exclusions within an enabled group.
+- **"All optional CFs" toggle is now scoped.** Only flips the
+  non-default opt-in CFs within a group. Required CFs and recommended
+  (default-on) members stay as the group toggle dictates — no more
+  accidentally turning off recommendations with a single click.
+- **Score input disabled when the CF is off.** Editing a score on a
+  CF that isn't being synced no longer silently leaks the override
+  into the sync payload — the input is greyed out with a tooltip
+  pointing you to enable the CF first.
+- **Apply / Apply & Sync close the editor on success.** Renamed
+  Cancel → Close, Save → Apply, Save & Sync → Apply & Sync. After a
+  successful Apply or Apply & Sync, the editor closes automatically
+  and a toast summarises the result — no more clicking through to
+  manually dismiss. Errors leave the editor open for re-attempt.
 
 #### Fixed
 
