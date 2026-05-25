@@ -184,13 +184,17 @@ func TestProfileSyncRunner_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T)
 	}
 }
 
-// TestProfileSyncRunner_NotifiesOnlyOnNewUpstream is the Phase C MVP
-// dedup contract: the upstream-ahead notification fires only when the
-// observed upstream commit changes from what was previously persisted.
-// Without this, every hourly tick would re-fire the same notification
-// while the user lets pending state sit (Notify mode users would get
-// spammed daily for one TRaSH commit).
-func TestProfileSyncRunner_NotifiesOnlyOnNewUpstream(t *testing.T) {
+// TestProfileSyncRunner_StableOnRepeatedUpstreamObservation verifies the
+// runner completes cleanly when the same upstream commit is observed across
+// consecutive ticks — a prerequisite for the dedup logic in
+// runDetectionOnly (which fires NotifyUpstreamUpdate only when the prior
+// persisted UpstreamHead differs from the new observation).
+//
+// Full notification-call-count assertion needs a notification-stub seam
+// that lands with Phase C commit 2 alongside WatchState. This test is
+// the runner-state half of the dedup contract; the notify-call half is
+// covered by the priorUpstream != upstreamHead branch in code review.
+func TestProfileSyncRunner_StableOnRepeatedUpstreamObservation(t *testing.T) {
 	app, ts, _ := newWatcherTestApp(t)
 	seedTrashCommit(t, ts, "local-commit-1111")
 	_ = app.Config.Update(func(c *Config) {

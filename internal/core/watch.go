@@ -109,6 +109,12 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 	cfg := uw.app.Config.Get()
 
+	// Empty-clone guard — DO NOT REMOVE. Comparing an empty local HEAD
+	// against any non-empty upstream HEAD would surface every TRaSH
+	// commit as "new" and fire NotifyUpstreamUpdate spuriously on the
+	// very first detection tick for fresh containers. The runner's
+	// notification dedup (priorUpstream != upstreamHead) doesn't help
+	// here because the prior value is also empty on first run.
 	localCommit := uw.app.Trash.CurrentCommit()
 	if localCommit == "" {
 		log.Printf("profile-sync: TRaSH clone not initialised — skipping detection (next Pull will populate it)")
@@ -134,22 +140,23 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		return safeErr
 	}
 
-	// Snapshot the prior UpstreamHead so we can detect "first time we
-	// noticed this upstream advance" — only fire a notification when the
-	// upstream value crosses a NEW boundary, not on every detection tick
-	// while the user hasn't pulled. (Full per-rule WatchState dedup with
-	// SHA fingerprints lands in Phase C commit 2; this is the MVP-level
-	// dedup that uses just the previously-persisted UpstreamHead.)
-	priorUpstream := ""
-	if cfg.ProfileSync != nil {
-		priorUpstream = cfg.ProfileSync.UpstreamHead
-	}
-
+	// Capture the prior UpstreamHead INSIDE the Config.Update closure so
+	// it reflects the actual state at write-time, not a potentially-stale
+	// snapshot from cfg.Get() at the top of Run. Without this, a manual
+	// Pull interleaving between our snapshot and our persist would let us
+	// re-fire a notification even though Pull just synced everything.
+	// (Full per-rule WatchState dedup with SHA fingerprints lands in
+	// Phase C commit 2; this is the MVP-level dedup against the most
+	// recent persisted UpstreamHead.)
+	var priorUpstream string
 	now := time.Now().UTC().Format(time.RFC3339)
 	if updErr := uw.app.Config.Update(func(c *Config) {
 		if c.ProfileSync == nil {
 			return
 		}
+		// Snapshot under the same lock that's about to do the write —
+		// no interleaving possible inside this closure.
+		priorUpstream = c.ProfileSync.UpstreamHead
 		c.ProfileSync.LastRun = now
 		c.ProfileSync.LocalHead = localCommit
 		c.ProfileSync.UpstreamHead = upstreamHead
@@ -161,9 +168,10 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
 		// Fire the notification only when this is a NEW upstream commit
 		// we haven't notified about before — prevents spamming on every
-		// hourly tick while the user lets the pending state sit.
-		// priorUpstream == upstreamHead means we already notified for
-		// this exact upstream value; skip.
+		// hourly tick while the user lets the pending state sit, AND
+		// prevents the manual-Pull-interleaving race (Pull persists
+		// UpstreamHead=Y; if our snapshot was taken BEFORE Pull ran,
+		// our closure-time priorUpstream now reads Y and we skip).
 		if priorUpstream != upstreamHead {
 			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead)
 		}

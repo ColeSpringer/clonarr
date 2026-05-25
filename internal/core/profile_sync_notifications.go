@@ -16,7 +16,7 @@ import (
 // the commit-hash delta. Phase C commit 2 will add per-rule mapping so the
 // notification can name which profiles are affected.
 //
-// Dispatches to every notification agent that has OnUpdateAvailable enabled
+// Dispatches to every notification agent that has OnUpstreamAhead enabled
 // (default false on existing agents — opt-in via Settings → Notifications
 // once that toggle ships in a follow-up).
 func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
@@ -25,7 +25,7 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
 	// No agents opted in → cheap no-op. Skip the message build entirely.
 	hasOptIn := false
 	for _, agent := range cfg.AutoSync.NotificationAgents {
-		if agent.Events.OnUpdateAvailable {
+		if agent.Events.OnUpstreamAhead {
 			hasOptIn = true
 			break
 		}
@@ -40,16 +40,21 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
 		fmt.Sprintf("**Local:** `%s`", shortHash(prevCommit)),
 		fmt.Sprintf("**Upstream:** `%s`", shortHash(newCommit)),
 		"",
-		"Open Clonarr and click **Pull and sync now** to apply, or wait for the next scheduled pull.",
+		"Open Clonarr and click **Pull** in the sidebar to apply, or wait for the next scheduled pull.",
 	}
 	payload := NotificationPayload{
 		Title:    title,
 		Message:  strings.Join(parts, "\n"),
 		Color:    0x58a6ff, // accent-blue (matches "update available" UI badge in Phase 4 UI)
 		Severity: NotificationSeverityInfo,
+		// Route to the updates channel so users who configured a separate
+		// Discord webhook for OnRepoUpdate get this event there too —
+		// semantically these are both "TRaSH-Guides repo state changed"
+		// notifications and belong in the same channel.
+		Route: NotificationRouteUpdates,
 	}
 	for _, agent := range cfg.AutoSync.NotificationAgents {
-		if !agent.Events.OnUpdateAvailable {
+		if !agent.Events.OnUpstreamAhead {
 			continue
 		}
 		app.DispatchNotificationAgent(agent, payload)
