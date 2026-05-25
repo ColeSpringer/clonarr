@@ -169,6 +169,12 @@
                       <template x-if="sh.orphanedAt">
                         <button class="v3-action-icon" @click.stop="restoreOrphanedRule(inst, sh)" x-tt="'Recreate this profile in Arr from the last synced state'">&#8634;</button>
                       </template>
+                      <template x-if="!sh.orphanedAt && (() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r && r.pendingChanges && r.pendingChanges.length > 0; })()">
+                        <button class="v3-action-icon"
+                                style="color:var(--accent-blue)"
+                                @click.stop="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); if (r) dismissPendingChanges(r); })()"
+                                x-tt="'Dismiss pending TRaSH updates — clear the badge without pulling. The next detection tick will re-create entries if changes are still pending upstream.'">&#10005;</button>
+                      </template>
                       <template x-if="!sh.orphanedAt">
                         <button class="v3-action-icon" @click.stop="resyncProfile(inst, sh)" x-tt="'Edit sync rule'">&#9998;</button>
                       </template>

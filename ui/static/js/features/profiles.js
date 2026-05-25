@@ -3066,6 +3066,29 @@ export default {
     //   ''        — no rule object (orphaned / never-synced display path)
     // Arr-side drift (manual Arr edits) requires dry-run; see CLAUDE.md
     // post-v3 backlog.
+    // Phase C commit 2 — clear a rule's PendingChanges + WatchState without
+    // applying. "I've seen the notification, drop the badge." Used by the
+    // Sync Rules per-row Dismiss action. Optimistically clears the local
+    // state so the badge disappears immediately; reloads rules on success
+    // so other browser tabs converge.
+    async dismissPendingChanges(rule) {
+      if (!rule || !rule.id) return;
+      // Optimistic update — clear locally first
+      rule.pendingChanges = [];
+      rule.watchState = null;
+      try {
+        const r = await fetch('/api/auto-sync/rules/' + encodeURIComponent(rule.id) + '/dismiss-pending', { method: 'POST' });
+        if (!r.ok) {
+          this.showToast('Failed to dismiss pending changes', 'error', 4000);
+          await this.loadAutoSyncRules(); // re-fetch to undo optimistic update
+        }
+      } catch (e) {
+        console.error('dismissPendingChanges:', e);
+        this.showToast('Could not dismiss (network error)', 'error', 4000);
+        await this.loadAutoSyncRules();
+      }
+    },
+
     v3RuleStatus(rule) {
       if (!rule) return '';
       if (rule.lastSyncError) return 'failed';
@@ -3103,8 +3126,23 @@ export default {
         case 'ok':                return 'Last sync matched the target Arr profile';
         case 'pending':           return 'Saved overrides not yet pushed — click Sync now';
         case 'update-available':  {
-          const n = (rule.pendingChanges || []).length;
-          return `${n} TRaSH change${n === 1 ? '' : 's'} affecting this profile detected upstream — click Pull in the sidebar to apply`;
+          const pc = rule.pendingChanges || [];
+          const n = pc.length;
+          // Build a multi-line tooltip listing what's pending so users
+          // can verify without leaving the row. Newest first; cap at 8
+          // entries with "...and N more" to keep the tooltip reasonable.
+          const sorted = [...pc].sort((a, b) => (b.detectedAt || '').localeCompare(a.detectedAt || ''));
+          const shown = sorted.slice(0, 8);
+          const lines = [
+            `${n} TRaSH change${n === 1 ? '' : 's'} affecting this profile`,
+            'Click Pull in the sidebar to apply, or use the Dismiss action to clear without pulling.',
+            '',
+            ...shown.map(c => `• ${c.changeType || 'change'}: ${c.affectedName || c.affectedId || '?'} (commit ${(c.commitHash || '').slice(0,7)})`),
+          ];
+          if (sorted.length > shown.length) {
+            lines.push(`...and ${sorted.length - shown.length} more`);
+          }
+          return lines.join('\n');
         }
         case 'drift':             return 'TRaSH was updated since last sync — Sync to apply';
         case 'failed':            return rule?.lastSyncError || 'Last sync attempt failed';
