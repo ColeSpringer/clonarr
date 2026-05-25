@@ -214,7 +214,50 @@
             </div>
           </div>
           <div class="setting-row">
-            <div class="setting-label">Pull Interval</div>
+            <div class="setting-label">Status</div>
+            <div class="setting-value" style="font-size:13px">
+              <template x-if="trashStatus.cloned">
+                <span>
+                  Commit <code x-text="trashStatus.commitHash" style="background:var(--bg-muted);padding:2px 6px;border-radius:4px;font-size:12px"></code>
+                  — Radarr: <span x-text="trashStatus.radarrCFs"></span> CFs, <span x-text="trashStatus.radarrProfiles"></span> profiles
+                  — Sonarr: <span x-text="trashStatus.sonarrCFs"></span> CFs, <span x-text="trashStatus.sonarrProfiles"></span> profiles
+                </span>
+              </template>
+              <template x-if="!trashStatus.cloned">
+                <span style="color:var(--text-muted)">
+                  Not cloned yet. Click Pull in the nav bar<span x-show="trashStatus.nextPull" x-text="', or wait for ' + nextPullLabel()"></span>.
+                </span>
+              </template>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Reset TRaSH Data</div>
+            <div class="setting-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-danger"
+                      @click="resetTrashData()"
+                      :disabled="trashStatus.pulling || pulling || syncing || trashResetting">
+                <span x-show="trashResetting" class="spinner"></span>
+                <span>Reset data</span>
+              </button>
+              <span style="font-size:12px;color:var(--text-muted)">Deletes only the local cache. Pull redownloads TRaSH data; Sync All forces an Arr refresh.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Profile Sync ===== -->
+        <!-- Dedicated tab for the unified Profile Sync subsystem (Phase E).
+             Houses everything related to "when does clonarr check + what
+             does it do when it finds changes" — schedule cadence, what to
+             watch (Sources), what action to take (Mode), and the legacy
+             Auto-sync Schedule (will deprecate when Delayed-apply ships).
+             TRaSH Guides tab is now purely about repo identity (URL,
+             branch, status, reset). -->
+        <div x-show="settingsSection === 'profile-sync'">
+          <div class="settings-section-title">Profile Sync</div>
+          <div class="settings-section-desc">When clonarr checks for changes and what it does when it finds them. Default mirrors today's Pull-and-sync behaviour — opt in to <em>Just notify me</em> or <em>Wait before applying</em> for finer control.</div>
+
+          <div class="setting-row">
+            <div class="setting-label">Check for changes</div>
             <div class="setting-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <select class="input" style="width:180px" x-model="config.pullInterval" @change="saveConfig(['pullInterval'])">
                 <template x-for="opt in (manifest.pullIntervalPresets || [])" :key="opt.value">
@@ -282,14 +325,81 @@
                 </template>
               </select>
               <span x-show="config.pullInterval !== 'specific'"
-                    style="font-size:12px;color:var(--text-muted)">Auto-pull TRaSH data at this interval</span>
+                    style="flex-basis:100%;font-size:12px;color:var(--text-muted);font-style:italic">How often clonarr looks for TRaSH-Guides updates. The schedule above drives both detection and apply when Mode is set to <em>Apply automatically</em>.</span>
               <span x-show="config.pullInterval === 'specific'"
                     style="flex-basis:100%;font-size:12px;color:var(--text-secondary);font-style:italic"
                     x-text="scheduleTimeZoneHelperText()"></span>
             </div>
           </div>
+
           <div class="setting-row">
-            <div class="setting-label" x-tt="'Periodically force-resync your saved profile settings to Sonarr/Radarr — overwrites any manual changes done in the *arr UI or via other tools. Independent of Pull Interval. Default off; turn on if you want clonarr to keep the profile clean even when no TRaSH updates have happened.'">Auto-sync Schedule</div>
+            <div class="setting-label">What to check for</div>
+            <div class="setting-value" style="flex-direction:column;align-items:flex-start;gap:8px">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="checkbox" x-model="config.profileSync.sources.trashUpstream" @change="saveProfileSync()" style="margin-top:2px">
+                <span>
+                  <span style="font-weight:500">TRaSH-Guides updates</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">When the guide publishes new custom formats, score changes, or profile updates upstream.</span>
+                </span>
+              </label>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:not-allowed;font-size:13px;opacity:0.55">
+                <input type="checkbox" disabled style="margin-top:2px">
+                <span>
+                  <span style="font-weight:500">Direct edits in Radarr/Sonarr</span>
+                  <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">When someone changes scores or settings directly in the Arr UI between clonarr's syncs. Coming in next wave.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">When changes are found</div>
+            <div class="setting-value" style="flex-direction:column;align-items:flex-start;gap:10px">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="radio" name="profile-sync-mode" value="auto"
+                       :checked="config.profileSync.mode === 'auto'"
+                       @change="config.profileSync.mode = 'auto'; saveProfileSync()"
+                       style="margin-top:3px">
+                <span>
+                  <span style="font-weight:500">Apply automatically</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">clonarr syncs the change to Arr right away — for rules with auto-sync turned on. Rules with auto-sync off get a notification so you can review and apply manually. (Matches today's Pull-and-sync behaviour.)</span>
+                </span>
+              </label>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="radio" name="profile-sync-mode" value="notify"
+                       :checked="config.profileSync.mode === 'notify'"
+                       @change="config.profileSync.mode = 'notify'; saveProfileSync()"
+                       style="margin-top:3px">
+                <span>
+                  <span style="font-weight:500">Just notify me — I'll apply manually</span>
+                  <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">No automatic Arr writes. You get a notification and a badge on the affected rule when changes are detected. Click <em>Pull and sync now</em> when you're ready to apply. (Notification firing lands in the next wave — config saves now.)</span>
+                </span>
+              </label>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="radio" name="profile-sync-mode" value="delayed"
+                       :checked="config.profileSync.mode === 'delayed'"
+                       @change="config.profileSync.mode = 'delayed'; saveProfileSync()"
+                       style="margin-top:3px">
+                <span>
+                  <span style="font-weight:500">Wait before applying — apply on a separate schedule</span>
+                  <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">Detect changes now, apply on a separate schedule (e.g. nightly 03:00). Useful if you want a controlled apply window regardless of when TRaSH publishes. (Apply schedule UI + behaviour land in the next wave.)</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Legacy Auto-sync Schedule. Will deprecate once the
+               Delayed-apply mode + Apply schedule UI ships. Until then,
+               surfaced here so existing users who rely on it can still
+               configure it from the relevant section. -->
+          <div class="setting-row" style="border-top:1px solid var(--bg-muted);margin-top:14px;padding-top:14px">
+            <div class="setting-label" x-tt="'Periodically force-resync your saved profile settings to Sonarr/Radarr — overwrites any manual changes done in the *arr UI or via other tools. Independent of Pull Interval. Default off; turn on if you want clonarr to keep the profile clean even when no TRaSH updates have happened.'">
+              Auto-sync Schedule
+              <span style="display:block;font-size:11px;color:var(--text-muted-secondary);font-weight:400;margin-top:2px">legacy — superseded soon by <em>Wait before applying</em></span>
+            </div>
             <div class="setting-value" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <select class="input" style="width:130px"
                       x-model="config.syncSchedule.mode"
@@ -330,8 +440,7 @@
                   <option :value="h.value" x-text="h.label"></option>
                 </template>
               </select>
-              <span style="font-size:13px;color:var(--text-muted)"
-                    x-show="config.syncSchedule.enabled">:</span>
+              <span x-show="config.syncSchedule.enabled" style="font-size:13px;color:var(--text-muted)">:</span>
               <select class="input" style="width:70px"
                       x-show="config.syncSchedule.enabled"
                       :value="syncScheduleMinuteValue()"
@@ -354,35 +463,6 @@
                     style="font-size:12px;color:var(--text-muted)">Sync only follows pull or manual triggers</span>
               <span x-show="config.syncSchedule.enabled"
                     style="flex-basis:100%;font-size:12px;color:var(--text-secondary);font-style:italic">Forces a resync of every active rule at this time, overwriting any settings changed directly in Sonarr/Radarr or by other tools.</span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">Status</div>
-            <div class="setting-value" style="font-size:13px">
-              <template x-if="trashStatus.cloned">
-                <span>
-                  Commit <code x-text="trashStatus.commitHash" style="background:var(--bg-muted);padding:2px 6px;border-radius:4px;font-size:12px"></code>
-                  — Radarr: <span x-text="trashStatus.radarrCFs"></span> CFs, <span x-text="trashStatus.radarrProfiles"></span> profiles
-                  — Sonarr: <span x-text="trashStatus.sonarrCFs"></span> CFs, <span x-text="trashStatus.sonarrProfiles"></span> profiles
-                </span>
-              </template>
-              <template x-if="!trashStatus.cloned">
-                <span style="color:var(--text-muted)">
-                  Not cloned yet. Click Pull in the nav bar<span x-show="trashStatus.nextPull" x-text="', or wait for ' + nextPullLabel()"></span>.
-                </span>
-              </template>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">Reset TRaSH Data</div>
-            <div class="setting-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <button class="btn btn-sm btn-danger"
-                      @click="resetTrashData()"
-                      :disabled="trashStatus.pulling || pulling || syncing || trashResetting">
-                <span x-show="trashResetting" class="spinner"></span>
-                <span>Reset data</span>
-              </button>
-              <span style="font-size:12px;color:var(--text-muted)">Deletes only the local cache. Pull redownloads TRaSH data; Sync All forces an Arr refresh.</span>
             </div>
           </div>
         </div>

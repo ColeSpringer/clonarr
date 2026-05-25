@@ -187,6 +187,8 @@
            :href="navHref('settings', { settingsSection: 'instances' })">Instances</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'trash' }"
            :href="navHref('settings', { settingsSection: 'trash' })">TRaSH Guides</a>
+        <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'profile-sync' }"
+           :href="navHref('settings', { settingsSection: 'profile-sync' })">Profile Sync</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'notifications' }"
            :href="navHref('settings', { settingsSection: 'notifications' })">Notifications</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'display' }"
@@ -380,6 +382,8 @@
            :href="navHref('settings', { settingsSection: 'instances' })" @click="sidebarSubnavPopup = ''">Instances</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'trash' }"
            :href="navHref('settings', { settingsSection: 'trash' })" @click="sidebarSubnavPopup = ''">TRaSH Guides</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'profile-sync' }"
+           :href="navHref('settings', { settingsSection: 'profile-sync' })" @click="sidebarSubnavPopup = ''">Profile Sync</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'notifications' }"
            :href="navHref('settings', { settingsSection: 'notifications' })" @click="sidebarSubnavPopup = ''">Notifications</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'display' }"

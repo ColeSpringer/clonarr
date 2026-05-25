@@ -801,6 +801,18 @@ export function clonarr() {
         this.config = await r.json();
         this.config.pullSchedule = Object.assign({ mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, this.config.pullSchedule || {});
         this.config.syncSchedule = Object.assign({ enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, this.config.syncSchedule || {});
+        // Profile Sync — defaults match the backend migration so a fresh
+        // install with no profileSync block in the API response renders
+        // sensibly. Sources subobject is initialised so the checkbox bindings
+        // don't have to null-guard.
+        this.config.profileSync = Object.assign(
+          { mode: 'auto', interval: '24h', sources: { trashUpstream: true, arrDrift: false } },
+          this.config.profileSync || {}
+        );
+        this.config.profileSync.sources = Object.assign(
+          { trashUpstream: true, arrDrift: false },
+          this.config.profileSync.sources || {}
+        );
         // UI's mode dropdown uses 'disabled' as a sentinel for "off". Map the
         // backend's enabled=false (regardless of saved mode) to that sentinel
         // so the dropdown reflects the actual state. Saved mode is preserved
@@ -1089,6 +1101,30 @@ export function clonarr() {
       } catch (e) {
         console.error('saveConfig:', e);
         this.showToast('Could not save settings (network error)', 'error', 6000);
+      }
+    },
+
+    // Save Mode + Sources to /api/profile-sync. Schedule fields (interval,
+    // specific) flow through saveConfig() → PUT /api/config which propagates
+    // to ProfileSync server-side; no need to send them here.
+    async saveProfileSync() {
+      try {
+        const body = {
+          mode: this.config.profileSync.mode,
+          sources: this.config.profileSync.sources,
+        };
+        const r = await fetch('/api/profile-sync', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const msg = (await r.json().catch(() => ({ error: 'save failed' }))).error || 'save failed';
+          this.showToast(msg, 'error', 6000);
+        }
+      } catch (e) {
+        console.error('saveProfileSync:', e);
+        this.showToast('Could not save Profile Sync settings (network error)', 'error', 6000);
       }
     },
 

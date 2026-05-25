@@ -203,7 +203,7 @@ export default {
       const validSections = ['profiles','custom-formats','media-management','quality-size','naming','maintenance','advanced','settings','about'];
       // 'prowlarr' kept as a legacy alias for old bookmarks — Prowlarr config
       // now lives inside the Instances section as its own v3-inst-card.
-      const validSettings = ['instances','trash','notifications','display','security','advanced'];
+      const validSettings = ['instances','trash','profile-sync','notifications','display','security','advanced'];
       const settingsAlias = { prowlarr: 'instances' };
       // v3: 'trash-sync' kept as a legacy alias of 'trash-profiles' so old
       // bookmarks and hashes keep working after the sub-tab split. Mapped

@@ -73,5 +73,11 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "failed to save profile-sync settings")
 		return
 	}
+	// Wake the profile-sync-watcher so cadence / sources / mode changes take
+	// effect immediately rather than waiting for the 60s poll-tick fallback.
+	select {
+	case s.Core.PullUpdateCh <- "":
+	default:
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
