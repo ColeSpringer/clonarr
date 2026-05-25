@@ -767,6 +767,24 @@ export function clonarr() {
         this._nowTick = Date.now();
         const prevPull = this.trashStatus?.lastPull;
         await this.loadTrashStatus();
+        // Refresh ProfileSync state so the sidebar "TRaSH updates available"
+        // indicator reflects what the backend watcher persisted on its
+        // most-recent tick. Same 30s cadence as trashStatus so they stay
+        // in step. Best-effort; failures are non-fatal.
+        try {
+          const ps = await fetch('/api/profile-sync');
+          if (ps.ok) {
+            const data = await ps.json();
+            // Merge in just the runner-managed fields; user-config fields
+            // (mode, sources, interval) are managed by the Settings UI
+            // and shouldn't be clobbered mid-edit.
+            if (this.config.profileSync) {
+              this.config.profileSync.lastRun = data.lastRun || '';
+              this.config.profileSync.upstreamHead = data.upstreamHead || '';
+              this.config.profileSync.localHead = data.localHead || '';
+            }
+          }
+        } catch (e) { /* network blip — try again next tick */ }
         // If lastPull changed (scheduled pull completed), reload sync data
         if (this.trashStatus?.lastPull && this.trashStatus.lastPull !== prevPull) {
           // Show pull diff toast for scheduled pulls (only if diff is fresh — newCommit matches current)

@@ -235,6 +235,18 @@
               <span class="sidebar-trash-commit" x-show="trashStatus.commitHash" x-text="trashStatus.commitHash"></span>
               <span class="sidebar-trash-next" x-show="trashStatus.nextPull" x-text="'· ' + nextPullLabel()"></span>
             </span>
+            <!-- Profile Sync upstream-ahead indicator. Shown only when
+                 ProfileSync detection has noticed the upstream HEAD is
+                 ahead of our local clone — typically because the user
+                 runs Mode=notify or Mode=delayed and hasn't pulled yet.
+                 Auto-mode users see this rarely (the next scheduled tick
+                 would pull and clear it). -->
+            <span class="sidebar-trash-line2"
+                  x-show="config.profileSync && config.profileSync.upstreamHead && config.profileSync.localHead && config.profileSync.upstreamHead !== config.profileSync.localHead"
+                  x-cloak
+                  style="color:var(--accent-blue);font-weight:500">
+              <span>↑ TRaSH updates available</span>
+            </span>
           </button>
         </template>
         <template x-if="!trashStatus.cloned">

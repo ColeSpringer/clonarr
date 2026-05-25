@@ -135,7 +135,12 @@
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary)">
             <input type="checkbox" x-model="agentModal.events.onRepoUpdate" style="accent-color:var(--accent-blue)">
             TRaSH update
-            <span class="cf-info" @mouseenter="showCFTooltip($event, 'Sent when the TRaSH Guides repository receives a new commit')" @mouseleave="hideCFTooltip()">ⓘ</span>
+            <span class="cf-info" @mouseenter="showCFTooltip($event, 'Sent when the TRaSH Guides repository receives a new commit (fires after Pull)')" @mouseleave="hideCFTooltip()">ⓘ</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary)">
+            <input type="checkbox" x-model="agentModal.events.onUpstreamAhead" style="accent-color:var(--accent-blue)">
+            TRaSH updates available
+            <span class="cf-info" @mouseenter="showCFTooltip($event, 'Sent when Profile Sync detects new TRaSH commits upstream WITHOUT pulling — for users on Notify or Delayed mode who want to know about updates before applying.')" @mouseleave="hideCFTooltip()">ⓘ</span>
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary)">
             <input type="checkbox" x-model="agentModal.events.onChangelog" style="accent-color:var(--accent-blue)">

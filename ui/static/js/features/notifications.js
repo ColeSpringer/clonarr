@@ -5,6 +5,7 @@ function defaultAgentEvents() {
     onCleanup: true,
     onRepoUpdate: false,
     onChangelog: false,
+    onUpstreamAhead: false,
   };
 }
 
