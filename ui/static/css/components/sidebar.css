@@ -508,7 +508,7 @@ body:has(.sidebar.collapsed) .sidebar-trash-popover {
 }
 
 /* Defensive: belt-and-suspenders for the topnav/sidebar swap. x-show
-   on each root should already hide the inactive one, but a user reported
+   on each root should already hide the inactive one, but reports surfaced
    seeing the TRaSH-sync indicator from .topnav rendering above the
    sidebar+app-banner in sidebar mode. Forcing display:none on the
    inactive nav via the data-nav-style attribute on the x-data root
