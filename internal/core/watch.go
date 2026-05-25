@@ -166,17 +166,176 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 
 	if upstreamHead != localCommit {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
-		// Fire the notification only when this is a NEW upstream commit
-		// we haven't notified about before — prevents spamming on every
-		// hourly tick while the user lets the pending state sit, AND
-		// prevents the manual-Pull-interleaving race (Pull persists
-		// UpstreamHead=Y; if our snapshot was taken BEFORE Pull ran,
-		// our closure-time priorUpstream now reads Y and we skip).
+		// Phase C commit 2 — fetch commit-range to a dedicated side-ref
+		// + walk the file changes + per-rule PendingChanges + per-rule
+		// fingerprint dedup. Best-effort: failures in this enrichment
+		// path fall back to the MVP-level aggregate notification so
+		// users still hear about upstream activity.
+		uw.detectPerRuleChanges(ctx, cfg, remote, branch, localCommit, upstreamHead)
+
+		// Aggregate-level notification (the MVP path) still fires only
+		// when this is a NEW upstream commit we haven't notified about.
+		// Per-rule notifications inside detectPerRuleChanges have their
+		// own per-rule fingerprint dedup.
 		if priorUpstream != upstreamHead {
 			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead)
 		}
 	}
 	return nil
+}
+
+// detectPerRuleChanges fetches the commit-range to a side-ref, walks the
+// file changes, classifies them into trash_ids, and updates per-rule
+// PendingChanges + WatchState for every sync rule whose profile is
+// affected. Best-effort — a failure here is logged but doesn't propagate
+// (the aggregate notification still fires in the caller).
+func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Config, remote, branch, localCommit, upstreamHead string) {
+	if err := uw.app.Trash.FetchUpstreamRefspec(ctx, remote, branch); err != nil {
+		log.Printf("profile-sync: fetch upstream side-ref failed: %v", err)
+		return
+	}
+	changedFiles, err := uw.app.Trash.ChangedFilesSinceLocal(ctx, branch)
+	if err != nil {
+		log.Printf("profile-sync: walk commit range failed: %v", err)
+		return
+	}
+	if len(changedFiles) == 0 {
+		return // upstream != local but no file diffs — unusual but harmless
+	}
+
+	// Bucket changed trash_ids by app-type. Profile-eligible-CF lookup
+	// per rule needs to know which app the rule's profile belongs to so
+	// we only consider changes in the matching app's directory.
+	changedByApp := make(map[string][]ClassifiedFile)
+	for _, path := range changedFiles {
+		cf := ClassifyTrashFilePath(path)
+		if cf.Kind == FileChangeOther || cf.Kind == FileChangeQualitySize {
+			continue // QS handled separately in Phase D; non-data files ignored
+		}
+		changedByApp[cf.AppType] = append(changedByApp[cf.AppType], cf)
+	}
+	if len(changedByApp) == 0 {
+		return
+	}
+
+	// For each rule, compute the affected trash_id set + per-rule
+	// fingerprint dedup. Updates land via a single Config.Update so
+	// multiple rule changes batch into one disk write.
+	snap := uw.app.Trash.Snapshot()
+	if snap == nil {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	perRuleUpdates := uw.buildPerRuleUpdates(cfg, snap, changedByApp, upstreamHead, now)
+	if len(perRuleUpdates) == 0 {
+		return
+	}
+	if err := uw.app.Config.Update(func(c *Config) {
+		for i := range c.AutoSync.Rules {
+			r := &c.AutoSync.Rules[i]
+			upd, ok := perRuleUpdates[r.ID]
+			if !ok {
+				continue
+			}
+			if r.WatchState == nil {
+				r.WatchState = &WatchState{}
+			}
+			r.WatchState.LastUpstreamFingerprint = upd.fingerprint
+			if upd.shouldNotify {
+				r.WatchState.LastUpstreamNotifiedAt = now
+			}
+			r.PendingChanges = MergePendingChanges(r.PendingChanges, upd.pending)
+		}
+	}); err != nil {
+		log.Printf("profile-sync: persist per-rule pending failed: %v", err)
+	}
+	log.Printf("profile-sync: per-rule mapping updated %d rule(s)", len(perRuleUpdates))
+}
+
+// perRuleUpdate is the planned mutation for one rule, computed outside the
+// Config.Update closure so the closure stays trivially short.
+type perRuleUpdate struct {
+	fingerprint  string
+	shouldNotify bool
+	pending      []PendingChange
+}
+
+func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, changedByApp map[string][]ClassifiedFile, upstreamHead, now string) map[string]perRuleUpdate {
+	out := make(map[string]perRuleUpdate)
+	for _, rule := range cfg.AutoSync.Rules {
+		if rule.OrphanedAt != "" || !rule.Enabled {
+			continue
+		}
+		var inst Instance
+		var found bool
+		for _, i := range cfg.Instances {
+			if i.ID == rule.InstanceID {
+				inst, found = i, true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		changedForApp := changedByApp[inst.Type]
+		if len(changedForApp) == 0 {
+			continue
+		}
+		var ad *AppData
+		switch inst.Type {
+		case "radarr":
+			ad = &snap.Radarr
+		case "sonarr":
+			ad = &snap.Sonarr
+		default:
+			continue
+		}
+		var profile *TrashQualityProfile
+		for _, p := range ad.Profiles {
+			if p != nil && p.TrashID == rule.TrashProfileID {
+				profile = p
+				break
+			}
+		}
+		if profile == nil {
+			continue
+		}
+
+		changedTrashIDs := make([]string, 0, len(changedForApp))
+		for _, cf := range changedForApp {
+			if cf.Kind == FileChangeCF {
+				changedTrashIDs = append(changedTrashIDs, cf.TrashID)
+			}
+		}
+		affected := RuleAffectedTrashIDs(&rule, profile, ad, changedTrashIDs)
+		if len(affected) == 0 {
+			continue
+		}
+
+		fp := ComputeUpstreamFingerprint(affected)
+		var prior string
+		if rule.WatchState != nil {
+			prior = rule.WatchState.LastUpstreamFingerprint
+		}
+		shouldNotify := fp != prior
+
+		pending := make([]PendingChange, 0, len(affected))
+		for _, tid := range affected {
+			pending = append(pending, PendingChange{
+				Source:     "trash",
+				DetectedAt: now,
+				CommitHash: upstreamHead,
+				ChangeType: "cf-modified",
+				AffectedID: tid,
+			})
+		}
+		out[rule.ID] = perRuleUpdate{
+			fingerprint:  fp,
+			shouldNotify: shouldNotify,
+			pending:      pending,
+		}
+	}
+	return out
 }
 
 // runPullAndSync dispatches to the canonical App.RunPullAndSync flow with

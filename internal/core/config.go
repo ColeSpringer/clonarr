@@ -254,6 +254,15 @@ type AutoSyncRule struct {
 	// (permanent delete) actions. Empty when the rule is in normal
 	// operation. Soft-tombstone replaces the previous auto-delete cleanup.
 	OrphanedAt string `json:"orphanedAt,omitempty"`
+	// WatchState + PendingChanges — Profile Sync detection state per rule.
+	// WatchState carries the SHA fingerprint of the most-recent affected-
+	// trash-id set so notifications dedupe across consecutive detection
+	// ticks. PendingChanges accumulates union-merged change events for
+	// the rule (TRaSH-side now, Arr-drift in Phase D) — surfaced as the
+	// rule's badge + backlog timeline in the UI. Both default empty.
+	// Cleared when a successful sync applies the change set.
+	WatchState     *WatchState     `json:"watchState,omitempty"`
+	PendingChanges []PendingChange `json:"pendingChanges,omitempty"`
 }
 
 // SyncBehavior controls how the sync engine handles CF additions, score overrides, and removals.

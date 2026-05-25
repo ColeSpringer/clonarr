@@ -3020,7 +3020,7 @@ export default {
       const dir = this.syncRulesSort.dir === 'desc' ? -1 : 1;
       // Status sort order: failed > drift > pending > ok (most-urgent first
       // when sorting ascending — matches "show me what needs attention").
-      const statusOrder = { failed: 0, drift: 1, pending: 2, ok: 3 };
+      const statusOrder = { failed: 0, drift: 1, 'update-available': 2, pending: 3, ok: 4 };
       // Pre-index this instance's rules by arrProfileId so the comparator
       // is O(1) per call. Without this, lastSync / status sorts do
       // .find() twice per compare → O(N² log N) on each sort.
@@ -3071,6 +3071,14 @@ export default {
       if (rule.lastSyncError) return 'failed';
       const hasPending = rule.updatedAt && (!rule.lastSyncTime || rule.updatedAt > rule.lastSyncTime);
       if (hasPending) return 'pending';
+      // Profile Sync Phase C — backend persists per-rule PendingChanges when
+      // detection finds upstream TRaSH changes that affect this rule. Wins
+      // over 'drift' because it's more specific: drift = "local moved past
+      // rule's last sync"; update-available = "upstream moved past local
+      // AND those changes affect THIS rule's CFs".
+      if (rule.pendingChanges && rule.pendingChanges.length > 0) {
+        return 'update-available';
+      }
       const remoteCommit = this.trashStatus?.commitHash || '';
       if (rule.lastSyncCommit && remoteCommit && rule.lastSyncCommit !== remoteCommit) {
         return 'drift';
@@ -3079,20 +3087,28 @@ export default {
     },
     v3RuleStatusLabel(rule) {
       switch (this.v3RuleStatus(rule)) {
-        case 'ok':      return 'In sync';
-        case 'pending': return 'Pending';
-        case 'drift':   return 'Out of sync';
-        case 'failed':  return 'Failed';
-        default:        return '—';
+        case 'ok':                return 'In sync';
+        case 'pending':           return 'Pending';
+        case 'update-available':  {
+          const n = (rule.pendingChanges || []).length;
+          return n === 1 ? '1 update available' : `${n} updates available`;
+        }
+        case 'drift':             return 'Out of sync';
+        case 'failed':            return 'Failed';
+        default:                  return '—';
       }
     },
     v3RuleStatusTip(rule) {
       switch (this.v3RuleStatus(rule)) {
-        case 'ok':      return 'Last sync matched the target Arr profile';
-        case 'pending': return 'Saved overrides not yet pushed — click Sync now';
-        case 'drift':   return 'TRaSH was updated since last sync — Sync to apply';
-        case 'failed':  return rule?.lastSyncError || 'Last sync attempt failed';
-        default:        return '';
+        case 'ok':                return 'Last sync matched the target Arr profile';
+        case 'pending':           return 'Saved overrides not yet pushed — click Sync now';
+        case 'update-available':  {
+          const n = (rule.pendingChanges || []).length;
+          return `${n} TRaSH change${n === 1 ? '' : 's'} affecting this profile detected upstream — click Pull in the sidebar to apply`;
+        }
+        case 'drift':             return 'TRaSH was updated since last sync — Sync to apply';
+        case 'failed':            return rule?.lastSyncError || 'Last sync attempt failed';
+        default:                  return '';
       }
     },
 
