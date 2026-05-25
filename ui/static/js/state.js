@@ -87,6 +87,9 @@ export default function baseState() {
     expandedInstances: {},
     expandedProfileGroups: {},
     pulling: false,
+    checkingUpdates: false,
+    updatingInstance: '', // instance id currently running Update all
+    updatingRuleId: '',   // rule id currently running Update profile
     trashResetting: false,
     profileTabs: {},  // per app-type profile tab: { radarr: 'trash-profiles', sonarr: 'sync-rules', ... }
     // Per app-type Media Management sub-tab: { radarr: 'quality' | 'naming', sonarr: ... }.

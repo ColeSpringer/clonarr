@@ -3020,7 +3020,7 @@ export default {
       const dir = this.syncRulesSort.dir === 'desc' ? -1 : 1;
       // Status sort order: failed > drift > pending > ok (most-urgent first
       // when sorting ascending — matches "show me what needs attention").
-      const statusOrder = { failed: 0, drift: 1, 'update-available': 2, pending: 3, ok: 4 };
+      const statusOrder = { failed: 0, pending: 1, updates: 2, 'out-of-sync': 3, ok: 4 };
       // Pre-index this instance's rules by arrProfileId so the comparator
       // is O(1) per call. Without this, lastSync / status sorts do
       // .find() twice per compare → O(N² log N) on each sort.
@@ -3054,99 +3054,89 @@ export default {
       });
     },
 
-    // v3 Sprint 3 — per-rule status badge. Cheap-only checks (no API calls).
-    //   'failed'  — LastSyncError set. Wins over everything else because
-    //               the error is the user's first concern; surfacing
-    //               "pending" while a sync is broken would bury the lede.
-    //               The status pill's tooltip carries the lastSyncError so
-    //               the user can see WHY without leaving the list.
-    //   'pending' — user saved overrides via Save without a follow-up sync
-    //   'drift'   — TRaSH local commit moved past this rule's last-synced commit
-    //   'ok'      — last sync succeeded, no pending overrides, TRaSH-commit in sync
-    //   ''        — no rule object (orphaned / never-synced display path)
-    // Arr-side drift (manual Arr edits) requires dry-run; see CLAUDE.md
-    // post-v3 backlog.
-    // Phase C commit 2 — clear a rule's PendingChanges + WatchState without
-    // applying. "I've seen the notification, drop the badge." Used by the
-    // Sync Rules per-row Dismiss action. Optimistically clears the local
-    // state so the badge disappears immediately; reloads rules on success
-    // so other browser tabs converge.
-    async dismissPendingChanges(rule) {
-      if (!rule || !rule.id) return;
-      // Optimistic update — clear locally first
-      rule.pendingChanges = [];
-      rule.watchState = null;
-      try {
-        const r = await fetch('/api/auto-sync/rules/' + encodeURIComponent(rule.id) + '/dismiss-pending', { method: 'POST' });
-        if (!r.ok) {
-          this.showToast('Failed to dismiss pending changes', 'error', 4000);
-          await this.loadAutoSyncRules(); // re-fetch to undo optimistic update
-        }
-      } catch (e) {
-        console.error('dismissPendingChanges:', e);
-        this.showToast('Could not dismiss (network error)', 'error', 4000);
-        await this.loadAutoSyncRules();
-      }
-    },
-
+    // Per-rule status badge. Pending and out-of-sync share the orange
+    // colour (same urgency family) but stay separately labelled so the
+    // user knows at a glance what action resolves the state.
+    //   'failed'      — lastSyncError set. Red. Wins over everything else
+    //                   so a broken sync doesn't get buried; tooltip
+    //                   exposes the error.
+    //   'pending'     — user saved local overrides without syncing
+    //                   (updatedAt > lastSyncTime). Orange. Resolved by
+    //                   clicking Sync.
+    //   'out-of-sync' — upstream TRaSH changes affect this rule's CFs
+    //                   (pendingChanges populated by Profile Sync
+    //                   detection). Orange. Resolved by clicking Pull.
+    //                   Future Arr-side drift (Phase D) joins this state.
+    //   'ok'          — last sync succeeded and nothing pending.
+    //   ''            — no rule object (orphaned display path).
     v3RuleStatus(rule) {
       if (!rule) return '';
       if (rule.lastSyncError) return 'failed';
-      const hasPending = rule.updatedAt && (!rule.lastSyncTime || rule.updatedAt > rule.lastSyncTime);
-      if (hasPending) return 'pending';
-      // Profile Sync Phase C — backend persists per-rule PendingChanges when
-      // detection finds upstream TRaSH changes that affect this rule. Wins
-      // over 'drift' because it's more specific: drift = "local moved past
-      // rule's last sync"; update-available = "upstream moved past local
-      // AND those changes affect THIS rule's CFs".
-      if (rule.pendingChanges && rule.pendingChanges.length > 0) {
-        return 'update-available';
-      }
-      const remoteCommit = this.trashStatus?.commitHash || '';
-      if (rule.lastSyncCommit && remoteCommit && rule.lastSyncCommit !== remoteCommit) {
-        return 'drift';
-      }
+      // Three distinct "needs attention" states share the orange colour
+      // (same urgency family) but stay separately labelled so the user
+      // can tell at a glance what CAUSE drives the state and what
+      // action resolves it:
+      //   pending      — YOU edited locally without syncing
+      //   updates      — TRaSH-Guides UPSTREAM has changes pending
+      //   out-of-sync  — ARR-side drift (future, Phase D — kept as
+      //                  reserved state-string until then)
+      // Pending wins over updates: a user-driven edit is the most-
+      // immediate signal; tooltip surfaces upstream changes too so
+      // nothing is hidden.
+      const hasUnpushedEdits = rule.updatedAt && (!rule.lastSyncTime || rule.updatedAt > rule.lastSyncTime);
+      if (hasUnpushedEdits) return 'pending';
+      if (rule.pendingChanges && rule.pendingChanges.length > 0) return 'updates';
       return 'ok';
     },
     v3RuleStatusLabel(rule) {
       switch (this.v3RuleStatus(rule)) {
-        case 'ok':                return 'In sync';
-        case 'pending':           return 'Pending';
-        case 'update-available':  {
-          const n = (rule.pendingChanges || []).length;
-          return n === 1 ? '1 update available' : `${n} updates available`;
-        }
-        case 'drift':             return 'Out of sync';
-        case 'failed':            return 'Failed';
-        default:                  return '—';
+        case 'ok':           return 'In sync';
+        case 'pending':      return 'Pending';
+        case 'updates':      return 'Updates';
+        case 'out-of-sync':  return 'Out of sync'; // reserved for Phase D Arr drift
+        case 'failed':       return 'Failed';
+        default:             return '—';
       }
     },
     v3RuleStatusTip(rule) {
       switch (this.v3RuleStatus(rule)) {
-        case 'ok':                return 'Last sync matched the target Arr profile';
-        case 'pending':           return 'Saved overrides not yet pushed — click Sync now';
-        case 'update-available':  {
+        case 'ok':     return 'Last sync matched the target Arr profile';
+        case 'failed': return rule?.lastSyncError || 'Last sync attempt failed';
+        case 'out-of-sync': return 'Arr-side drift detected — external changes since last sync. Update profile to overwrite.';
+        case 'pending': {
+          // User has saved local overrides without syncing. If there are
+          // ALSO upstream changes (pendingChanges non-empty), mention them
+          // so the user knows both signals are active even though pending
+          // wins the pill label.
           const pc = rule.pendingChanges || [];
-          const n = pc.length;
-          // Build a multi-line tooltip listing what's pending so users
-          // can verify without leaving the row. Newest first; cap at 8
-          // entries with "...and N more" to keep the tooltip reasonable.
+          if (pc.length === 0) {
+            return 'You saved changes that haven\'t been pushed yet — click Sync to apply';
+          }
+          return [
+            'You saved changes that haven\'t been pushed yet — click Sync to apply.',
+            '',
+            `Also: TRaSH updated ${pc.length} CF${pc.length === 1 ? '' : 's'} affecting this profile since last sync.`,
+          ].join('\n');
+        }
+        case 'updates': {
+          const pc = rule.pendingChanges || [];
+          // Resolve CF names from local CF cache (backend populates
+          // AffectedName at detection-time, but legacy entries written
+          // before that fix have it empty — this fallback covers them).
+          const appType = rule.instanceType || '';
+          const cfs = (this.cfBrowseData && this.cfBrowseData[appType] && this.cfBrowseData[appType].cfs) || [];
+          const nameByID = new Map();
+          for (const cf of cfs) nameByID.set(cf.trash_id, cf.name);
+          const resolveName = c => c.affectedName || nameByID.get(c.affectedId) || c.affectedId || 'unknown';
           const sorted = [...pc].sort((a, b) => (b.detectedAt || '').localeCompare(a.detectedAt || ''));
           const shown = sorted.slice(0, 8);
-          const lines = [
-            `${n} TRaSH change${n === 1 ? '' : 's'} affecting this profile`,
-            'Click Pull in the sidebar to apply, or use the Dismiss action to clear without pulling.',
-            '',
-            ...shown.map(c => `• ${c.changeType || 'change'}: ${c.affectedName || c.affectedId || '?'} (commit ${(c.commitHash || '').slice(0,7)})`),
-          ];
-          if (sorted.length > shown.length) {
-            lines.push(`...and ${sorted.length - shown.length} more`);
-          }
+          const lines = [`TRaSH updated ${pc.length} CF${pc.length === 1 ? '' : 's'} in this profile since last sync:`, ''];
+          for (const c of shown) lines.push('• ' + resolveName(c));
+          if (sorted.length > shown.length) lines.push(`...and ${sorted.length - shown.length} more`);
+          lines.push('', 'Click ↻ Update profile to apply.');
           return lines.join('\n');
         }
-        case 'drift':             return 'TRaSH was updated since last sync — Sync to apply';
-        case 'failed':            return rule?.lastSyncError || 'Last sync attempt failed';
-        default:                  return '';
+        default: return '';
       }
     },
 
@@ -4797,12 +4787,391 @@ export default {
       return localClock ? serverText + ' / ' + localClock + ' local' : serverText;
     },
 
+    // --- Profile editor Updates section helpers ---
+    // pdCurrentRule resolves the rule the editor is currently editing.
+    // Returns null when the editor is in Create-New flow (no rule yet)
+    // or when autoSyncRules hasn't loaded. Same lookup pattern as
+    // saveRuleOnly — by instance + locked Arr-profile-id.
+    pdCurrentRule() {
+      if (!this.profileDetail || !this.profileDetail.instance) return null;
+      const inst = this.profileDetail.instance;
+      const arrId = this.profileDetail._editLockedArrProfileId || 0;
+      if (!arrId) return null;
+      return (this.autoSyncRules || []).find(r => r.instanceId === inst.id && r.arrProfileId === arrId) || null;
+    },
+    pdPendingChanges() {
+      const r = this.pdCurrentRule();
+      return (r && r.pendingChanges) || [];
+    },
+    // Group pending changes by editor's existing section vocabulary so
+    // the Updates panel mirrors General / Quality items / Custom Formats
+    // grouping the user already knows from other tabs.
+    pdPendingByCategory() {
+      const out = { general: [], quality: [], cfs: [] };
+      for (const c of this.pdPendingChanges()) {
+        const t = c.changeType || '';
+        // General — profile-level settings (name, score thresholds,
+        // upgrade allowed, language). Score thresholds belong to General
+        // tab in TRaSH/Arr's profile editor, not Quality items.
+        if (t === 'profile-name' ||
+            t === 'profile-upgrade-allowed' ||
+            t === 'profile-language' ||
+            t === 'profile-min-format-score' ||
+            t === 'profile-cutoff-format-score' ||
+            t === 'profile-min-upgrade-format-score') {
+          out.general.push(c);
+          continue;
+        }
+        // Quality items — cutoff QUALITY (not score) + per-quality allowed flips.
+        // profile-modified is the legacy generic emit (pre-granular) —
+        // map there since its phrasing was "quality settings updated".
+        if (t === 'profile-modified' ||
+            t === 'profile-quality-cutoff' ||
+            t === 'profile-quality-allowed' ||
+            t === 'profile-quality-added' ||
+            t === 'profile-quality-removed') {
+          out.quality.push(c);
+          continue;
+        }
+        // Custom Formats — cf-modified, cf-group-*, profile-formatitem-*
+        out.cfs.push(c);
+      }
+      return out;
+    },
+    // Resolve CF display name for CF-section entries — pulls from cache
+    // when backend's AffectedName is empty (legacy entries written before
+    // the AffectedName fix).
+    pdResolveUpdateName(c) {
+      if (c.affectedName) return c.affectedName;
+      const appType = this.profileDetail?.instance?.type || '';
+      const cfs = (this.cfBrowseData && this.cfBrowseData[appType] && this.cfBrowseData[appType].cfs) || [];
+      const hit = cfs.find(x => x.trash_id === c.affectedId);
+      return hit ? hit.name : (c.affectedId || 'unknown');
+    },
+    // Mode-aware + rule-state-aware action guidance for the Updates
+    // panel footer. Tells the user WHEN/HOW these changes will be
+    // applied without putting a per-rule "apply" button in the editor
+    // (Pull is a global TRaSH-repo operation, not per-rule).
+    // Whether the editor's Update now button should show spinner / be
+    // disabled. True while EITHER the rule-level update flow is running
+    // (updateThisProfile sets updatingRuleId), OR while a per-instance
+    // Update all is running for this rule's instance.
+    pdUpdateBusy() {
+      const r = this.pdCurrentRule();
+      if (!r) return false;
+      if (this.updatingRuleId === r.id) return true;
+      if (this.updatingInstance === r.instanceId) return true;
+      return false;
+    },
+    // Trigger the same pull-then-sync-one-rule flow as the row-level
+    // Update profile button. Synthesises the sh-shape quickSync expects
+    // by combining profileDetail (TRaSH profile + Arr profile lookup)
+    // with the live rule's persisted selectedCFs / excludedCFs so the
+    // sync plan can be built without crashing on undefined fields.
+    async pdUpdateNow() {
+      if (!this.profileDetail || !this.profileDetail.instance) return;
+      const inst = this.profileDetail.instance;
+      const arrId = this.profileDetail._editLockedArrProfileId || 0;
+      if (!arrId) {
+        this.showToast('No saved rule yet — Save & Sync first to create the rule, then Update.', 'warning', 6000);
+        return;
+      }
+      const rule = this.pdCurrentRule();
+      const profile = this.profileDetail.profile || {};
+      const sh = {
+        arrProfileId: arrId,
+        arrProfileName: this.profileDetail._arrProfileName || profile.name || '',
+        profileName: profile.name || '',
+        profileTrashId: profile.trashId || (rule && rule.trashProfileId) || '',
+        importedProfileId: (rule && rule.importedProfileId) || '',
+        selectedCFs: (rule && Array.isArray(rule.selectedCFs))
+          ? Object.fromEntries(rule.selectedCFs.map(id => [id, true]))
+          : {},
+        excludedCFs: (rule && Array.isArray(rule.excludedCFs)) ? rule.excludedCFs.slice() : [],
+        keepArrCFIDs: (rule && rule.keepArrCFIDs) || null,
+      };
+      await this.updateThisProfile(inst, sh);
+    },
+    pdUpdateActionLabel() {
+      const rule = this.pdCurrentRule();
+      if (rule && rule.enabled === false) {
+        return 'Auto-sync is OFF on this rule. Update now applies these changes regardless.';
+      }
+      const mode = (this.config?.profileSync?.mode || '').toLowerCase();
+      const remaining = this.nextPullTime();
+      const clock = this.nextPullClockLabel();
+      const when = remaining ? (remaining === 'soon' ? 'soon' : 'in ' + remaining) + (clock ? ' (' + clock + ')' : '') : '';
+      if (mode === 'auto') {
+        return when ? 'Otherwise scheduled pull will apply ' + when + '.' : '';
+      }
+      // notify / delayed / manual — no automatic apply currently. The
+      // delayed-mode auto-apply scheduler hasn't shipped yet (Phase D);
+      // until it does, "delayed" behaves identically to "notify": detection
+      // runs on schedule, apply is manual via this Update button.
+      return '';
+    },
+
     nextPullLabel() {
       const remaining = this.nextPullTime();
       if (!remaining) return '';
       const clock = this.nextPullClockLabel();
       const suffix = clock ? ' (' + clock + ')' : '';
-      return remaining === 'soon' ? 'next pull soon' + suffix : 'next pull in ' + remaining + suffix;
+      // Mode-aware label: in Notify/Delayed mode the scheduler runs a
+      // detection-only check (no pull), so the wording must reflect what
+      // actually happens on the next tick — not "pull" which implies
+      // fetching new TRaSH data.
+      const mode = (this.config?.profileSync?.mode || '').toLowerCase();
+      const action = (mode === 'notify' || mode === 'delayed') ? 'check' : 'pull';
+      return remaining === 'soon' ? `next ${action} soon` + suffix : `next ${action} in ` + remaining + suffix;
+    },
+
+    // Sidebar-footer helpers. Together with the mode-aware nextPullLabel
+    // they make the footer reflect what the scheduler actually does in the
+    // user's current Mode — "Last checked" in Notify/Delayed, "TRaSH
+    // pulled" in Auto — instead of always claiming "pulled" even when no
+    // pull happened.
+    // Sidebar footer status — is upstream ahead of local? True when
+    // ProfileSync detection has noticed new upstream commits we haven't
+    // pulled yet. Length-normalised compare (matches backend gate)
+    // since the persisted heads can be 7-char short or 40-char full
+    // depending on which version of clonarr wrote them.
+    // Aggregate pending updates across all rules for the sidebar popover.
+    // Same data the per-rule tooltips show, just rolled up so the user
+    // can see at-a-glance what's waiting upstream without opening each
+    // rule. Grouped by app (Radarr / Sonarr) then by ChangeType class
+    // (Custom Formats / Profile settings / Quality items). HTML output
+    // because the popover renders via x-html for inline structure.
+    pendingUpdatesSummary() {
+      const rules = this.autoSyncRules || [];
+      const insts = this.instances || [];
+      const instByID = new Map();
+      for (const i of insts) instByID.set(i.id, i);
+      // Collect unique changes across rules. Key by ChangeType + AffectedID
+      // so the same CF affecting 8 rules counts once.
+      const seen = new Map(); // appType → Map(changeType → Map(key → name))
+      for (const r of rules) {
+        const pc = r.pendingChanges || [];
+        if (!pc.length) continue;
+        const inst = instByID.get(r.instanceId);
+        if (!inst) continue;
+        const app = inst.type || '';
+        if (!seen.has(app)) seen.set(app, new Map());
+        const byType = seen.get(app);
+        const cfs = (this.cfBrowseData && this.cfBrowseData[app] && this.cfBrowseData[app].cfs) || [];
+        const nameByID = new Map();
+        for (const cf of cfs) nameByID.set(cf.trash_id, cf.name);
+        for (const c of pc) {
+          const t = c.changeType || 'unknown';
+          if (!byType.has(t)) byType.set(t, new Map());
+          const key = c.affectedId + '|' + t;
+          const name = c.affectedName || nameByID.get(c.affectedId) || c.affectedId || 'unknown';
+          byType.get(t).set(key, name);
+        }
+      }
+      if (seen.size === 0) {
+        return '<em>No specific affected items detected yet — click Check to refresh.</em>';
+      }
+      // Map ChangeType into section vocabulary the editor already uses.
+      const sectionFor = (t) => {
+        if (t === 'profile-name' || t === 'profile-upgrade-allowed' || t === 'profile-language' ||
+            t === 'profile-min-format-score' || t === 'profile-cutoff-format-score' || t === 'profile-min-upgrade-format-score') return 'General';
+        if (t === 'profile-modified' || t === 'profile-quality-cutoff' || t === 'profile-quality-allowed' ||
+            t === 'profile-quality-added' || t === 'profile-quality-removed') return 'Quality items';
+        return 'Custom Formats';
+      };
+      const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const parts = [];
+      for (const [app, byType] of seen) {
+        const appLabel = app === 'radarr' ? 'Radarr' : (app === 'sonarr' ? 'Sonarr' : app);
+        // Re-bucket entries by editor-section vocabulary
+        const sections = new Map(); // section → Set(name)
+        for (const [t, names] of byType) {
+          const s = sectionFor(t);
+          if (!sections.has(s)) sections.set(s, new Set());
+          for (const name of names.values()) sections.get(s).add(name);
+        }
+        parts.push('<div style="margin-top:6px;font-weight:600">' + esc(appLabel) + '</div>');
+        for (const sName of ['General', 'Quality items', 'Custom Formats']) {
+          const items = sections.get(sName);
+          if (!items || items.size === 0) continue;
+          parts.push('<div style="margin-top:2px"><span style="color:var(--text-muted)">' + esc(sName) + ':</span></div>');
+          const list = Array.from(items).slice(0, 8);
+          for (const name of list) parts.push('<div style="padding-left:8px">• ' + esc(name) + '</div>');
+          if (items.size > list.length) parts.push('<div style="padding-left:8px;color:var(--text-muted)">...and ' + (items.size - list.length) + ' more</div>');
+        }
+      }
+      return parts.join('');
+    },
+
+    trashUpstreamAhead() {
+      const u = this.config?.profileSync?.upstreamHead || '';
+      const l = this.config?.profileSync?.localHead || '';
+      if (!u || !l) return false;
+      const len = Math.min(u.length, l.length);
+      return u.slice(0, len) !== l.slice(0, len);
+    },
+    commitURL(hash) {
+      if (!hash) return '';
+      const url = (this.config?.trashRepo?.url || '').replace(/\.git$/, '');
+      if (!url) return '';
+      return url + '/commit/' + hash;
+    },
+    profileSyncIsNotifyOrDelayed() {
+      const mode = (this.config?.profileSync?.mode || '').toLowerCase();
+      return mode === 'notify' || mode === 'delayed';
+    },
+    // Wait for a pull-only operation to finish. /api/trash/pull returns
+    // 202 immediately + spawns a background goroutine. Two-phase poll:
+    //   Phase 1 — wait until trashStatus.pulling becomes TRUE (so we
+    //             don't false-finish before the goroutine even acquired
+    //             the pull mutex)
+    //   Phase 2 — wait until it becomes FALSE again (pull completed)
+    // Without phase 1, downstream orchestration could chain sync against
+    // pre-pull TRaSH data. 5s phase-1 budget; 120s phase-2.
+    async _waitForPullDone(phase1Ms = 5000, phase2Ms = 120000) {
+      const phase1Start = Date.now();
+      let started = false;
+      while (Date.now() - phase1Start < phase1Ms) {
+        await this.loadTrashStatus();
+        if (this.trashStatus?.pulling) { started = true; break; }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      if (!started) {
+        // Goroutine never flipped pulling=true within budget. Could be
+        // empty-clone fast-path, error, or pull already done by polling
+        // tick. Treat as done — caller's downstream loadTrashStatus
+        // covers staleness.
+        return true;
+      }
+      const phase2Start = Date.now();
+      while (Date.now() - phase2Start < phase2Ms) {
+        await new Promise(r => setTimeout(r, 1000));
+        await this.loadTrashStatus();
+        if (!this.trashStatus?.pulling) return true;
+      }
+      return false;
+    },
+
+    // Update all enabled rules on this instance: pull TRaSH data first
+    // (since the user wants the latest upstream), then run the existing
+    // per-instance sync-all loop. Other instances are not touched —
+    // user must run Update all on each instance they care about.
+    async updateAllForInstance(inst) {
+      if (this.updatingInstance) return;
+      this.updatingInstance = inst.id;
+      try {
+        const prevCommit = this.trashStatus?.commitHash || '';
+        await fetch('/api/trash/pull', { method: 'POST' });
+        await this._waitForPullDone();
+        if (this.trashStatus?.pullError) {
+          this.showToast(`Update all (${inst.name}): pull failed — ${this.trashStatus.pullError}`, 'error', 8000);
+          return;
+        }
+        // Reload data sources that the sync loop reads from
+        await this.loadCFBrowse(inst.type);
+        await this.loadTrashProfiles(inst.type);
+        // Now run the existing per-instance sync-all loop
+        await this.syncAllForInstance(inst);
+        if (this.trashStatus?.commitHash && this.trashStatus.commitHash !== prevCommit) {
+          this.showToast(`Update all complete (${inst.name}) — TRaSH advanced to ${this.trashStatus.commitHash}`, 'success', 4000);
+        }
+      } finally {
+        this.updatingInstance = '';
+      }
+    },
+
+    // Update just one rule: pull TRaSH first (so the rule gets the
+    // latest upstream content), then sync ONLY this rule. Other rules
+    // on the same instance stay at their previous lastSyncCommit + their
+    // Arr state is untouched, even though local TRaSH has advanced.
+    async updateThisProfile(inst, sh) {
+      const rule = this.autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId);
+      const ruleId = rule?.id || '';
+      if (!ruleId || this.updatingRuleId) return;
+      this.updatingRuleId = ruleId;
+      try {
+        await fetch('/api/trash/pull', { method: 'POST' });
+        await this._waitForPullDone();
+        if (this.trashStatus?.pullError) {
+          this.showToast(`Update profile: pull failed — ${this.trashStatus.pullError}`, 'error', 8000);
+          return;
+        }
+        await this.loadCFBrowse(inst.type);
+        await this.loadTrashProfiles(inst.type);
+        // Reuse the existing quickSync path for the actual Arr write.
+        await this.quickSync(inst, sh);
+        await this.loadAutoSyncRules();
+      } finally {
+        this.updatingRuleId = '';
+      }
+    },
+
+    async checkTrashUpdates() {
+      if (this.checkingUpdates) return;
+      this.checkingUpdates = true;
+      try {
+        const r = await fetch('/api/profile-sync/check', { method: 'POST' });
+        if (!r.ok) {
+          let msg = 'Check failed';
+          try { const data = await r.json(); if (data && data.error) msg = data.error; } catch {}
+          this.showToast(msg, 'error', 4000);
+          return;
+        }
+        // Refresh state so any newly-detected pendingChanges show up
+        await this.loadTrashStatus();
+        try {
+          const ps = await fetch('/api/profile-sync');
+          if (ps.ok) {
+            const data = await ps.json();
+            if (this.config.profileSync) {
+              this.config.profileSync.lastRun = data.lastRun || '';
+              this.config.profileSync.upstreamHead = data.upstreamHead || '';
+              this.config.profileSync.localHead = data.localHead || '';
+            }
+          }
+        } catch {}
+        await this.loadAutoSyncRules();
+        // Compose informative toast based on post-check state.
+        const upstream = this.config?.profileSync?.upstreamHead || '';
+        const local = this.config?.profileSync?.localHead || '';
+        // Length-normalised compare (matches backend gate)
+        let upstreamAhead = false;
+        if (upstream && local) {
+          const len = Math.min(upstream.length, local.length);
+          upstreamAhead = upstream.slice(0, len) !== local.slice(0, len);
+        }
+        if (!upstreamAhead) {
+          this.showToast('TRaSH-Guides is up to date — no upstream changes', 'success', 3000);
+          return;
+        }
+        // Upstream ahead — count rules with pendingChanges to summarise impact
+        const affectedRules = (this.autoSyncRules || []).filter(r => (r.pendingChanges || []).length > 0);
+        if (affectedRules.length === 0) {
+          this.showToast('TRaSH has new commits but none affect your synced profiles', 'info', 4000);
+          return;
+        }
+        // Unique CFs across affected rules
+        const cfNames = new Set();
+        for (const r of affectedRules) {
+          const appType = r.instanceType || '';
+          const cfs = (this.cfBrowseData && this.cfBrowseData[appType] && this.cfBrowseData[appType].cfs) || [];
+          const nameByID = new Map();
+          for (const cf of cfs) nameByID.set(cf.trash_id, cf.name);
+          for (const pc of r.pendingChanges) {
+            const name = pc.affectedName || nameByID.get(pc.affectedId) || pc.affectedId;
+            cfNames.add(name);
+          }
+        }
+        const ruleCount = affectedRules.length;
+        const cfCount = cfNames.size;
+        const cfLabel = cfCount === 1 ? '1 CF' : `${cfCount} CFs`;
+        const ruleLabel = ruleCount === 1 ? '1 profile' : `${ruleCount} profiles`;
+        this.showToast(`Found ${cfLabel} affecting ${ruleLabel} — use Update all / Update profile to apply`, 'info', 5000);
+      } catch (e) {
+        this.showToast('Check failed (network error)', 'error', 4000);
+      } finally {
+        this.checkingUpdates = false;
+      }
     },
 
     formatCommitDate(dateStr) {

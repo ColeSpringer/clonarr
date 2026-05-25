@@ -159,30 +159,29 @@
 .v3-last-sync { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
 .v3-last-sync.never { color: var(--text-muted); font-style: italic; }
 
-/* Status pill */
+/* Status pill — no leading dot (the text colour is signal enough; the
+   dot was redundant noise). */
 .v3-status {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 8px; border-radius: 10px; font-size: 11px;
   white-space: nowrap; font-weight: 500;
 }
-.v3-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .v3-status.ok { color: var(--accent-green); }
-.v3-status.ok::before { background: var(--accent-green); }
+/* Three distinct labels share the same accent-orange — they belong to
+   the same "needs attention" family — but the labels (rendered in the
+   markup) tell the user the CAUSE + action:
+     pending     → user saved local edits, click Sync/Apply to push
+     updates     → TRaSH-Guides has upstream updates for this rule
+     out-of-sync → Arr-side drift (Phase D — reserved colour) */
 .v3-status.pending { color: var(--accent-orange); }
-.v3-status.pending::before { background: var(--accent-orange); }
-/* Drift uses a brighter amber than pending's --accent-orange so the two
-   read as distinct states at a glance. --accent-orange-bright exists
-   in tokens.css for both light and dark modes. */
-.v3-status.drift { color: var(--accent-orange-bright); }
-.v3-status.drift::before { background: var(--accent-orange-bright); }
-/* update-available: Profile Sync detected new upstream TRaSH commits that
-   affect this rule's CFs. Accent-blue matches the sidebar
-   "↑ TRaSH updates available" indicator so the two surfaces speak the
-   same visual language for the same event. */
-.v3-status.update-available { color: var(--accent-blue); }
-.v3-status.update-available::before { background: var(--accent-blue); }
+.v3-status.updates { color: var(--accent-orange); }
+.v3-status.out-of-sync { color: var(--accent-orange); }
 .v3-status.failed { color: var(--accent-red); }
-.v3-status.failed::before { background: var(--accent-red); }
+/* Clickable variant for places where the pill should act as a button
+   (e.g. the "Update available" chip in the editor's top action bar).
+   Inherits the family colour + adds button-affordance underline on hover. */
+button.v3-status { background: transparent; border: 0; cursor: pointer; font-family: inherit; }
+button.v3-status:hover { text-decoration: underline; }
 
 /* Auto-sync cell */
 .v3-auto-cell { display: flex; align-items: center; gap: 7px; }

@@ -766,11 +766,13 @@ export function clonarr() {
       setInterval(async () => {
         this._nowTick = Date.now();
         const prevPull = this.trashStatus?.lastPull;
+        const prevLastRun = this.config?.profileSync?.lastRun || '';
         await this.loadTrashStatus();
         // Refresh ProfileSync state so the sidebar "TRaSH updates available"
         // indicator reflects what the backend watcher persisted on its
         // most-recent tick. Same 30s cadence as trashStatus so they stay
         // in step. Best-effort; failures are non-fatal.
+        let lastRunChanged = false;
         try {
           const ps = await fetch('/api/profile-sync');
           if (ps.ok) {
@@ -779,12 +781,23 @@ export function clonarr() {
             // (mode, sources, interval) are managed by the Settings UI
             // and shouldn't be clobbered mid-edit.
             if (this.config.profileSync) {
-              this.config.profileSync.lastRun = data.lastRun || '';
+              const newLastRun = data.lastRun || '';
+              if (newLastRun && newLastRun !== prevLastRun) {
+                lastRunChanged = true;
+              }
+              this.config.profileSync.lastRun = newLastRun;
               this.config.profileSync.upstreamHead = data.upstreamHead || '';
               this.config.profileSync.localHead = data.localHead || '';
             }
           }
         } catch (e) { /* network blip — try again next tick */ }
+        // In Notify/Delayed mode, a scheduled check populates per-rule
+        // pendingChanges on the backend without pulling. Reload the
+        // rules list when lastRun advances so the "Outdated" pill +
+        // tooltip appear without requiring a page refresh.
+        if (lastRunChanged) {
+          await this.loadAutoSyncRules();
+        }
         // If lastPull changed (scheduled pull completed), reload sync data
         if (this.trashStatus?.lastPull && this.trashStatus.lastPull !== prevPull) {
           // Show pull diff toast for scheduled pulls (only if diff is fresh — newCommit matches current)

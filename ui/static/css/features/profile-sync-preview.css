@@ -983,6 +983,17 @@ button.sp-summary-active:focus-visible {
   white-space: nowrap;
   min-width: 0;
 }
+/* Updates panel rows have plenty of room (no score column) and the
+   entry text is descriptive — let the full label render and wrap when
+   needed instead of truncating at the default name-column width. */
+.sp-ov-card-updates .sp-ov-cf-row {
+  grid-template-columns: 1fr;
+}
+.sp-ov-card-updates .sp-ov-cf-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
 .sp-ov-cf-score {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);

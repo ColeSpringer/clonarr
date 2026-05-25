@@ -186,7 +186,7 @@
           </span>
         </template>
         <template x-if="!profileDetail?.detail?.imported">
-          <span class="sp-action-buttons-native" style="display:flex;gap:8px">
+          <span class="sp-action-buttons-native" style="display:flex;gap:8px;align-items:center">
             <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
             <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
@@ -453,6 +453,20 @@
         </template>
       </button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
+      <!-- Profile updates — top-level sibling tab, shown only when
+           Profile Sync detection has found upstream TRaSH changes for
+           this rule. Its own body lives below; no longer a sub-section
+           of Profile overview. -->
+      <!-- $watch — when pendingChanges drops to zero (e.g. after Update now
+           successfully syncs the rule), auto-switch off Updates so the
+           user doesn't get stuck on a hidden tab showing blank space. -->
+      <button class="sp-tab"
+              x-show="pdPendingChanges().length > 0"
+              x-init="$watch('pdPendingChanges().length', n => { if (n === 0 && spActiveTab === 'updates') spActiveTab = 'overview'; })"
+              :class="{ active: spActiveTab === 'updates' }"
+              @click="spActiveTab = 'updates'">Profile updates
+        <span class="sp-tab-count" x-text="pdPendingChanges().length"></span>
+      </button>
     </div>
 
     <!-- ===== Profile default tab ===== -->
@@ -976,6 +990,10 @@
           <span class="sp-sub-nav-label">Diffs</span>
           <span class="sp-sub-nav-count" x-text="spOverviewDiffCount() || ''"></span>
         </button>
+        <!-- "Updates" was previously a sub-nav entry here; it's been
+             promoted to a top-level tab ("Profile updates") next to
+             Profile default / Profile overview so the user always sees
+             it regardless of which sub-section of Overview they're on. -->
         <div class="sp-overview-nav-divider" aria-hidden="true"></div>
         <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'general' }"
@@ -1634,6 +1652,71 @@
             </div>
           </template>
           <div class="sp-ov-empty" x-show="spOverviewFlatCFs('additional').length === 0">No additional CFs activated.</div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ===== Profile updates tab =====
+         Shown only when this rule has pendingChanges populated by
+         Profile Sync detection. Lists upcoming changes grouped by the
+         same section vocabulary as elsewhere in the editor (General,
+         Quality items, Custom Formats), with an "Update now" action
+         button that runs the same pull-then-sync-this-rule flow as
+         the row-level Update profile button. -->
+    <div class="sp-body" x-show="spActiveTab === 'updates'"
+         x-data="{ get _u() { return pdPendingByCategory(); } }"
+         style="grid-template-columns: 1fr">
+      <main class="sp-content">
+        <section class="sp-ov-card sp-ov-card-updates">
+          <h3 class="sp-ov-card-title">
+            Upcoming changes on next pull
+            <span class="sp-ov-card-count" x-text="'(' + pdPendingChanges().length + ')'"></span>
+          </h3>
+
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_u.general.length > 0">
+            <div class="sp-ov-cf-section-title">General <span class="sp-ov-cf-section-count" x-text="_u.general.length"></span></div>
+            <div class="sp-ov-cf-list">
+              <template x-for="c in _u.general" :key="'upd-gen-'+c.affectedId+c.changeType">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_u.quality.length > 0">
+            <div class="sp-ov-cf-section-title">Quality items <span class="sp-ov-cf-section-count" x-text="_u.quality.length"></span></div>
+            <div class="sp-ov-cf-list">
+              <template x-for="c in _u.quality" :key="'upd-q-'+c.affectedId+c.changeType">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_u.cfs.length > 0">
+            <div class="sp-ov-cf-section-title">Custom Formats <span class="sp-ov-cf-section-count" x-text="_u.cfs.length"></span></div>
+            <div class="sp-ov-cf-list">
+              <template x-for="c in _u.cfs" :key="'upd-cf-'+c.affectedId+c.changeType">
+                <div class="sp-ov-cf-row">
+                  <span class="sp-ov-cf-name" x-text="pdResolveUpdateName(c)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="sp-ov-updates-footer"
+               style="margin-top:16px; padding:10px 12px; border-radius:6px; background:var(--bg-subtle); display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap;">
+            <span style="color:var(--text-muted); font-size:13px;" x-text="pdUpdateActionLabel()"></span>
+            <button type="button" class="btn btn-sm"
+                    @click="pdUpdateNow()"
+                    :disabled="pdUpdateBusy() || pulling"
+                    x-tt="'Pull TRaSH-Guides, then sync only this profile. Same as the row-level Update profile action.'">
+              <span x-show="pdUpdateBusy()" class="spinner"></span>
+              <span x-show="!pdUpdateBusy()">Update now</span>
+            </button>
+          </div>
         </section>
       </main>
     </div>

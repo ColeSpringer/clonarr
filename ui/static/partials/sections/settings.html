@@ -376,11 +376,8 @@
                   <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">No automatic Arr writes. When new TRaSH commits are detected upstream, you get a notification (Discord/NTFY/Apprise — opt in per agent under Notifications) and a "↑ TRaSH updates available" badge in the sidebar. Click <em>Pull</em> when you're ready to apply.</span>
                 </span>
               </label>
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
-                <input type="radio" name="profile-sync-mode" value="delayed"
-                       :checked="config.profileSync.mode === 'delayed'"
-                       @change="config.profileSync.mode = 'delayed'; saveProfileSync()"
-                       style="margin-top:3px">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:not-allowed;font-size:13px;opacity:0.55">
+                <input type="radio" name="profile-sync-mode" value="delayed" disabled style="margin-top:3px">
                 <span>
                   <span style="font-weight:500">Wait before applying — apply on a separate schedule</span>
                   <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
@@ -397,7 +394,6 @@
           <div class="setting-row" style="border-top:1px solid var(--bg-muted);margin-top:14px;padding-top:14px">
             <div class="setting-label" x-tt="'Periodically force-resync your saved profile settings to Sonarr/Radarr — overwrites any manual changes done in the *arr UI or via other tools. Independent of Pull Interval. Default off; turn on if you want clonarr to keep the profile clean even when no TRaSH updates have happened.'">
               Auto-sync Schedule
-              <span style="display:block;font-size:11px;color:var(--text-muted-secondary);font-weight:400;margin-top:2px">legacy — superseded soon by <em>Wait before applying</em></span>
             </div>
             <div class="setting-value" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <select class="input" style="width:130px"
