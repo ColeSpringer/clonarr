@@ -164,7 +164,20 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		return fmt.Errorf("profile-sync: persist result: %w", updErr)
 	}
 
-	if upstreamHead != localCommit {
+	// Length-normalised compare. New code stores the full 40-char hash on
+	// both sides, but existing installs may have a 7-char shortened local
+	// hash persisted in last-pull-diff.json from an earlier --short bug;
+	// truncating the longer side to the shorter's length lets the very
+	// first detection tick after upgrade compare equal instead of firing
+	// a false "upstream ahead" notification. The next loadAndSwap rewrites
+	// CommitHash to the full form and this fallback stops mattering.
+	cmpLocal, cmpUpstream := localCommit, upstreamHead
+	if len(cmpLocal) < len(cmpUpstream) {
+		cmpUpstream = cmpUpstream[:len(cmpLocal)]
+	} else if len(cmpUpstream) < len(cmpLocal) {
+		cmpLocal = cmpLocal[:len(cmpUpstream)]
+	}
+	if cmpUpstream != cmpLocal {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
 		// Phase C commit 2 — fetch commit-range to a dedicated side-ref
 		// + walk the file changes + per-rule PendingChanges + per-rule

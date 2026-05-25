@@ -1173,8 +1173,14 @@ func (ts *TrashStore) LoadFromDisk() error {
 // returned the error to the caller and never updated pullError — so a
 // corrupted on-disk repo after a failed parse looked "clean" in the UI.)
 func (ts *TrashStore) loadAndSwap() error {
-	// Get commit hash
-	hash, err := exec.Command("git", "-C", ts.dataDir, "rev-parse", "--short", "HEAD").Output()
+	// Get commit hash — full 40-char form so it compares equal to
+	// `git ls-remote` output in the profile-sync runner. Previously this
+	// used --short (7 chars), which made the upstream-ahead detection
+	// fire spuriously on every tick: shortened-local "abc1234" never
+	// equals full-upstream "abc1234def...", so the gate always saw a
+	// delta. Display layers (logs, notifications) call shortHash()
+	// themselves; storage is full hash.
+	hash, err := exec.Command("git", "-C", ts.dataDir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		ts.SetPullError(err.Error())
 		return fmt.Errorf("get commit hash: %w", err)
