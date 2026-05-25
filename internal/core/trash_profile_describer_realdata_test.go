@@ -25,14 +25,6 @@ func TestDescribeProfile_RealRadarrData(t *testing.T) {
 		t.Skipf("skipping: TRaSH data dir not available (%s)", dataDir)
 	}
 
-	mdSections, err := LoadProfileMarkdown(dataDir, "radarr")
-	if err != nil {
-		t.Fatalf("LoadProfileMarkdown: %v", err)
-	}
-	if len(mdSections) == 0 {
-		t.Fatal("markdown sections empty — sparse-checkout not extended yet?")
-	}
-
 	groupDir := filepath.Join(dataDir, "docs", "json", "radarr", "cf-groups")
 	groupFiles, err := os.ReadDir(groupDir)
 	if err != nil {
@@ -101,7 +93,7 @@ func TestDescribeProfile_RealRadarrData(t *testing.T) {
 			if err := json.Unmarshal(data, &p); err != nil {
 				t.Fatalf("parse %s: %v", tc.filename, err)
 			}
-			desc := describeProfile("radarr", &p, groups, mdSections[p.Name])
+			desc := describeProfile("radarr", &p, groups)
 
 			// Marshal and print for visual verification
 			pretty, _ := json.MarshalIndent(desc, "", "  ")

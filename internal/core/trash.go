@@ -1060,16 +1060,13 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 		// Ensure sparse-checkout config matches the current clonarr version's
 		// expected pattern. Runs unconditionally — git's sparse-checkout set
 		// is idempotent (no-op if already matches), and the cost of always
-		// running it is negligible (~10ms). Without this, upgrades that need
-		// new files (e.g. v3-Sprint-4 added the setup-quality-profiles.md
-		// files for auto-derived profile descriptions) wouldn't pick them up
-		// on existing clones — only fresh clones get the new pattern.
+		// running it is negligible (~10ms). Upgrades that change the file
+		// set (add/remove paths) pick them up automatically on the next
+		// pull, not just on fresh clones.
 		for _, cmd := range []*exec.Cmd{
 			exec.Command("git", "-C", ts.dataDir, "config", "core.sparseCheckout", "true"),
 			exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
-				"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
-				"docs/Radarr/radarr-setup-quality-profiles.md",
-				"docs/Sonarr/sonarr-setup-quality-profiles.md"),
+				"docs/json/", "docs/updates.txt", "includes/cf-descriptions/"),
 		} {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -1111,9 +1108,7 @@ func (ts *TrashStore) CloneOrPull(repoURL, branch string) error {
 			return fmt.Errorf("git clone: %w", err)
 		}
 		cmd = exec.Command("git", "-C", ts.dataDir, "sparse-checkout", "set", "--no-cone",
-			"docs/json/", "docs/updates.txt", "includes/cf-descriptions/",
-			"docs/Radarr/radarr-setup-quality-profiles.md",
-			"docs/Sonarr/sonarr-setup-quality-profiles.md")
+			"docs/json/", "docs/updates.txt", "includes/cf-descriptions/")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -1173,14 +1168,8 @@ func (ts *TrashStore) LoadFromDisk() error {
 // returned the error to the caller and never updated pullError — so a
 // corrupted on-disk repo after a failed parse looked "clean" in the UI.)
 func (ts *TrashStore) loadAndSwap() error {
-	// Get commit hash — full 40-char form so it compares equal to
-	// `git ls-remote` output in the profile-sync runner. Previously this
-	// used --short (7 chars), which made the upstream-ahead detection
-	// fire spuriously on every tick: shortened-local "abc1234" never
-	// equals full-upstream "abc1234def...", so the gate always saw a
-	// delta. Display layers (logs, notifications) call shortHash()
-	// themselves; storage is full hash.
-	hash, err := exec.Command("git", "-C", ts.dataDir, "rev-parse", "HEAD").Output()
+	// Get commit hash
+	hash, err := exec.Command("git", "-C", ts.dataDir, "rev-parse", "--short", "HEAD").Output()
 	if err != nil {
 		ts.SetPullError(err.Error())
 		return fmt.Errorf("get commit hash: %w", err)

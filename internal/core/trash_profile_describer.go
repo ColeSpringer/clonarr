@@ -1,18 +1,14 @@
 package core
 
 import (
-	"bufio"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 )
 
 // ProfileDescription is the full auto-derived description of a TRaSH quality
-// profile, computed from three data sources without any per-profile hand-curation:
+// profile, computed from two data sources without any per-profile hand-curation:
 //
 //  1. Profile JSON (quality-profiles/X.json) — items[], cutoff, formatItems
 //  2. CF-group JSONs (cf-groups/*.json) — quality_profiles.include maps,
@@ -20,8 +16,6 @@ import (
 //     and which HDR variants (DV Boost, HDR10+ Boost) are available as
 //     opt-ins. The cf-group lists themselves aren't stored — only the
 //     boolean conclusions on Axes.HDR / Axes.Audio.
-//  3. Profile markdown section (docs/<App>/<app>-setup-quality-profiles.md) —
-//     tagline ("If you prefer ..."), size ("_Size: X-Y GB..._"), optional Note
 //
 // On top of those raw fields, two composed bullet-lists give the editorial
 // framing TRaSH itself doesn't ship: Highlights ("what you get") and
@@ -37,7 +31,6 @@ type ProfileDescription struct {
 	Tagline    string      `json:"tagline,omitempty"`
 	Axes       ProfileAxes `json:"axes"`
 	Highlights []string    `json:"highlights,omitempty"`
-	TrashNote  string      `json:"trashNote,omitempty"`
 	// Disclaimer is TRaSH's own prose disclaimer from the profile JSON's
 	// trash_description field, surfaced when it's not just the structural
 	// "Quality Profile that covers: ..." auto-text. Currently used for
@@ -88,19 +81,10 @@ type ProfileAudioSummary struct {
 	Scored bool `json:"scored"`
 }
 
-// ProfileMarkdownSection is the parsed per-profile section of TRaSH's
-// docs/<App>/<app>-setup-quality-profiles.md file. All fields are optional —
-// not every profile has a Note.
-type ProfileMarkdownSection struct {
-	Tagline  string
-	SizeText string
-	Note     string
-}
-
 // DescribeProfiles returns ProfileDescription for every profile in the app's
-// loaded TRaSH data. Combines profile JSONs, cf-groups, and the per-app
-// setup-quality-profiles.md sections. Safe to call before data is loaded —
-// returns empty slice if no profiles are available yet.
+// loaded TRaSH data. Combines profile JSONs and cf-groups — all fields
+// auto-derived from data, no external markdown dependency. Safe to call
+// before data is loaded — returns empty slice if no profiles available.
 func (ts *TrashStore) DescribeProfiles(app string) ([]ProfileDescription, error) {
 	snap := ts.Snapshot()
 	if snap == nil {
@@ -118,14 +102,9 @@ func (ts *TrashStore) DescribeProfiles(app string) ([]ProfileDescription, error)
 	if len(appData.Profiles) == 0 {
 		return nil, nil
 	}
-	mdSections, err := LoadProfileMarkdown(ts.dataDir, app)
-	if err != nil {
-		// Markdown failure is non-fatal — describe what we can from JSON
-		mdSections = map[string]ProfileMarkdownSection{}
-	}
 	out := make([]ProfileDescription, 0, len(appData.Profiles))
 	for _, p := range appData.Profiles {
-		out = append(out, describeProfile(app, p, appData.CFGroups, mdSections[p.Name]))
+		out = append(out, describeProfile(app, p, appData.CFGroups))
 	}
 	return out, nil
 }
@@ -145,112 +124,6 @@ func (ts *TrashStore) DescribeProfile(app, trashID string) (*ProfileDescription,
 	return nil, nil
 }
 
-// LoadProfileMarkdown reads the per-app setup-quality-profiles.md once and
-// returns a map keyed by profile name (the ### header text). Returns an empty
-// map if the markdown file is missing (sparse-checkout not yet expanded on
-// an existing clone, or pre-pull state). Callers MUST tolerate empty results.
-func LoadProfileMarkdown(dataDir, app string) (map[string]ProfileMarkdownSection, error) {
-	var path string
-	switch app {
-	case "radarr":
-		path = filepath.Join(dataDir, "docs", "Radarr", "radarr-setup-quality-profiles.md")
-	case "sonarr":
-		path = filepath.Join(dataDir, "docs", "Sonarr", "sonarr-setup-quality-profiles.md")
-	default:
-		return nil, fmt.Errorf("unknown app: %s", app)
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// sparse-checkout hasn't fetched the file yet — caller renders
-			// just the JSON-derived data and skips tagline/note/workflow
-			return map[string]ProfileMarkdownSection{}, nil
-		}
-		return nil, fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	return parseProfileMarkdown(f), nil
-}
-
-// parseProfileMarkdown extracts per-profile sections from the
-// docs/<App>/<app>-setup-quality-profiles.md content.
-//
-// Section boundaries: ### <profile name> ... (next ### or ## or end of file)
-// Within a section:
-//   - Tagline = first non-blank prose line after the header (typically
-//     "If you prefer ...")
-//   - SizeText = the italic _Size: ..._ line, with surrounding markers stripped
-//   - Note = lines starting with "Note:" (single-line; if TRaSH adds
-//     multi-line notes later, this captures only the first line — defensible
-//     since all current notes are single-line)
-func parseProfileMarkdown(r interface{ Read([]byte) (int, error) }) map[string]ProfileMarkdownSection {
-	sections := map[string]ProfileMarkdownSection{}
-	scanner := bufio.NewScanner(r)
-	// markdown lines can be long when they have include-markdown directives;
-	// bump the buffer to be safe.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	var (
-		currentProfile string
-		taglineSeen    bool
-	)
-	sizeRe := regexp.MustCompile(`^[-*]\s*_Size:\s*(.+?)\.?_\s*$`)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		// New profile section (### Header)
-		if strings.HasPrefix(line, "### ") {
-			currentProfile = strings.TrimSpace(strings.TrimPrefix(line, "### "))
-			sections[currentProfile] = ProfileMarkdownSection{}
-			taglineSeen = false
-			continue
-		}
-		// New top-level section ends the current profile context
-		if strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "### ") {
-			currentProfile = ""
-			continue
-		}
-		if currentProfile == "" {
-			continue
-		}
-		sec := sections[currentProfile]
-
-		// Tagline — first non-blank prose line after header
-		trimmed := strings.TrimSpace(line)
-		if !taglineSeen && trimmed != "" && !strings.HasPrefix(trimmed, "{!") &&
-			!strings.HasPrefix(trimmed, "**") && !strings.HasPrefix(trimmed, "-") &&
-			!strings.HasPrefix(trimmed, "!!!") && !strings.HasPrefix(trimmed, "?") {
-			sec.Tagline = trimmed
-			taglineSeen = true
-			sections[currentProfile] = sec
-			continue
-		}
-
-		// Size — italic bullet "_Size: X-Y GB..._"
-		if m := sizeRe.FindStringSubmatch(line); m != nil {
-			sec.SizeText = strings.TrimSpace(m[1])
-			sections[currentProfile] = sec
-			continue
-		}
-
-		// Note — line starting with "Note:"
-		if strings.HasPrefix(trimmed, "Note:") {
-			note := strings.TrimSpace(strings.TrimPrefix(trimmed, "Note:"))
-			// Strip markdown backticks for cleaner display
-			note = strings.ReplaceAll(note, "`", "")
-			sec.Note = note
-			sections[currentProfile] = sec
-			continue
-		}
-	}
-	// Scanner errors (e.g. line > 1 MiB buffer, I/O failure) would otherwise
-	// leave us with a silently-truncated section map and zero signal in logs.
-	if err := scanner.Err(); err != nil {
-		log.Printf("parseProfileMarkdown: scanner error after %d sections: %v", len(sections), err)
-	}
-	return sections
-}
-
 // describeProfile builds a complete ProfileDescription for one profile by
 // combining its JSON, the cf-groups that include it, and (optionally) the
 // matching markdown section.
@@ -262,7 +135,6 @@ func describeProfile(
 	app string,
 	profile *TrashQualityProfile,
 	allGroups []*TrashCFGroup,
-	mdSec ProfileMarkdownSection,
 ) ProfileDescription {
 	out := ProfileDescription{
 		TrashID:  profile.TrashID,
@@ -275,7 +147,6 @@ func describeProfile(
 			Codec:      deriveCodec(profile.Items),
 			Cutoff:     profile.Cutoff,
 		},
-		TrashNote: mdSec.Note,
 	}
 	// Tagline + AvgSize are auto-generated uniformly for ALL profiles
 	// from the axes + profile metadata. Markdown taglines only existed
@@ -308,6 +179,41 @@ func describeProfile(
 			// rather than name prefix — TRaSH adjusts CF-group names
 			// occasionally but trash_ids never change once assigned.
 			hdrOptIns = append(hdrOptIns, label)
+		}
+	}
+	// Fallback: profiles like [SQP] SQP-3 (Audio) score the same lossless
+	// audio CFs directly in formatItems instead of pulling them in via the
+	// [Audio] Audio Formats cf-group. Detect that case by looking for any
+	// known lossless-audio trash_id in profile.FormatItems. Without this,
+	// audio-focused profiles get a false "lossy" pill.
+	if !out.Axes.Audio.Scored && profile.FormatItems != nil {
+		for _, tid := range profile.FormatItems {
+			if losslessAudioCFTrashIDs[tid] {
+				out.Axes.Audio.Scored = true
+				break
+			}
+		}
+	}
+	// Same fallback for HDR scoring. Profiles like SQP-1 (2160p) include
+	// DV / HDR10+ CFs directly in formatItems rather than via the
+	// [HDR Formats] HDR cf-group. Surface basic HDR scoring whenever ANY
+	// HDR-family CF is in formatItems; also collect non-basic variants
+	// (DV Boost, DV w/o HDR fallback, HDR10+ Boost) as opt-in labels.
+	if profile.FormatItems != nil {
+		seen := make(map[string]bool, len(hdrOptIns))
+		for _, l := range hdrOptIns {
+			seen[l] = true
+		}
+		for _, tid := range profile.FormatItems {
+			label, isHDR := hdrCFTrashIDLabels[tid]
+			if !isHDR {
+				continue
+			}
+			out.Axes.HDR.Scored = true
+			if label != "" && label != "HDR" && !seen[label] {
+				hdrOptIns = append(hdrOptIns, label)
+				seen[label] = true
+			}
 		}
 	}
 	sort.Strings(hdrOptIns)
@@ -534,6 +440,67 @@ func audioFormatsTrashID(app string) string {
 		return "e9a1944a254e6f8a9da63083f7ae15cb"
 	}
 	return ""
+}
+
+// losslessAudioCFTrashIDs is the set of TRaSH-Guides CF trash_ids that
+// represent lossless / object-based-audio formats. Used as a fallback
+// when a profile lists these CFs directly in formatItems instead of
+// pulling them in via the [Audio] Audio Formats cf-group (e.g. all
+// Radarr SQP profiles do this).
+//
+// What counts as "lossless audio" for this signal:
+//   - True lossless: FLAC, PCM, TrueHD, DTS-HD MA, DTS-HD HRA
+//   - Object-based / Atmos-bearing (premium audio scoring): TrueHD
+//     ATMOS, DTS X, ATMOS (undefined), DD+ ATMOS
+// Excluded (lossy, not premium-scored): AAC, DD, DD+, DTS, DTS-ES,
+// MP3, Opus.
+//
+// Includes both Radarr and Sonarr trash_ids — app prefixes happen to
+// differ but membership-by-trash_id is stable across TRaSH updates.
+var losslessAudioCFTrashIDs = map[string]bool{
+	// Radarr
+	"496f355514737f7d83bf7aa4d24f8169": true, // TrueHD ATMOS
+	"2f22d89048b01681dde8afe203bf2e95": true, // DTS X
+	"417804f7f2c4308c1f4c5d380d4c4475": true, // ATMOS (undefined)
+	"1af239278386be2919e1bcee0bde047e": true, // DD+ ATMOS
+	"3cafb66171b47f226146a0770576870f": true, // TrueHD
+	"dcf3ec6938fa32445f590a4da84256cd": true, // DTS-HD MA
+	"a570d4a0e56a2874b64e5bfa55202a1b": true, // FLAC
+	"e7c2fcae07cbada050a0af3357491d7b": true, // PCM
+	"8e109e50e0a0b83a5098b056e13bf6db": true, // DTS-HD HRA
+	// Sonarr (parallel set — no profiles currently use these via
+	// formatItems but pre-populated so future SQP-style profiles get
+	// the same detection automatically).
+	"0d7824bb924701997f874e7ff7d4844a": true, // TrueHD ATMOS
+	"9d00418ba386a083fbf4d58235fc37ef": true, // DTS X
+	"b6fbafa7942952a13e17e2b1152b539a": true, // ATMOS (undefined)
+	"4232a509ce60c4e208d13825b7c06264": true, // DD+ ATMOS
+	"1808e4b9cee74e064dfae3f1db99dbfe": true, // TrueHD
+	"c429417a57ea8c41d57e6990a8b0033f": true, // DTS-HD MA
+	"851bd64e04c9374c51102be3dd9ae4cc": true, // FLAC
+	"30f70576671ca933adbdcfc736a69718": true, // PCM
+	"cfa5fbd8f02a86fc55d8d223d06a5e1f": true, // DTS-HD HRA
+}
+
+// hdrCFTrashIDsByID lookup: trash_id → human label for HDR-related CFs
+// that profiles can include directly in formatItems. Mirrors the
+// losslessAudio fallback but for HDR scoring. Profiles like SQP-1 (2160p)
+// list these CFs directly, bypassing the cf-group route — without this
+// fallback they'd get a false "no HDR" pill.
+//
+// Includes the basic HDR CF + the variant CFs (DV Boost, DV w/o HDR
+// fallback, HDR10+ Boost). Excludes SDR — that's the absence of HDR.
+var hdrCFTrashIDLabels = map[string]string{
+	// Radarr
+	"493b6d1dbec3c3364c59d7607f7e3405": "HDR",                    // basic HDR
+	"b337d6812e06c200ec9a2d3cfa9d20a7": "DV Boost",               // variant
+	"923b6abef9b17f937fab56cfcf89e1f1": "DV (w/o HDR fallback)",  // variant
+	"caa37d0df9c348912df1fb1d88f9273a": "HDR10+ Boost",           // variant
+	// Sonarr
+	"505d871304820ba7106b693be6fe4a9e": "HDR",
+	"7c3a61a9c6cb04f52f1544be6d44a026": "DV Boost",
+	"9b27ab6498ec0f31a3353992e19434ca": "DV (w/o HDR fallback)",
+	"0c4b99df9206d2cfac3c05ab897dd62a": "HDR10+ Boost",
 }
 
 // hdrFormatsTrashID returns the trash_id of the primary HDR Formats cf-group
