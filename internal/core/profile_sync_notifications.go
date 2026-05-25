@@ -5,21 +5,35 @@ import (
 	"strings"
 )
 
+// UpstreamChangeSummary carries aggregate detection results so the
+// "upstream ahead" notification can name which CFs / profiles changed
+// and how many of the user's rules are affected. Nil / zero-count means
+// the caller didn't have per-rule data (degraded mode — falls back to
+// commit-hash-only message).
+type UpstreamChangeSummary struct {
+	AffectedRuleCount int
+	AffectedCFs       []AffectedItem // Custom Formats whose file changed
+	AffectedProfiles  []AffectedItem // Quality Profiles whose file changed
+}
+
+// AffectedItem is one CF or profile that changed upstream AND is in scope
+// for at least one of the user's rules. Used inside UpstreamChangeSummary.
+type AffectedItem struct {
+	Name    string // human-readable
+	AppType string // "radarr" | "sonarr"
+}
+
 // NotifyUpstreamUpdate fires the "TRaSH upstream ahead" notification —
-// triggered when ProfileSyncRunner.runDetectionOnly() finds the remote HEAD
-// has advanced beyond the local clone without performing a pull. Tells users
-// who run Mode=notify or Mode=delayed that there are new TRaSH commits
-// waiting for them, so they can click "Pull and sync now" when they're
-// ready.
+// triggered when ProfileSyncRunner.runDetectionOnly() finds the remote
+// HEAD has advanced beyond the local clone without performing a pull.
 //
-// Phase C MVP: one aggregated notification per detection-run that reports
-// the commit-hash delta. Phase C commit 2 will add per-rule mapping so the
-// notification can name which profiles are affected.
+// When summary is non-nil and AffectedRuleCount > 0, the message names the
+// affected CFs and rule count. When summary is nil or empty, falls back to
+// a commit-hash-only message (degraded mode if the per-rule mapping path
+// failed for some reason).
 //
-// Dispatches to every notification agent that has OnUpstreamAhead enabled
-// (default false on existing agents — opt-in via Settings → Notifications
-// once that toggle ships in a follow-up).
-func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
+// Dispatches to every notification agent that has OnUpstreamAhead enabled.
+func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string, summary *UpstreamChangeSummary) {
 	cfg := app.Config.Get()
 
 	// No agents opted in → cheap no-op. Skip the message build entirely.
@@ -34,18 +48,59 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
 		return
 	}
 
-	title := "Clonarr: TRaSH updates available"
-	parts := []string{
-		"TRaSH-Guides has new commits upstream that clonarr hasn't pulled yet.",
-		fmt.Sprintf("**Local:** `%s`", shortHash(prevCommit)),
-		fmt.Sprintf("**Upstream:** `%s`", shortHash(newCommit)),
-		"",
-		"Open Clonarr and click **Pull** in the sidebar to apply, or wait for the next scheduled pull.",
+	var title, message string
+	if summary != nil && summary.AffectedRuleCount > 0 {
+		title = fmt.Sprintf("Clonarr: TRaSH updates affect %d of your sync rule%s", summary.AffectedRuleCount, plural(summary.AffectedRuleCount))
+		var parts []string
+		cfCount := len(summary.AffectedCFs)
+		profCount := len(summary.AffectedProfiles)
+		summaryLine := buildAffectedSummaryLine(cfCount, profCount)
+		parts = append(parts, summaryLine)
+		const maxShown = 8
+		renderList := func(label string, items []AffectedItem) {
+			if len(items) == 0 {
+				return
+			}
+			parts = append(parts, "")
+			parts = append(parts, "**"+label+":**")
+			shown := items
+			extra := 0
+			if len(shown) > maxShown {
+				extra = len(shown) - maxShown
+				shown = shown[:maxShown]
+			}
+			for _, it := range shown {
+				app := it.AppType
+				if app == "radarr" {
+					app = "Radarr"
+				} else if app == "sonarr" {
+					app = "Sonarr"
+				}
+				parts = append(parts, fmt.Sprintf("• %s (%s)", it.Name, app))
+			}
+			if extra > 0 {
+				parts = append(parts, fmt.Sprintf("...and %d more", extra))
+			}
+		}
+		renderList("Custom Formats", summary.AffectedCFs)
+		renderList("Quality Profiles", summary.AffectedProfiles)
+		parts = append(parts, "")
+		parts = append(parts, fmt.Sprintf("Open Clonarr and click **Pull** to apply (`%s` → `%s`).", shortHash(prevCommit), shortHash(newCommit)))
+		message = strings.Join(parts, "\n")
+	} else {
+		// Degraded fallback — per-rule mapping unavailable or zero matches.
+		title = "Clonarr: TRaSH upstream has new commits"
+		message = strings.Join([]string{
+			fmt.Sprintf("TRaSH-Guides advanced from `%s` to `%s`.", shortHash(prevCommit), shortHash(newCommit)),
+			"",
+			"None of the changes appear to affect your synced profiles. The next Pull will catch the clone up.",
+		}, "\n")
 	}
+
 	payload := NotificationPayload{
 		Title:    title,
-		Message:  strings.Join(parts, "\n"),
-		Color:    0x58a6ff, // accent-blue (matches "update available" UI badge in Phase 4 UI)
+		Message:  message,
+		Color:    0x58a6ff, // accent-blue (matches "update available" UI badge)
 		Severity: NotificationSeverityInfo,
 		// Route to the updates channel so users who configured a separate
 		// Discord webhook for OnRepoUpdate get this event there too —
@@ -58,5 +113,30 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string) {
 			continue
 		}
 		app.DispatchNotificationAgent(agent, payload)
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// buildAffectedSummaryLine renders one of three sentence shapes depending
+// on whether the upstream changes touched CFs, profiles, or both.
+func buildAffectedSummaryLine(cfCount, profCount int) string {
+	switch {
+	case cfCount > 0 && profCount > 0:
+		return fmt.Sprintf("TRaSH-Guides updated **%d Custom Format%s** and **%d Quality Profile%s** that affect your rules.",
+			cfCount, plural(cfCount), profCount, plural(profCount))
+	case cfCount > 0:
+		return fmt.Sprintf("TRaSH-Guides updated **%d Custom Format%s** that your profiles use.",
+			cfCount, plural(cfCount))
+	case profCount > 0:
+		return fmt.Sprintf("TRaSH-Guides updated **%d Quality Profile%s** that your rules sync.",
+			profCount, plural(profCount))
+	default:
+		return "TRaSH-Guides has upstream updates affecting your rules."
 	}
 }

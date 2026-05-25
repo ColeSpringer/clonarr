@@ -103,10 +103,46 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 	}
 }
 
+// RunDetectionOnly is the public entry point for the detection-only path.
+// Wraps the unexported helper so handlers can trigger a check on demand
+// (e.g. the [Check] button in the sidebar footer) regardless of which
+// scheduler Mode is active. Same mutex as Run() — concurrent calls serialise.
+func (uw *ProfileSyncRunner) RunDetectionOnly(ctx context.Context) error {
+	uw.refreshMu.Lock()
+	defer uw.refreshMu.Unlock()
+	return uw.runDetectionOnly(ctx)
+}
+
 // runDetectionOnly performs the ls-remote-only check. Empty-clone guard
 // applies — comparing against an empty local HEAD would surface every
 // upstream commit as "new" once Phase C wires notification firing.
 func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
+	// Unconditional sweep of legacy "profile-modified" generic entries —
+	// they're superseded by the granular profile-quality-* / profile-name
+	// / profile-formatitem-* types. Runs every detection tick so a single
+	// Check is enough to drop them, even when local==upstream and the
+	// rest of detection short-circuits.
+	_ = uw.app.Config.Update(func(c *Config) {
+		for i := range c.AutoSync.Rules {
+			r := &c.AutoSync.Rules[i]
+			if len(r.PendingChanges) == 0 {
+				continue
+			}
+			cleaned := r.PendingChanges[:0:0]
+			changed := false
+			for _, pc := range r.PendingChanges {
+				if pc.ChangeType == "profile-modified" {
+					changed = true
+					continue
+				}
+				cleaned = append(cleaned, pc)
+			}
+			if changed {
+				r.PendingChanges = cleaned
+			}
+		}
+	})
+
 	cfg := uw.app.Config.Get()
 
 	// Empty-clone guard — DO NOT REMOVE. Comparing an empty local HEAD
@@ -184,14 +220,14 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		// fingerprint dedup. Best-effort: failures in this enrichment
 		// path fall back to the MVP-level aggregate notification so
 		// users still hear about upstream activity.
-		uw.detectPerRuleChanges(ctx, cfg, remote, branch, localCommit, upstreamHead)
+		summary := uw.detectPerRuleChanges(ctx, cfg, remote, branch, localCommit, upstreamHead)
 
-		// Aggregate-level notification (the MVP path) still fires only
-		// when this is a NEW upstream commit we haven't notified about.
-		// Per-rule notifications inside detectPerRuleChanges have their
-		// own per-rule fingerprint dedup.
+		// Aggregate-level notification fires only when this is a NEW
+		// upstream commit we haven't notified about. summary may be nil
+		// (per-rule mapping failed somehow) — NotifyUpstreamUpdate then
+		// falls back to a degraded commit-hash-only message.
 		if priorUpstream != upstreamHead {
-			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead)
+			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead, summary)
 		}
 	}
 	return nil
@@ -200,35 +236,82 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 // detectPerRuleChanges fetches the commit-range to a side-ref, walks the
 // file changes, classifies them into trash_ids, and updates per-rule
 // PendingChanges + WatchState for every sync rule whose profile is
-// affected. Best-effort — a failure here is logged but doesn't propagate
-// (the aggregate notification still fires in the caller).
-func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Config, remote, branch, localCommit, upstreamHead string) {
+// affected. Returns a summary (affected rule count + unique CF list)
+// the caller can feed into the aggregate notification so users see what
+// actually changed instead of bare commit hashes. Returns nil on any
+// failure path so the caller falls back to the degraded notification.
+func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Config, remote, branch, localCommit, upstreamHead string) *UpstreamChangeSummary {
 	if err := uw.app.Trash.FetchUpstreamRefspec(ctx, remote, branch); err != nil {
 		log.Printf("profile-sync: fetch upstream side-ref failed: %v", err)
-		return
+		return nil
 	}
 	changedFiles, err := uw.app.Trash.ChangedFilesSinceLocal(ctx, branch)
 	if err != nil {
 		log.Printf("profile-sync: walk commit range failed: %v", err)
-		return
+		return nil
 	}
 	if len(changedFiles) == 0 {
-		return // upstream != local but no file diffs — unusual but harmless
+		return nil // upstream != local but no file diffs — unusual but harmless
 	}
 
-	// Bucket changed trash_ids by app-type. Profile-eligible-CF lookup
-	// per rule needs to know which app the rule's profile belongs to so
-	// we only consider changes in the matching app's directory.
+	// Bucket changed trash_ids by app-type. The filename slug (e.g.
+	// `web-tier-01.json`) is NOT the trash_id — that's a 32-char hash
+	// stored inside the JSON content. Resolve it by reading the file
+	// from the upstream side-ref, falling back to HEAD for files that
+	// were deleted upstream (file gone from side-ref but still in HEAD).
+	//
+	// For cf-group files we ALSO compute the old-vs-new member diff so
+	// the per-rule mapping can emit one PendingChange per affected CF
+	// (added to the group, default-flag flipped, etc.) instead of
+	// silently skipping group-level changes.
+	upstreamRef := upstreamWatchRefPrefix + branch
 	changedByApp := make(map[string][]ClassifiedFile)
+	groupDiffs := make(map[string]GroupDiff)       // group trash_id → member diff
+	profileDiffs := make(map[string]ProfileDiff)   // profile trash_id → content diff
+	cfDiffs := make(map[string]CFDiff)             // CF trash_id → content diff
 	for _, path := range changedFiles {
 		cf := ClassifyTrashFilePath(path)
 		if cf.Kind == FileChangeOther || cf.Kind == FileChangeQualitySize {
 			continue // QS handled separately in Phase D; non-data files ignored
 		}
+		tid, _ := uw.app.Trash.ReadTrashIDFromRef(ctx, upstreamRef, path)
+		if tid == "" {
+			tid, _ = uw.app.Trash.ReadTrashIDFromRef(ctx, "HEAD", path)
+		}
+		if tid == "" {
+			continue // file gone from both refs or malformed JSON — skip
+		}
+		cf.TrashID = tid
+		if cf.Kind == FileChangeCF {
+			oldCF, _ := uw.app.Trash.ReadCFFromRef(ctx, "HEAD", path)
+			newCF, _ := uw.app.Trash.ReadCFFromRef(ctx, upstreamRef, path)
+			cdiff := DiffCFSnapshots(oldCF, newCF)
+			if !cdiff.IsEmpty() {
+				cfDiffs[tid] = cdiff
+			}
+		}
+		if cf.Kind == FileChangeCFGroup {
+			oldMembers, _ := uw.app.Trash.ReadCFGroupMembersFromRef(ctx, "HEAD", path)
+			newMembers, _ := uw.app.Trash.ReadCFGroupMembersFromRef(ctx, upstreamRef, path)
+			diff := DiffCFGroupMembers(oldMembers, newMembers)
+			if diff.IsEmpty() {
+				continue // file changed but member list unchanged (e.g. comment/description tweak)
+			}
+			groupDiffs[tid] = diff
+		}
+		if cf.Kind == FileChangeQualityProfile {
+			oldProf, _ := uw.app.Trash.ReadQualityProfileFromRef(ctx, "HEAD", path)
+			newProf, _ := uw.app.Trash.ReadQualityProfileFromRef(ctx, upstreamRef, path)
+			pdiff := DiffQualityProfile(oldProf, newProf)
+			if pdiff.IsEmpty() {
+				continue // file changed but no actionable aspect (e.g. trash_id + name only)
+			}
+			profileDiffs[tid] = pdiff
+		}
 		changedByApp[cf.AppType] = append(changedByApp[cf.AppType], cf)
 	}
 	if len(changedByApp) == 0 {
-		return
+		return nil
 	}
 
 	// For each rule, compute the affected trash_id set + per-rule
@@ -236,18 +319,28 @@ func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Confi
 	// multiple rule changes batch into one disk write.
 	snap := uw.app.Trash.Snapshot()
 	if snap == nil {
-		return
+		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	perRuleUpdates := uw.buildPerRuleUpdates(cfg, snap, changedByApp, upstreamHead, now)
+	perRuleUpdates := uw.buildPerRuleUpdates(cfg, snap, changedByApp, groupDiffs, profileDiffs, cfDiffs, upstreamHead, now)
 	if len(perRuleUpdates) == 0 {
-		return
+		return nil
 	}
 	if err := uw.app.Config.Update(func(c *Config) {
 		for i := range c.AutoSync.Rules {
 			r := &c.AutoSync.Rules[i]
 			upd, ok := perRuleUpdates[r.ID]
 			if !ok {
+				continue
+			}
+			// Race guard: if a concurrent Update / Sync ran between our
+			// detection snapshot (read outside this closure) and this
+			// persist, rule.LastSyncCommit may have advanced past the
+			// upstream commit our pending entries describe. Re-checking
+			// inside the closure (where we hold the config lock) prevents
+			// resurrecting just-cleared PendingChanges. Length-normalised
+			// compare for the same reason watch.go's gate uses it.
+			if commitMatches(r.LastSyncCommit, upstreamHead) {
 				continue
 			}
 			if r.WatchState == nil {
@@ -258,11 +351,109 @@ func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Confi
 				r.WatchState.LastUpstreamNotifiedAt = now
 			}
 			r.PendingChanges = MergePendingChanges(r.PendingChanges, upd.pending)
+			// Sweep out the legacy "profile-modified" generic entry —
+			// superseded by granular profile-quality-* / profile-name /
+			// profile-formatitem-* types the current detection emits.
+			// One-shot cleanup; harmless once no legacy entries remain.
+			if len(r.PendingChanges) > 0 {
+				cleaned := r.PendingChanges[:0:0]
+				for _, pc := range r.PendingChanges {
+					if pc.ChangeType == "profile-modified" {
+						continue
+					}
+					cleaned = append(cleaned, pc)
+				}
+				r.PendingChanges = cleaned
+			}
 		}
 	}); err != nil {
 		log.Printf("profile-sync: persist per-rule pending failed: %v", err)
 	}
 	log.Printf("profile-sync: per-rule mapping updated %d rule(s)", len(perRuleUpdates))
+
+	// Build aggregate summary for the notification message. Deduplicates
+	// CFs across rules (one CF affecting 12 rules → one line, not twelve).
+	// Sort by app then name for stable ordering across runs.
+	summary := &UpstreamChangeSummary{
+		AffectedRuleCount: len(perRuleUpdates),
+	}
+	type itemKey struct{ appType, trashID string }
+	seen := make(map[itemKey]bool)
+	for _, app := range []string{"radarr", "sonarr"} {
+		var ad *AppData
+		var cfMap map[string]*TrashCF
+		switch app {
+		case "radarr":
+			ad = &snap.Radarr
+			cfMap = snap.Radarr.CustomFormats
+		case "sonarr":
+			ad = &snap.Sonarr
+			cfMap = snap.Sonarr.CustomFormats
+		}
+		for _, cf := range changedByApp[app] {
+			k := itemKey{app, cf.TrashID}
+			if seen[k] {
+				continue
+			}
+			// Only include in the summary if at least one rule has it
+			// in scope — otherwise it's an upstream change that doesn't
+			// matter to the user.
+			if !anyRuleHasCF(perRuleUpdates, cf.TrashID) {
+				continue
+			}
+			seen[k] = true
+			switch cf.Kind {
+			case FileChangeQualityProfile:
+				name := cf.TrashID
+				for _, p := range ad.Profiles {
+					if p != nil && p.TrashID == cf.TrashID {
+						name = p.Name
+						break
+					}
+				}
+				summary.AffectedProfiles = append(summary.AffectedProfiles, AffectedItem{
+					Name:    name,
+					AppType: app,
+				})
+				continue
+			}
+			name := cf.TrashID // CF / cf-group fallback when not in snapshot yet
+			if entry, ok := cfMap[cf.TrashID]; ok && entry != nil {
+				name = entry.Name
+			} else {
+				for _, g := range ad.CFGroups {
+					if g != nil && g.TrashID == cf.TrashID {
+						name = g.Name
+						break
+					}
+				}
+			}
+			summary.AffectedCFs = append(summary.AffectedCFs, AffectedItem{
+				Name:    name,
+				AppType: app,
+			})
+		}
+	}
+	return summary
+}
+
+// anyRuleHasCF reports whether at least one perRuleUpdate's pending list
+// contains the given trash_id. Used to filter the summary down to CFs the
+// user actually cares about. Matches both direct AffectedID equality and
+// the "trashID:context" prefix form used for cf-score entries.
+func anyRuleHasCF(updates map[string]perRuleUpdate, trashID string) bool {
+	prefix := trashID + ":"
+	for _, upd := range updates {
+		for _, pc := range upd.pending {
+			if pc.AffectedID == trashID {
+				return true
+			}
+			if strings.HasPrefix(pc.AffectedID, prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // perRuleUpdate is the planned mutation for one rule, computed outside the
@@ -273,10 +464,15 @@ type perRuleUpdate struct {
 	pending      []PendingChange
 }
 
-func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, changedByApp map[string][]ClassifiedFile, upstreamHead, now string) map[string]perRuleUpdate {
+func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, changedByApp map[string][]ClassifiedFile, groupDiffs map[string]GroupDiff, profileDiffs map[string]ProfileDiff, cfDiffs map[string]CFDiff, upstreamHead, now string) map[string]perRuleUpdate {
 	out := make(map[string]perRuleUpdate)
 	for _, rule := range cfg.AutoSync.Rules {
-		if rule.OrphanedAt != "" || !rule.Enabled {
+		// Orphaned rules (profile deleted from Arr) skip — there's nothing
+		// to sync to. Disabled rules ARE detected so the user still sees
+		// "Outdated" badges and notifications; the Pull-time filter
+		// (filterEligibleRulesForPull) handles the "don't auto-sync"
+		// part separately.
+		if rule.OrphanedAt != "" {
 			continue
 		}
 		var inst Instance
@@ -314,34 +510,183 @@ func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, ch
 			continue
 		}
 
+		// Direct CF file changes — match against profile-eligible set.
+		// Quality-profile JSON changes — match directly against the rule's
+		// TrashProfileID (the profile JSON IS the rule's target).
 		changedTrashIDs := make([]string, 0, len(changedForApp))
+		profileFileChanged := false
 		for _, cf := range changedForApp {
 			if cf.Kind == FileChangeCF {
 				changedTrashIDs = append(changedTrashIDs, cf.TrashID)
+			} else if cf.Kind == FileChangeQualityProfile && cf.TrashID == rule.TrashProfileID {
+				profileFileChanged = true
 			}
 		}
 		affected := RuleAffectedTrashIDs(&rule, profile, ad, changedTrashIDs)
-		if len(affected) == 0 {
-			continue
+
+		// Build trash_id → CF name lookup from the snapshot so tooltips
+		// show "WEB Tier 01" instead of an opaque 32-char hash. CFs that
+		// aren't in the snapshot (e.g. brand-new ones added in this
+		// commit, before Pull syncs them locally) fall back to empty
+		// AffectedName — UI then renders the trash_id.
+		nameByTrashID := make(map[string]string, len(ad.CustomFormats))
+		for _, c := range ad.CustomFormats {
+			nameByTrashID[c.TrashID] = c.Name
 		}
 
-		fp := ComputeUpstreamFingerprint(affected)
+		// Group-level changes — for each changed cf-group, check if this
+		// profile uses it (via ad.CFGroups[i].QualityProfiles.Include),
+		// then emit a PendingChange per member-diff entry. This is the
+		// detection-side parity for the sync engine, which has always
+		// understood cf-group structure.
+		groupBased := buildGroupChangePending(rule, profile, ad, changedForApp, groupDiffs, nameByTrashID, upstreamHead, now)
+
+		// Combine the streams. Up to three can apply to the same rule
+		// when upstream touches CF file + cf-group file + profile file
+		// in the same commit range. Merge by trash_id+changeType so we
+		// don't double-emit the same logical change.
+		pending := make([]PendingChange, 0, len(affected)+len(groupBased)+1)
+		emitOne := func(changeType, affectedID, name string) {
+			pending = append(pending, PendingChange{
+				Source:       "trash",
+				DetectedAt:   now,
+				CommitHash:   upstreamHead,
+				ChangeType:   changeType,
+				AffectedID:   affectedID,
+				AffectedName: name,
+			})
+		}
+		for _, tid := range affected {
+			cfName := nameByTrashID[tid]
+			cdiff, hasDiff := cfDiffs[tid]
+			if !hasDiff || cdiff.IsEmpty() {
+				// File changed but no actionable per-aspect detail (parse
+				// failed or only whitespace tweaked). Fall back to the
+				// generic cf-modified signal so the user still sees the
+				// CF flagged as out-of-sync.
+				emitOne("cf-modified", tid, cfName)
+				continue
+			}
+			if cdiff.NameChanged {
+				display := cfName
+				if display == "" {
+					display = cdiff.NewName
+				}
+				emitOne("cf-name", tid, display+" — renamed: "+cdiff.OldName+" → "+cdiff.NewName)
+			}
+			for ctx, sc := range cdiff.ScoreChanges {
+				label := ctx
+				if label == "default" {
+					label = "default score"
+				} else {
+					label = ctx + " score"
+				}
+				emitOne("cf-score", tid+":"+ctx, cfName+" — "+label+": "+fmt.Sprintf("%d → %d", sc.Old, sc.New))
+			}
+			if cdiff.SpecsChanged {
+				emitOne("cf-specs", tid, cfName+" — conditions changed")
+			}
+			if cdiff.RenameFlagChanged {
+				state := "no"
+				if cdiff.RenameFlagNow {
+					state = "yes"
+				}
+				emitOne("cf-rename-flag", tid, cfName+" — include in file rename: "+state)
+			}
+		}
+		if profileFileChanged {
+			pdiff := profileDiffs[rule.TrashProfileID]
+			emit := func(changeType, affectedID, name string) {
+				pending = append(pending, PendingChange{
+					Source:       "trash",
+					DetectedAt:   now,
+					CommitHash:   upstreamHead,
+					ChangeType:   changeType,
+					AffectedID:   affectedID,
+					AffectedName: name,
+				})
+			}
+			if pdiff.NameChanged {
+				emit("profile-name", rule.TrashProfileID, "Renamed: "+pdiff.OldName+" → "+pdiff.NewName)
+			}
+			if pdiff.UpgradeAllowedChanged {
+				state := "no longer allowed"
+				if pdiff.UpgradeAllowedNow {
+					state = "now allowed"
+				}
+				emit("profile-upgrade-allowed", rule.TrashProfileID, "Upgrades — "+state)
+			}
+			if pdiff.LanguageChanged {
+				emit("profile-language", rule.TrashProfileID, "Language: "+pdiff.OldLanguage+" → "+pdiff.NewLanguage)
+			}
+			if pdiff.MinFormatScoreChanged {
+				emit("profile-min-format-score", rule.TrashProfileID, fmt.Sprintf("Minimum Custom Format Score: %d → %d", pdiff.MinFormatScore.Old, pdiff.MinFormatScore.New))
+			}
+			if pdiff.CutoffFormatScoreChanged {
+				emit("profile-cutoff-format-score", rule.TrashProfileID, fmt.Sprintf("Upgrade Until Custom Format Score: %d → %d", pdiff.CutoffFormatScore.Old, pdiff.CutoffFormatScore.New))
+			}
+			if pdiff.MinUpgradeFormatScoreChanged {
+				emit("profile-min-upgrade-format-score", rule.TrashProfileID, fmt.Sprintf("Minimum Custom Format Score Increment: %d → %d", pdiff.MinUpgradeFormatScore.Old, pdiff.MinUpgradeFormatScore.New))
+			}
+			if pdiff.CutoffChanged {
+				emit("profile-quality-cutoff", rule.TrashProfileID, "Cutoff: "+pdiff.OldCutoff+" → "+pdiff.NewCutoff)
+			}
+			for _, c := range pdiff.ItemsChanged {
+				state := "no longer allowed"
+				if c.NowAllowed {
+					state = "now allowed"
+				}
+				emit("profile-quality-allowed", c.Name, c.Name+" — "+state)
+			}
+			for _, c := range pdiff.ItemsAdded {
+				emit("profile-quality-added", c.Name, c.Name+" — new quality added")
+			}
+			for _, c := range pdiff.ItemsRemoved {
+				emit("profile-quality-removed", c.Name, c.Name+" — quality removed")
+			}
+			for _, c := range pdiff.FIAdded {
+				name := c.Name
+				if cached := nameByTrashID[c.TrashID]; cached != "" {
+					name = cached
+				}
+				emit("profile-formatitem-added", c.TrashID, name+" — added to profile")
+			}
+			for _, c := range pdiff.FIRemoved {
+				name := c.Name
+				if cached := nameByTrashID[c.TrashID]; cached != "" {
+					name = cached
+				}
+				emit("profile-formatitem-removed", c.TrashID, name+" — removed from profile")
+			}
+		}
+		// Dedup: if a CF appears in both streams (e.g. CF file changed AND
+		// group entry changed in same commit range), keep the more
+		// specific change-type from the group stream — it carries the
+		// "added/removed/default-flipped" semantic that's more actionable.
+		seen := make(map[string]bool, len(pending))
+		for _, pc := range pending {
+			seen[pc.AffectedID+"|"+pc.ChangeType] = true
+		}
+		for _, pc := range groupBased {
+			if !seen[pc.AffectedID+"|"+pc.ChangeType] {
+				pending = append(pending, pc)
+			}
+		}
+		if len(pending) == 0 {
+			continue
+		}
+		// Fingerprint covers ALL affected trash_ids so any subset change
+		// produces a different fingerprint and re-fires notification.
+		fpIDs := make([]string, 0, len(pending))
+		for _, pc := range pending {
+			fpIDs = append(fpIDs, pc.AffectedID+":"+pc.ChangeType)
+		}
+		fp := ComputeUpstreamFingerprint(fpIDs)
 		var prior string
 		if rule.WatchState != nil {
 			prior = rule.WatchState.LastUpstreamFingerprint
 		}
 		shouldNotify := fp != prior
-
-		pending := make([]PendingChange, 0, len(affected))
-		for _, tid := range affected {
-			pending = append(pending, PendingChange{
-				Source:     "trash",
-				DetectedAt: now,
-				CommitHash: upstreamHead,
-				ChangeType: "cf-modified",
-				AffectedID: tid,
-			})
-		}
 		out[rule.ID] = perRuleUpdate{
 			fingerprint:  fp,
 			shouldNotify: shouldNotify,
@@ -349,6 +694,95 @@ func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, ch
 		}
 	}
 	return out
+}
+
+// buildGroupChangePending emits one PendingChange per cf-group member-diff
+// entry that affects the given rule. "Affects" means:
+//   - The changed cf-group is included by this profile (via
+//     ad.CFGroups[i].QualityProfiles.Include[profile.Name])
+//   - The member-level diff carries semantics that change the rule's
+//     effective CF set on next sync (Added with default-on/required,
+//     Removed, default flag flipped)
+//
+// Skips RequiredOn/RequiredOff for now — those don't change which CFs
+// are pushed to Arr, only whether the user can deselect them.
+func buildGroupChangePending(rule AutoSyncRule, profile *TrashQualityProfile, ad *AppData, changedForApp []ClassifiedFile, groupDiffs map[string]GroupDiff, nameByTrashID map[string]string, upstreamHead, now string) []PendingChange {
+	var out []PendingChange
+	excluded := make(map[string]bool, len(rule.ExcludedCFs))
+	for _, ex := range rule.ExcludedCFs {
+		excluded[ex] = true
+	}
+	for _, cf := range changedForApp {
+		if cf.Kind != FileChangeCFGroup {
+			continue
+		}
+		diff, ok := groupDiffs[cf.TrashID]
+		if !ok {
+			continue
+		}
+		groupName, profileUses := lookupGroupForProfile(ad, cf.TrashID, profile)
+		if !profileUses {
+			continue
+		}
+		emit := func(m GroupCFMember, changeType, suffix string) {
+			if excluded[m.TrashID] {
+				return // user opted out of this CF — no signal
+			}
+			name := m.Name
+			if cached := nameByTrashID[m.TrashID]; cached != "" {
+				name = cached
+			}
+			if suffix != "" {
+				name = name + " — " + suffix + " " + groupName
+			}
+			out = append(out, PendingChange{
+				Source:       "trash",
+				DetectedAt:   now,
+				CommitHash:   upstreamHead,
+				ChangeType:   changeType,
+				AffectedID:   m.TrashID,
+				AffectedName: name,
+			})
+		}
+		for _, m := range diff.Added {
+			// Only fire when the new entry will actually be pushed —
+			// default-on or required-on entries get applied at sync;
+			// default-off optional CFs need explicit user opt-in.
+			if m.Default || m.Required {
+				emit(m, "cf-group-added", "added to")
+			}
+		}
+		for _, m := range diff.Removed {
+			emit(m, "cf-group-removed", "removed from")
+		}
+		for _, m := range diff.DefaultOn {
+			emit(m, "cf-group-default-on", "now default-on in")
+		}
+		for _, m := range diff.DefaultOff {
+			emit(m, "cf-group-default-off", "no longer default-on in")
+		}
+	}
+	return out
+}
+
+// lookupGroupForProfile finds the cf-group with the given trash_id in the
+// snapshot and reports whether the profile uses it (via
+// QualityProfiles.Include[profile.Name]). Returns the group's name as the
+// first return so callers can use it in tooltip labels.
+func lookupGroupForProfile(ad *AppData, groupTrashID string, profile *TrashQualityProfile) (string, bool) {
+	if ad == nil || profile == nil {
+		return "", false
+	}
+	for _, g := range ad.CFGroups {
+		if g == nil || g.TrashID != groupTrashID {
+			continue
+		}
+		if _, ok := g.QualityProfiles.Include[profile.Name]; ok {
+			return g.Name, true
+		}
+		return g.Name, false
+	}
+	return "", false
 }
 
 // runPullAndSync dispatches to the canonical App.RunPullAndSync flow with
@@ -482,4 +916,21 @@ func shortHash(h string) string {
 		return h
 	}
 	return h[:7]
+}
+
+// commitMatches reports whether two commit-hash strings refer to the same
+// git commit, tolerating mixed short (7-char) vs full (40-char) forms by
+// truncating the longer side to the shorter's length. Used by both the
+// runDetectionOnly gate and the per-rule persist race guard so they
+// agree on equality. See also Trash.CurrentCommit() which keeps the
+// 7-char form for UI compatibility.
+func commitMatches(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	return a[:n] == b[:n]
 }

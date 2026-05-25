@@ -81,3 +81,22 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
+
+// handleProfileSyncCheck runs one detection-only tick synchronously. Bypasses
+// the Mode dispatch (Auto/Notify/Delayed) so the user can trigger a check
+// regardless of how scheduler is configured — useful for testing and for
+// users on Auto mode who want a status snapshot without waiting for the
+// next pull-and-sync cycle. Respects the Sources gate: if TrashUpstream is
+// disabled, returns ok=false with a hint instead of pretending to work.
+func (s *Server) handleProfileSyncCheck(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Core.Config.Get()
+	if cfg.ProfileSync == nil || !cfg.ProfileSync.Sources.TrashUpstream {
+		writeError(w, 400, "TRaSH-upstream source is disabled — enable it in Settings → Profile Sync → Sources")
+		return
+	}
+	if err := s.Core.ProfileSyncRunner.RunDetectionOnly(r.Context()); err != nil {
+		writeError(w, 500, "check failed: "+err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}

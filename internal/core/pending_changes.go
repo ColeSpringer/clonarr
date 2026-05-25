@@ -19,27 +19,38 @@ type PendingChange struct {
 }
 
 // MergePendingChanges union-merges new into existing, deduplicating on
-// (CommitHash, AffectedID, ChangeType) so the same change isn't recorded
-// twice on subsequent ticks. Returns the merged list; caller is responsible
-// for assigning back to the rule.
+// (AffectedID, ChangeType) — the LOGICAL identity of a pending change.
+// CommitHash is excluded from the key on purpose: if the same change is
+// still pending across multiple Check runs at different upstream HEADs,
+// we want ONE entry that reflects the latest detection, not N entries.
+// Incoming wins on conflict (its CommitHash + AffectedName replace the
+// existing entry's), so the timeline shows the newest commit + name.
 //
 // Cap at maxPendingChangesPerRule to prevent unbounded growth if upstream
 // goes wild (or detection misclassifies). Oldest entries drop first.
 func MergePendingChanges(existing, incoming []PendingChange) []PendingChange {
-	seen := make(map[string]bool, len(existing))
 	keyFor := func(pc PendingChange) string {
-		return pc.CommitHash + "|" + pc.AffectedID + "|" + pc.ChangeType
+		return pc.AffectedID + "|" + pc.ChangeType
 	}
-	out := make([]PendingChange, 0, len(existing)+len(incoming))
+	byKey := make(map[string]PendingChange, len(existing)+len(incoming))
+	order := make([]string, 0, len(existing)+len(incoming))
 	for _, pc := range existing {
-		seen[keyFor(pc)] = true
-		out = append(out, pc)
+		k := keyFor(pc)
+		if _, ok := byKey[k]; !ok {
+			order = append(order, k)
+		}
+		byKey[k] = pc
 	}
 	for _, pc := range incoming {
-		if !seen[keyFor(pc)] {
-			seen[keyFor(pc)] = true
-			out = append(out, pc)
+		k := keyFor(pc)
+		if _, ok := byKey[k]; !ok {
+			order = append(order, k)
 		}
+		byKey[k] = pc // incoming wins — refresh CommitHash, AffectedName, etc.
+	}
+	out := make([]PendingChange, 0, len(order))
+	for _, k := range order {
+		out = append(out, byKey[k])
 	}
 	if len(out) > maxPendingChangesPerRule {
 		out = out[len(out)-maxPendingChangesPerRule:]
