@@ -485,6 +485,10 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 				cfg.AutoSync.Rules[i].LastSyncTime = now
 				cfg.AutoSync.Rules[i].UpdatedAt = now
 				cfg.AutoSync.Rules[i].LastSyncError = ""
+				// Restoration includes the same sync work as a fresh
+				// Save & Sync, so any Profile Sync detection entries
+				// that survived the orphan period are now stale.
+				cfg.AutoSync.Rules[i].PendingChanges = nil
 				break
 			}
 		}
@@ -629,30 +633,3 @@ func (s *Server) handleRuleCustomizations(w http.ResponseWriter, r *http.Request
 	writeJSON(w, out)
 }
 
-// handleDismissPendingChanges clears the rule's accumulated PendingChanges
-// + WatchState fingerprint. "I've seen the notification — drop the badge
-// without applying." Same UX intent as Discord's "mark as read" except
-// scoped to one specific rule. Used by the Sync Rules table's
-// per-rule expand-row.
-//
-// Doesn't pull or sync — the next Profile Sync detection tick will repopulate
-// PendingChanges if the upstream is still ahead AND the user hasn't pulled.
-// Without the WatchState reset, the runner's dedup would silently skip
-// re-creating them; resetting forces a fresh notification on the next tick
-// if anything's still actually pending.
-func (s *Server) handleDismissPendingChanges(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := s.Core.Config.Update(func(cfg *core.Config) {
-		for i := range cfg.AutoSync.Rules {
-			if cfg.AutoSync.Rules[i].ID == id {
-				cfg.AutoSync.Rules[i].PendingChanges = nil
-				cfg.AutoSync.Rules[i].WatchState = nil
-				return
-			}
-		}
-	}); err != nil {
-		writeError(w, 500, "Failed to dismiss pending changes")
-		return
-	}
-	writeJSON(w, map[string]bool{"ok": true})
-}

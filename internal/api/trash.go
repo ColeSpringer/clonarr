@@ -64,13 +64,19 @@ func nextSpecificPull(cfg core.Config) time.Time {
 
 func (s *Server) handleTrashPull(w http.ResponseWriter, r *http.Request) {
 	utils.SafeGo("manual-trash-pull", func() {
-		// All Pull-and-sync logic (DebugLog tracing, SetPullError on
-		// failure, ProfileSync state persistence, DiffPull detail lines,
-		// AfterPullCallback, AutoSyncAfterPull) lives in App.RunPullAndSync
-		// so manual and scheduled paths can't drift apart. The error is
-		// already logged inside RunPullAndSync — we don't need to surface
-		// it again at this call site.
-		_ = s.Core.RunPullAndSync(core.SourceManualPull)
+		// User-facing Pull button is now data-only — refresh local TRaSH
+		// data without auto-syncing any rule. Sync happens via explicit
+		// "Update All" / "Update this profile" actions, or via the
+		// scheduler when configured. Decoupling pull from sync removes
+		// the silent "your Arr profiles will be modified" side effect
+		// users wouldn't necessarily expect from a Pull click.
+		//
+		// Async (SafeGo) so the busy-state semantics work: reset returns
+		// 409 while a pull is in flight (verified by trash_api_test.go).
+		// Frontend orchestration (updateAllForInstance / updateThisProfile)
+		// polls trashStatus.pulling — first waits for it to transition to
+		// true (so the test races aren't hit), then waits for false.
+		_ = s.Core.RunPullOnly(core.SourceManualPull)
 	})
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]string{"status": "pulling"})

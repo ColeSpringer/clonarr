@@ -120,3 +120,89 @@ func (app *App) RunPullAndSync(source string) error {
 	}
 	return nil
 }
+
+// RunPullOnly fetches the TRaSH repo without running per-rule auto-sync.
+// Used by the user-facing "Pull" button (which is now data-only) and as
+// the data-refresh step inside Update All / Update this profile actions
+// that explicitly scope which rules get pushed to Arr.
+//
+// AfterPullCallback (e.g. AutoSyncQualitySizes) still fires — that's
+// instance-level quality-size handling, not the per-rule sync work.
+func (app *App) RunPullOnly(source string) error {
+	cfg := app.Config.Get()
+	remote := cfg.TrashRepo.URL
+	branch := cfg.TrashRepo.Branch
+	if remote == "" {
+		return fmt.Errorf("pull-only: TRaSH repo URL not configured")
+	}
+	if branch == "" {
+		branch = "master"
+	}
+
+	op := app.DebugLog.BeginOp(OpTrash, source, "url="+remote+" branch="+branch+" mode=pull-only")
+	endResult := "error: unknown"
+	defer func() { op.End(endResult) }()
+
+	prevCommit := app.Trash.CurrentCommit()
+	if err := app.Trash.CloneOrPull(remote, branch); err != nil {
+		log.Printf("pull-only: pull failed: %v", err)
+		app.DebugLog.Logf(LogError, "TRaSH pull failed: %v", err)
+		app.Trash.SetPullError(err.Error())
+		if updErr := app.Config.Update(func(c *Config) {
+			if c.ProfileSync == nil {
+				return
+			}
+			c.ProfileSync.LastRun = time.Now().UTC().Format(time.RFC3339)
+			c.ProfileSync.LocalHead = prevCommit
+		}); updErr != nil {
+			log.Printf("pull-only: persist error-state failed: %v", updErr)
+		}
+		endResult = "error: pull failed"
+		return err
+	}
+
+	newCommit := app.Trash.CurrentCommit()
+	commitChanged := prevCommit != "" && newCommit != prevCommit
+
+	if updErr := app.Config.Update(func(c *Config) {
+		if c.ProfileSync == nil {
+			return
+		}
+		c.ProfileSync.LastRun = time.Now().UTC().Format(time.RFC3339)
+		c.ProfileSync.LocalHead = newCommit
+		c.ProfileSync.UpstreamHead = newCommit
+	}); updErr != nil {
+		log.Printf("pull-only: persist pull-result failed: %v", updErr)
+	}
+
+	if commitChanged {
+		app.NotifyRepoUpdate(prevCommit, newCommit)
+		if diff, err := app.Trash.DiffPull(prevCommit, newCommit); err == nil {
+			app.DebugLog.Logf(LogTrash, "Pull completed (no sync) — commit %s → %s", shortHash(prevCommit), shortHash(newCommit))
+			for _, ap := range []string{"radarr", "sonarr"} {
+				if sum := diff.SummaryByApp(ap); sum != "" {
+					appLabel := "Radarr"
+					if ap == "sonarr" {
+						appLabel = "Sonarr"
+					}
+					app.DebugLog.Logf(LogTrash, "%s — %s", appLabel, sum)
+				}
+			}
+		}
+	} else if prevCommit == "" {
+		app.DebugLog.Logf(LogTrash, "Initial pull completed (no sync) — commit %s", shortHash(newCommit))
+	} else {
+		app.DebugLog.Logf(LogTrash, "Pull completed — no upstream changes")
+	}
+
+	if app.AfterPullCallback != nil {
+		app.AfterPullCallback()
+	}
+
+	if commitChanged {
+		endResult = "ok | new commit " + shortHash(newCommit)
+	} else {
+		endResult = "ok | no change"
+	}
+	return nil
+}

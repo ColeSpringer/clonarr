@@ -112,7 +112,6 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/auto-sync/rules/{id}", s.handleUpdateAutoSyncRule)
 	mux.HandleFunc("DELETE /api/auto-sync/rules/{id}", s.handleDeleteAutoSyncRule)
 	mux.HandleFunc("POST /api/auto-sync/rules/{id}/restore", s.handleRestoreAutoSyncRule)
-	mux.HandleFunc("POST /api/auto-sync/rules/{id}/dismiss-pending", s.handleDismissPendingChanges)
 
 	// External widget summary (homepage, glance, etc.) — stable contract
 	mux.HandleFunc("GET /api/widget/summary", s.handleWidgetSummary)
@@ -120,6 +119,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Profile Sync — config + telemetry (Phase A: settings; runner endpoints in Phase B)
 	mux.HandleFunc("GET /api/profile-sync", s.handleGetProfileSync)
 	mux.HandleFunc("PUT /api/profile-sync", s.handlePutProfileSync)
+	mux.HandleFunc("POST /api/profile-sync/check", s.handleProfileSyncCheck)
 
 	// Cleanup events
 	mux.HandleFunc("GET /api/cleanup-events", s.handleCleanupEvents)

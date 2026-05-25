@@ -497,6 +497,13 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 						cfg.AutoSync.Rules[i].PriorAvailableGroups = core.ComputeAvailableGroups(ad, cfg.AutoSync.Rules[i].TrashProfileID)
 					}
 				}
+				// Mirror the auto-sync engine's clearing in
+				// UpdateAutoSyncRuleCommit — the rule just successfully
+				// synced, so any Profile Sync detection entries are now
+				// stale and the "Out of sync" pill must drop. WatchState
+				// fingerprint is retained so the next detection tick
+				// doesn't immediately re-fire for the same upstream.
+				cfg.AutoSync.Rules[i].PendingChanges = nil
 				syncedCFs := make([]string, 0, len(plan.CFActions))
 				for _, a := range plan.CFActions {
 					syncedCFs = append(syncedCFs, a.TrashID)
