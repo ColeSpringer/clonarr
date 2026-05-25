@@ -184,6 +184,54 @@ func TestProfileSyncRunner_LsRemoteErrorPreservesPriorUpstreamHead(t *testing.T)
 	}
 }
 
+// TestProfileSyncRunner_NotifiesOnlyOnNewUpstream is the Phase C MVP
+// dedup contract: the upstream-ahead notification fires only when the
+// observed upstream commit changes from what was previously persisted.
+// Without this, every hourly tick would re-fire the same notification
+// while the user lets pending state sit (Notify mode users would get
+// spammed daily for one TRaSH commit).
+func TestProfileSyncRunner_NotifiesOnlyOnNewUpstream(t *testing.T) {
+	app, ts, _ := newWatcherTestApp(t)
+	seedTrashCommit(t, ts, "local-commit-1111")
+	_ = app.Config.Update(func(c *Config) {
+		c.ProfileSync = &ProfileSync{
+			Sources: ProfileSyncSources{TrashUpstream: true},
+			Mode:    "notify",
+		}
+	})
+
+	currentUpstream := "upstream-commit-aaaa"
+	uw := &ProfileSyncRunner{
+		app: app,
+		gitLsRemote: func(ctx context.Context, remoteURL, branch string) (string, error) {
+			return currentUpstream, nil
+		},
+	}
+
+	// Run 1: no prior UpstreamHead → fresh observation, must notify.
+	if err := uw.Run(context.Background()); err != nil {
+		t.Fatalf("Run() 1st: %v", err)
+	}
+	got := app.Config.Get().ProfileSync
+	if got.UpstreamHead != currentUpstream {
+		t.Fatalf("first run failed to persist UpstreamHead: got %q", got.UpstreamHead)
+	}
+
+	// Run 2: same upstream as previously persisted → still completes,
+	// but the notification path should skip (priorUpstream == upstreamHead).
+	// Without a notification stub we can't directly assert "notify called
+	// only once" — that's coming in Phase C commit 2 when WatchState lands
+	// with proper test seams. For now we verify the second Run completes
+	// cleanly: error nil, UpstreamHead unchanged.
+	if err := uw.Run(context.Background()); err != nil {
+		t.Fatalf("Run() 2nd: %v", err)
+	}
+	got2 := app.Config.Get().ProfileSync
+	if got2.UpstreamHead != currentUpstream {
+		t.Errorf("UpstreamHead changed unexpectedly on 2nd Run: got %q want %q", got2.UpstreamHead, currentUpstream)
+	}
+}
+
 // TestRedactURL verifies userinfo (credentials embedded in URL) is stripped
 // before any URL is logged or returned in an error. Without this, a user
 // who configures TrashRepo.URL as "https://oauth2:ghp_xxx@github.com/..."

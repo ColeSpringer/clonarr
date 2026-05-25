@@ -134,6 +134,17 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		return safeErr
 	}
 
+	// Snapshot the prior UpstreamHead so we can detect "first time we
+	// noticed this upstream advance" — only fire a notification when the
+	// upstream value crosses a NEW boundary, not on every detection tick
+	// while the user hasn't pulled. (Full per-rule WatchState dedup with
+	// SHA fingerprints lands in Phase C commit 2; this is the MVP-level
+	// dedup that uses just the previously-persisted UpstreamHead.)
+	priorUpstream := ""
+	if cfg.ProfileSync != nil {
+		priorUpstream = cfg.ProfileSync.UpstreamHead
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 	if updErr := uw.app.Config.Update(func(c *Config) {
 		if c.ProfileSync == nil {
@@ -148,6 +159,14 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 
 	if upstreamHead != localCommit {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
+		// Fire the notification only when this is a NEW upstream commit
+		// we haven't notified about before — prevents spamming on every
+		// hourly tick while the user lets the pending state sit.
+		// priorUpstream == upstreamHead means we already notified for
+		// this exact upstream value; skip.
+		if priorUpstream != upstreamHead {
+			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead)
+		}
 	}
 	return nil
 }
