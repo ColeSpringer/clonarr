@@ -78,7 +78,7 @@ export default function baseState() {
     cfgbSavingMsg: '',                       // transient save/delete feedback
     cfgbSavingOk: false,                     // whether cfgbSavingMsg is success (green) or error (red)
     cfgbDeleting: false,                     // guard against double-fire on Delete → Confirm (modal's onConfirm could run twice under fast clicks)
-    config: { trashRepo: { url: '', branch: '' }, pullInterval: '24h', pullSchedule: { mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, syncSchedule: { enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, prowlarr: { url: '', apiKey: '', enabled: false, radarrCategories: [], sonarrCategories: [] }, authentication: 'forms', authenticationRequired: 'disabled_for_local_addresses', trustedNetworks: '', trustedProxies: '', sessionTtlDays: 30 },
+    config: { trashRepo: { url: '', branch: '' }, pullInterval: '24h', pullSchedule: { mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, syncSchedule: { enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, profileSync: { mode: 'auto', interval: '24h', sources: { trashUpstream: true, arrDrift: false } }, prowlarr: { url: '', apiKey: '', enabled: false, radarrCategories: [], sonarrCategories: [] }, authentication: 'forms', authenticationRequired: 'disabled_for_local_addresses', trustedNetworks: '', trustedProxies: '', sessionTtlDays: 30 },
     _syncScheduleSavedMode: 'daily',  // remembers the actual mode while UI dropdown shows 'disabled' sentinel; restored when user re-enables
     trashStatus: {},
     _nowTick: Date.now(),
