@@ -430,8 +430,8 @@ export default {
     },
 
     // Open confirmModal with current → new pattern preview before applying.
-    // Per feedback_dryrun_preview: destructive-ish UI ops should show a
-    // concrete preview, not just "Are you sure?".
+    // Destructive-ish UI ops should show a concrete preview of what's
+    // about to change, not just an "Are you sure?" prompt.
     confirmApplyNamingScheme(appType, sectionKey, scheme) {
       const instId = this.mediaInstanceId[appType];
       if (!instId) return;

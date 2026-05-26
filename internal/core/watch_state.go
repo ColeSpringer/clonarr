@@ -18,8 +18,9 @@ import (
 type WatchState struct {
 	// LastUpstreamFingerprint is the SHA-fragment over the sorted list of
 	// trash_ids that this rule was affected by in the most-recent detection
-	// run. Phase C uses this for "is this a new set vs what we already
-	// notified about?" check.
+	// run. Used to answer "is this a new set vs what we already notified
+	// about?" so the runner doesn't re-fire on each tick while a pending
+	// state sits.
 	LastUpstreamFingerprint string `json:"lastUpstreamFingerprint,omitempty"`
 	// LastUpstreamNotifiedAt is the RFC3339 timestamp of the most-recent
 	// upstream-ahead notification we fired for this rule. Surfaced in UI
@@ -27,8 +28,9 @@ type WatchState struct {
 	LastUpstreamNotifiedAt string `json:"lastUpstreamNotifiedAt,omitempty"`
 
 	// LastDriftFingerprint + LastDriftNotifiedAt: same dedup pattern for
-	// Phase D's Arr-drift detection. Field defined now so Phase D doesn't
-	// have to migrate WatchState shapes; runtime population lands then.
+	// the Arr-side drift detector. Fields defined now so the schema
+	// doesn't need migration when the drift detector starts populating
+	// them; runtime population is not implemented yet.
 	LastDriftFingerprint  string `json:"lastDriftFingerprint,omitempty"`
 	LastDriftNotifiedAt   string `json:"lastDriftNotifiedAt,omitempty"`
 }

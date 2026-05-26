@@ -16,8 +16,8 @@ func (s *Server) handleGetProfileSync(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
 	if cfg.ProfileSync == nil {
 		// Return all fields with zero values so frontend doesn't need
-		// optional-chaining on every read. Matches the shape Phase B will
-		// populate via migration.
+		// optional-chaining on every read. Matches the shape the
+		// migration populates for existing configs.
 		writeJSON(w, core.ProfileSync{})
 		return
 	}

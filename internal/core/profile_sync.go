@@ -14,7 +14,7 @@ import (
 //   Mode=auto + Sources.TrashUpstream → today's Pull-and-sync (default)
 //   Mode=notify + Sources.TrashUpstream → notify only, never apply
 //   Mode=delayed + ApplySchedule → notify now, apply at separate cadence
-//   Sources.ArrDrift → adds Arr-side direct-edit detection (Phase D)
+//   Sources.ArrDrift → adds Arr-side direct-edit detection (future)
 //
 // Migration: populated on first load from existing PullInterval + PullSchedule
 // with Mode=auto, Sources=TRaSH only. Zero functional change for existing
@@ -60,7 +60,7 @@ type ProfileSync struct {
 // ProfileSyncSources captures which detection axes the runner walks each tick.
 type ProfileSyncSources struct {
 	TrashUpstream bool `json:"trashUpstream"` // git ls-remote + fetch-to-side-ref + diff walk
-	ArrDrift      bool `json:"arrDrift"`      // per-rule Arr live state vs ComputeArrTarget diff (Phase D)
+	ArrDrift      bool `json:"arrDrift"`      // per-rule Arr live state vs ComputeArrTarget diff (future)
 }
 
 // ProfileSyncRunResult is the per-run telemetry surfaced via the API so the UI
@@ -68,9 +68,9 @@ type ProfileSyncSources struct {
 type ProfileSyncRunResult struct {
 	TriggeredBy        string   `json:"triggeredBy"`         // ProfileSyncTriggerScheduled | ProfileSyncTriggerManual
 	RanAt              string   `json:"ranAt"`               // RFC3339
-	RulesChecked       int      `json:"rulesChecked"`        // populated in Phase B (currently always 0)
-	PendingDetected    int      `json:"pendingDetected"`     // populated in Phase C (per-rule PendingChange accumulator)
-	NotificationsFired int      `json:"notificationsFired"`  // populated in Phase C (post-dedup count)
+	RulesChecked       int      `json:"rulesChecked"`        // populated by the detection runner
+	PendingDetected    int      `json:"pendingDetected"`     // per-rule PendingChange accumulator total
+	NotificationsFired int      `json:"notificationsFired"`  // post-dedup count actually pushed to notification agents
 	Errors             []string `json:"errors,omitempty"`    // per-rule errors (instance unreachable, etc.)
 }
 

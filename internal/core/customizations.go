@@ -23,11 +23,11 @@
 //   - KeepArrCFIDs: Arr-only CF preservation markers
 //   - Optional cf-groups: default-off groups the user toggled on
 //
-// ExcludedCFs ARE counted as of Phase 2c (2026-05-21) — the lock-icon
-// UI lets the user opt out of required CFs, so the rule can now carry
-// excludedCFs that materially affect what syncs. Without surfacing
-// the count, a rule with N excluded CFs reads as "0 customizations"
-// in the Sync Rules pill, which actively misleads.
+// ExcludedCFs ARE counted — the lock-icon UI lets the user opt out of
+// required CFs, so the rule can carry excludedCFs that materially affect
+// what syncs. Without surfacing the count, a rule with N excluded CFs
+// reads as "0 customizations" in the Sync Rules pill, which actively
+// misleads.
 
 package core
 
@@ -233,9 +233,9 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 	//    set. Only count exclusions that actually subtract something —
 	//    if the trashId isn't in defaultCFs, the entry is dead state
 	//    (CF moved out of defaults upstream; backend cleans on next
-	//    sync). This covers Phase 2c excluded required CFs (always in
-	//    defaults via FormatItems / required-in-active-groups) AND the
-	//    pre-existing opt-outs from default-on optional CFs.
+	//    sync). Covers BOTH excluded required CFs (always in defaults
+	//    via FormatItems / required-in-active-groups) AND opt-outs
+	//    from default-on optional CFs.
 	for _, tid := range rule.ExcludedCFs {
 		if defaultCFs[tid] {
 			out.ExcludedCFs++

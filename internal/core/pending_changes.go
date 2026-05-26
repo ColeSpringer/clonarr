@@ -2,15 +2,14 @@ package core
 
 // PendingChange is one TRaSH-side modification that affects a specific sync
 // rule, persisted per-rule so the UI can render "what's pending" timelines
-// (Phase 4 backlog view) and the runner can fingerprint the affected set
-// for dedup. Phase D will add a parallel "drift" source for Arr-side
-// changes.
+// (the backlog view) and the runner can fingerprint the affected set for
+// dedup. A future parallel "drift" source covers Arr-side changes.
 //
 // The accumulator is union-semantics: re-observing the same change across
 // hourly ticks doesn't duplicate the entry, but a NEW commit touching the
 // same trash_id does add a new entry (so the timeline shows the history).
 type PendingChange struct {
-	Source       string `json:"source"`               // "trash" (Phase C) | "drift" (Phase D)
+	Source       string `json:"source"`               // "trash" (TRaSH upstream) | "drift" (Arr-side, future)
 	DetectedAt   string `json:"detectedAt"`           // RFC3339
 	CommitHash   string `json:"commitHash,omitempty"` // TRaSH commit that introduced this change
 	ChangeType   string `json:"changeType"`           // "cf-modified" | "cf-added" | "cf-removed" | "cf-group-modified" | "profile-modified" | "qs-modified"
@@ -60,6 +59,6 @@ func MergePendingChanges(existing, incoming []PendingChange) []PendingChange {
 
 // maxPendingChangesPerRule caps per-rule storage so a misbehaving detection
 // run or a flood of upstream commits can't bloat clonarr.json indefinitely.
-// 50 is plenty for the UI backlog view (Phase 4) and lets older entries
-// roll off naturally as the user pulls or dismisses.
+// 50 is plenty for the UI backlog view and lets older entries roll off
+// naturally as the user pulls or dismisses.
 const maxPendingChangesPerRule = 50

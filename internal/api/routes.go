@@ -116,7 +116,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// External widget summary (homepage, glance, etc.) — stable contract
 	mux.HandleFunc("GET /api/widget/summary", s.handleWidgetSummary)
 
-	// Profile Sync — config + telemetry (Phase A: settings; runner endpoints in Phase B)
+	// Profile Sync — config + telemetry
 	mux.HandleFunc("GET /api/profile-sync", s.handleGetProfileSync)
 	mux.HandleFunc("PUT /api/profile-sync", s.handlePutProfileSync)
 	mux.HandleFunc("POST /api/profile-sync/check", s.handleProfileSyncCheck)

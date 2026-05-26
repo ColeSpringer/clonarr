@@ -26,7 +26,7 @@ type Config struct {
 	SyncHistory          []SyncHistoryEntry               `json:"syncHistory,omitempty"`
 	CleanupKeep          map[string][]string              `json:"cleanupKeep,omitempty"` // instanceID → CF names to keep during delete-all
 	AutoSync             AutoSyncConfig                   `json:"autoSync,omitempty"`
-	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Watch & Drift sprint — Arr-side drift detection (still used; populated by migration in Phase D)
+	DriftWatch           *DriftWatch                      `json:"driftWatch,omitempty"`           // Arr-side drift detection state; populated by the drift-detection runner
 	ProfileSync          *ProfileSync                     `json:"profileSync,omitempty"`          // Unified Profile Sync subsystem. Populated via migration from PullInterval/PullSchedule on first load after upgrade. nil = pre-migration state.
 	Prowlarr             ProwlarrConfig                   `json:"prowlarr,omitempty"`
 	// Authentication — matches Radarr/Sonarr Security panel model.
@@ -101,7 +101,7 @@ type DriftResult struct {
 //
 // NOTE: Current/Target are `any` so they can hold scores (int), names
 // (string), or quality-item lists. On JSON round-trip, numeric values come
-// back as float64 — Phase 3's diff-equality logic must normalize.
+// back as float64 — downstream diff-equality logic must normalize.
 type DriftDetail struct {
 	Field   string `json:"field"`            // "score" | "cf-membership" | "cutoff" | ...
 	CFName  string `json:"cfName,omitempty"` // for CF-related drifts
@@ -258,7 +258,7 @@ type AutoSyncRule struct {
 	// WatchState carries the SHA fingerprint of the most-recent affected-
 	// trash-id set so notifications dedupe across consecutive detection
 	// ticks. PendingChanges accumulates union-merged change events for
-	// the rule (TRaSH-side now, Arr-drift in Phase D) — surfaced as the
+	// the rule (TRaSH-side today; Arr-drift detection adds entries later) — surfaced as the
 	// rule's badge + backlog timeline in the UI. Both default empty.
 	// Cleared when a successful sync applies the change set.
 	WatchState     *WatchState     `json:"watchState,omitempty"`

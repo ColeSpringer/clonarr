@@ -25,16 +25,13 @@ var urlUserinfoRE = regexp.MustCompile(`(https?|git\+ssh|ssh)://[^@\s/]+@`)
 // touches Arr. Surfaces "TRaSH update available" badges on rules so users can
 // trigger a manual Pull (or wait for the scheduled one) when they're ready.
 //
-// Phase 2a (MVP) implemented here:
+// Current scope:
 //   - Empty-clone safety guard (Trash.CurrentCommit() == "" → skip)
 //   - git ls-remote against the configured TRaSH branch
 //   - Compare local HEAD vs upstream HEAD; update ProfileSync persistence
-//
-// Phase 2b will add:
-//   - Detailed commit-range walk + file-to-rule mapping
-//   - ExcludedCFs filter (Decision 6 + addendum G)
+//   - Detailed commit-range walk + file-to-rule mapping (detectPerRuleChanges)
+//   - ExcludedCFs filter so opt-outs don't trigger notifications
 //   - Per-rule notification firing for auto-sync-ON rules
-//   - POST /api/watch/update/refresh with rate limiting
 //
 type ProfileSyncRunner struct {
 	app *App
@@ -98,7 +95,8 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 		return uw.runPullAndSync(ctx)
 	default:
 		// Notify-only / Delayed modes use the ls-remote-only path for
-		// detection. Notification firing + per-rule mapping land in Phase C.
+		// detection. The runner then fires notifications + per-rule
+		// PendingChange entries without touching Arr.
 		return uw.runDetectionOnly(ctx)
 	}
 }
@@ -115,7 +113,7 @@ func (uw *ProfileSyncRunner) RunDetectionOnly(ctx context.Context) error {
 
 // runDetectionOnly performs the ls-remote-only check. Empty-clone guard
 // applies — comparing against an empty local HEAD would surface every
-// upstream commit as "new" once Phase C wires notification firing.
+// upstream commit as "new" and spam the notification path.
 func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 	// Unconditional sweep of legacy "profile-modified" generic entries —
 	// they're superseded by the granular profile-quality-* / profile-name
@@ -157,7 +155,7 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		return nil
 	}
 	if !cfg.ProfileSync.Sources.TrashUpstream {
-		return nil // ArrDrift-only path lands in Phase D; nothing to do here yet
+		return nil // ArrDrift-only path not yet implemented; nothing to do here
 	}
 
 	remote := cfg.TrashRepo.URL
@@ -181,9 +179,9 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 	// snapshot from cfg.Get() at the top of Run. Without this, a manual
 	// Pull interleaving between our snapshot and our persist would let us
 	// re-fire a notification even though Pull just synced everything.
-	// (Full per-rule WatchState dedup with SHA fingerprints lands in
-	// Phase C commit 2; this is the MVP-level dedup against the most
-	// recent persisted UpstreamHead.)
+	// This is the aggregate-level dedup against the persisted
+	// UpstreamHead; per-rule WatchState fingerprints add finer-grained
+	// dedup at the rule level (see detectPerRuleChanges).
 	var priorUpstream string
 	now := time.Now().UTC().Format(time.RFC3339)
 	if updErr := uw.app.Config.Update(func(c *Config) {
@@ -215,11 +213,11 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 	}
 	if cmpUpstream != cmpLocal {
 		log.Printf("profile-sync: TRaSH upstream ahead — local=%s upstream=%s", shortHash(localCommit), shortHash(upstreamHead))
-		// Phase C commit 2 — fetch commit-range to a dedicated side-ref
-		// + walk the file changes + per-rule PendingChanges + per-rule
-		// fingerprint dedup. Best-effort: failures in this enrichment
-		// path fall back to the MVP-level aggregate notification so
-		// users still hear about upstream activity.
+		// Fetch commit-range to a dedicated side-ref + walk the file
+		// changes + emit per-rule PendingChanges + per-rule fingerprint
+		// dedup. Best-effort: failures in this enrichment path fall back
+		// to the aggregate notification so users still hear about
+		// upstream activity.
 		summary := uw.detectPerRuleChanges(ctx, cfg, remote, branch, localCommit, upstreamHead)
 
 		// Aggregate-level notification fires only when this is a NEW
@@ -272,7 +270,7 @@ func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Confi
 	for _, path := range changedFiles {
 		cf := ClassifyTrashFilePath(path)
 		if cf.Kind == FileChangeOther || cf.Kind == FileChangeQualitySize {
-			continue // QS handled separately in Phase D; non-data files ignored
+			continue // QS handled by the quality-sizes auto-sync path; non-data files ignored
 		}
 		tid, _ := uw.app.Trash.ReadTrashIDFromRef(ctx, upstreamRef, path)
 		if tid == "" {

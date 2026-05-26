@@ -14,9 +14,8 @@
 //
 // Known limitation: Basic auth mode performs a bcrypt verify on every
 // request (~250ms). This is a CPU-amplification DoS vector without rate
-// limiting. Rate limiting on auth endpoints lands in Phase 2 of the
-// security hardening plan. Users should prefer Forms auth or front the
-// app with a reverse proxy that handles auth.
+// limiting. Users should prefer Forms auth (which IS rate-limited via
+// ratelimit.go) or front the app with a reverse proxy that handles auth.
 package auth
 
 import (

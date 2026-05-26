@@ -56,8 +56,8 @@ func (app *App) AutoSyncAfterPull(trigger string) {
 		return
 	}
 	// Per-instance pause is checked inside runRulesPerInstance — that path
-	// has the resolved Instance struct on hand. The pre-pass global pause
-	// check is gone now that pause is instance-scoped (v3 Sprint 3).
+	// has the resolved Instance struct on hand. No pre-pass global pause
+	// check here since pause is instance-scoped, not global.
 
 	if trigger == "" {
 		trigger = SourceAutoPullInterval
