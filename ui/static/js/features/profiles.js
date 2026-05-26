@@ -2112,8 +2112,12 @@ export default {
         // completes — guarantees the back-list reflects the persisted
         // state by the time the user sees it. Gated on the same
         // condition as the success toast above so error paths leave
-        // the editor open for re-attempt.
+        // the editor open for re-attempt. Clear the dirty-tracking
+        // baseline first so closeProfileEditor's unsaved-changes guard
+        // doesn't fire — Apply IS the save, by definition there's
+        // nothing unsaved to warn about.
         if (closeEditorAfterApply) {
+          this._clearProfileBaseline();
           this.closeProfileEditor();
         }
       } catch (e) {
@@ -2210,9 +2214,10 @@ export default {
         // grid). Pre-fix the user had to manually click Cancel to leave
         // even though they'd already committed their changes, which
         // also made "Cancel" read as "discard" right after a save.
-        // (No _captureProfileBaseline() before close — closeProfileEditor
-        // calls _clearProfileBaseline() first thing, so the capture
-        // would be immediately wiped.)
+        // Clear the dirty-tracking baseline first so closeProfileEditor's
+        // unsaved-changes guard doesn't fire — Apply IS the save, the
+        // editor state matches what was just persisted.
+        this._clearProfileBaseline();
         this.closeProfileEditor();
       } catch (e) {
         console.error('saveRuleOnly:', e);
