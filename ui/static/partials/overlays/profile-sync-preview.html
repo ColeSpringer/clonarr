@@ -79,7 +79,7 @@
           <template x-if="spOverviewDiffs().modifiedBasics.length > 0">
             <span> — <span x-text="spOverviewDiffs().modifiedBasics.length"></span> customized settings</span>
           </template>
-          <template x-if="(syncPlan.settingsPreview || []).length > 0 || (syncPlan.qualityPreview || []).length > 0 || (syncPlan.cfActions || []).some(a => a.action !== 'unchanged') || (syncPlan.scoreActions || []).some(a => a.action !== 'unchanged')">
+          <template x-if="(syncPlan?.settingsPreview || []).length > 0 || (syncPlan?.qualityPreview || []).length > 0 || (syncPlan?.cfActions || []).some(a => a.action !== 'unchanged') || (syncPlan?.scoreActions || []).some(a => a.action !== 'unchanged')">
             <div style="margin-top:6px">
               <a style="font-size:12px;color:var(--accent-blue);cursor:pointer;user-select:none" @click="dryrunDetailsOpen = !dryrunDetailsOpen"
                  x-text="dryrunDetailsOpen ? '▾ Hide details' : '▸ Show details'"></a>
@@ -88,29 +88,34 @@
                      then pdOverrides-derived customizations for the
                      CREATE-mode / matched-state case. Skip the latter
                      if settingsPreview already covered the same labels
-                     to avoid duplication. -->
-                <template x-for="s in (syncPlan.settingsPreview || [])" :key="s">
+                     to avoid duplication.
+                     Optional-chaining on syncPlan throughout: the
+                     outer x-if guards the visible DOM, but Alpine
+                     still evaluates inner x-for/x-text expressions
+                     during the teardown transition when syncPlan
+                     drops to null, so the reads need to survive that. -->
+                <template x-for="s in (syncPlan?.settingsPreview || [])" :key="s">
                   <div><span style="color:var(--accent-blue)">General:</span> <span x-text="s"></span></div>
                 </template>
-                <template x-if="(syncPlan.settingsPreview || []).length === 0">
+                <template x-if="(syncPlan?.settingsPreview || []).length === 0">
                   <div>
                     <template x-for="b in spOverviewDiffs().modifiedBasics" :key="'dry-mb-'+b.label">
                       <div><span style="color:var(--accent-blue)">General:</span> <span x-text="b.label + ': ' + b.original + ' → ' + b.current"></span></div>
                     </template>
                   </div>
                 </template>
-                <template x-for="q in (syncPlan.qualityPreview || [])" :key="q">
+                <template x-for="q in (syncPlan?.qualityPreview || [])" :key="q">
                   <div><span style="color:var(--accent-orange)">Quality:</span> <span x-text="q"></span></div>
                 </template>
                 <!-- spSortActions sorts by profile's natural order
                      (formatItems → default-on groups → additional). -->
-                <template x-for="a in spSortActions((syncPlan.cfActions || []).filter(a => a.action === 'create'), 'name')" :key="'cf-'+a.name">
+                <template x-for="a in spSortActions((syncPlan?.cfActions || []).filter(a => a.action === 'create'), 'name')" :key="'cf-'+a.name">
                   <div><span style="color:var(--accent-green)">Create CF:</span> <span x-text="a.name"></span></div>
                 </template>
-                <template x-for="a in spSortActions((syncPlan.cfActions || []).filter(a => a.action === 'update'), 'name')" :key="'cfu-'+a.name">
+                <template x-for="a in spSortActions((syncPlan?.cfActions || []).filter(a => a.action === 'update'), 'name')" :key="'cfu-'+a.name">
                   <div><span style="color:var(--accent-blue)">Update CF:</span> <span x-text="a.name"></span></div>
                 </template>
-                <template x-for="a in spSortActions((syncPlan.scoreActions || []).filter(a => a.action !== 'unchanged'), 'cfName')" :key="'sc-'+a.cfName">
+                <template x-for="a in spSortActions((syncPlan?.scoreActions || []).filter(a => a.action !== 'unchanged'), 'cfName')" :key="'sc-'+a.cfName">
                   <div><span style="color:var(--accent-orange)">Score:</span> <span x-text="a.cfName + ': ' + a.oldScore + ' → ' + a.newScore"></span></div>
                 </template>
               </div>
