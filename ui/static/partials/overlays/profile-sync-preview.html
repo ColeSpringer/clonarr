@@ -757,7 +757,13 @@
             </template>
             <!-- Multi-CF group: standard layout — action rows above,
                  CF list below. -->
-            <div class="sp-action-rows" x-show="!_singleCF">
+            <!-- Hide group-level controls when the user is searching for a
+                 specific CF. The group context (header + colored border) still
+                 shows so users know which group the matched CF belongs to,
+                 but the group toggle is removed to prevent clicks meant for
+                 the individual CF from accidentally flipping the whole
+                 group. Clearing the search restores the group toggle. -->
+            <div class="sp-action-rows" x-show="!_singleCF && !spSearchFilter">
               <template x-if="_hasToggle">
                 <label class="sp-action-row toggle-row">
                   <span class="toggle toggle-sm"
@@ -1811,8 +1817,11 @@
             <!-- Mass-toggle for the whole group — mirrors the Profile
                  default tab's "All optional CFs" action row. Renders
                  only when the group has 2+ CFs so it doesn't add noise
-                 for single-CF groups (those have their own row toggle). -->
-            <template x-if="spAdditionalGroupCFs(g).length >= 2">
+                 for single-CF groups (those have their own row toggle).
+                 Hidden when search is active so a user looking for a
+                 specific CF doesn't accidentally toggle the whole
+                 group with a misaimed click. -->
+            <template x-if="spAdditionalGroupCFs(g).length >= 2 && !spSearchFilter">
               <div class="sp-action-rows">
                 <label class="sp-action-row toggle-row">
                   <span class="toggle toggle-sm"

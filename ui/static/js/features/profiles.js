@@ -738,6 +738,12 @@ export default {
       this.syncPlan = null;
       this.syncResult = null;
       this.selectedOptionalCFs = {};
+      // Reset the CF search filter so a new profile doesn't open looking
+      // empty because a previous edit-session left a filter active.
+      // Without this, opening profile B after searching "flux" on profile
+      // A renders B's editor with the search still applied, hiding rows
+      // that don't match.
+      this.spSearchFilter = '';
 
       this.profileDetail = { instance: inst, profile: profile, detail: null };
       // Pre-load languages and quality presets for this instance (for override dropdowns)
