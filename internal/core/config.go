@@ -732,6 +732,25 @@ func (cs *ConfigStore) Get() Config {
 				o := *r.Overrides
 				cfg.AutoSync.Rules[i].Overrides = &o
 			}
+			if r.WatchState != nil {
+				ws := *r.WatchState
+				cfg.AutoSync.Rules[i].WatchState = &ws
+			}
+			if len(r.PendingChanges) > 0 {
+				cfg.AutoSync.Rules[i].PendingChanges = append([]PendingChange(nil), r.PendingChanges...)
+			}
+			if len(r.PriorAvailableGroups) > 0 {
+				cfg.AutoSync.Rules[i].PriorAvailableGroups = make(map[string]bool, len(r.PriorAvailableGroups))
+				for k, v := range r.PriorAvailableGroups {
+					cfg.AutoSync.Rules[i].PriorAvailableGroups[k] = v
+				}
+			}
+			if len(r.PriorSyncedCFs) > 0 {
+				cfg.AutoSync.Rules[i].PriorSyncedCFs = append([]string(nil), r.PriorSyncedCFs...)
+			}
+			if len(r.KeepArrCFIDs) > 0 {
+				cfg.AutoSync.Rules[i].KeepArrCFIDs = append([]int(nil), r.KeepArrCFIDs...)
+			}
 		}
 	}
 	return cfg

@@ -55,7 +55,8 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 			cfg.ProfileSync.Interval = *req.Interval
 		}
 		if req.Specific != nil {
-			cfg.ProfileSync.Specific = req.Specific
+			sp := *req.Specific
+			cfg.ProfileSync.Specific = &sp
 		}
 		if req.Sources != nil {
 			cfg.ProfileSync.Sources = *req.Sources
@@ -67,7 +68,8 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 			cfg.ProfileSync.ApplyInterval = *req.ApplyInterval
 		}
 		if req.ApplySpecific != nil {
-			cfg.ProfileSync.ApplySpecific = req.ApplySpecific
+			asp := *req.ApplySpecific
+			cfg.ProfileSync.ApplySpecific = &asp
 		}
 	}); err != nil {
 		writeError(w, 500, "failed to save profile-sync settings")
