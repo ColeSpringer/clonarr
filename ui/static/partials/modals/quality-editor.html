@@ -11,7 +11,21 @@
            get _items() { return (qualityEditorTarget === 'builder') ? (pb.qualityItems || []) : (qualityStructure || []); },
            get _target() { return qualityEditorTarget || 'builder'; },
            get _qsCols() { const n = this._items.length; return n > 12 ? 3 : n > 6 ? 2 : 1; },
-           get _qsRows() { return Math.ceil(this._items.length / this._qsCols); }
+           get _qsRows() { return Math.ceil(this._items.length / this._qsCols); },
+           // Distribute items into N independent columns by index so each
+           // column flows naturally without grid's forced row alignment.
+           // Expanding a group only makes its own column taller — other
+           // columns stay short, no ugly empty space below.
+           get _qsColumns() {
+             const cols = this._qsCols;
+             const rows = this._qsRows;
+             const out = Array.from({ length: cols }, () => []);
+             this._items.forEach((it, i) => {
+               const c = Math.min(Math.floor(i / rows), cols - 1);
+               out[c].push({ item: it, idx: i });
+             });
+             return out;
+           }
          }"
          @click.self="pb.qualityEditorOpen = false; qsCloseSharedState();"
          style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px">
@@ -41,21 +55,17 @@
                     x-tt="'Clear quality items — re-apply a preset to repopulate'"
                     @click="qsResetAll(_target)">Reset</button>
           </div>
-          <!-- Grid layout with grid-auto-flow: column gives top-to-
-               bottom column flow (matching the original column-count
-               visual) without breaking drag-and-drop. Items go down
-               column 1, then column 2, then column 3. Row count is
-               computed from item count + column count so columns
-               balance roughly evenly. -->
-          <div :style="{
-                 display: 'grid',
-                 gridTemplateRows: 'repeat(' + _qsRows + ', auto)',
-                 gridAutoFlow: 'column',
-                 columnGap: '16px',
-                 rowGap: '0'
-               }">
-            <template x-for="(item, idx) in _items" :key="item._id || ('qei-'+idx)">
-              <div>
+          <!-- N independent flex columns, items distributed by index.
+               Avoids CSS Grid's forced row alignment so expanding a
+               group only makes its own column taller — other columns
+               stay at their natural height with no empty space.
+               Each column is a separate flex container; items inside
+               keep their original idx for drag-drop handlers. -->
+          <div style="display:flex;column-gap:16px;align-items:flex-start">
+            <template x-for="(_qsCol, _qsColIdx) in _qsColumns" :key="'qsc-'+_qsColIdx">
+              <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column">
+                <template x-for="{ item, idx } in _qsCol" :key="item._id || ('qei-'+idx)">
+                  <div>
                 <template x-if="idx === 0">
                   <div class="qs-drop-gap"
                        :class="{ 'dnd-active': qualityStructureDrag.kind, 'dnd-hover': qualityStructureDrag.dropGap === 0 }"
@@ -148,6 +158,8 @@
                      @dragover.prevent="qualityStructureDrag.dropGap = idx + 1"
                      @dragleave="qualityStructureDrag.dropGap = null"
                      @drop.prevent="qsHandleDropOnGap(idx + 1, _target)"></div>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
