@@ -9,16 +9,22 @@
     <div x-cloak
          x-data="{
            get _items() { return (qualityEditorTarget === 'builder') ? (pb.qualityItems || []) : (qualityStructure || []); },
-           get _target() { return qualityEditorTarget || 'builder'; }
+           get _target() { return qualityEditorTarget || 'builder'; },
+           get _qsCols() { const n = this._items.length; return n > 12 ? 3 : n > 6 ? 2 : 1; },
+           get _qsRows() { return Math.ceil(this._items.length / this._qsCols); }
          }"
          @click.self="pb.qualityEditorOpen = false; qsCloseSharedState();"
          style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px">
-      <!-- max-width sized to a single-column quality-items list
-           (handle + checkbox + name + badge + delete). The previous
-           900px was sized for the 2-/3-column multi-col layout that
-           broke HTML5 drag-and-drop; with single-column the wider
-           modal just looked sparse. -->
-      <div style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+      <!-- max-width scales with the column count: a 3-column list needs
+           ~900px to breathe, a single column reads better at ~480px.
+           Original 900px-static + CSS column-count was visually nicer
+           but broke HTML5 drag-and-drop on items outside the first
+           column (a known CSS multi-column + DnD incompatibility).
+           CSS Grid with grid-auto-flow: column gives the same
+           top-to-bottom column layout while keeping DnD working
+           on every cell. -->
+      <div :style="{ maxWidth: _qsCols === 3 ? '900px' : _qsCols === 2 ? '700px' : '480px' }"
+           style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
         <div style="padding:14px 18px;border-bottom:1px solid var(--bg-muted);display:flex;align-items:flex-start;gap:10px">
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:600;color:var(--text-primary)">Edit Quality Items</div>
@@ -35,13 +41,19 @@
                     x-tt="'Clear quality items — re-apply a preset to repopulate'"
                     @click="qsResetAll(_target)">Reset</button>
           </div>
-          <!-- Single-column layout intentionally — CSS multi-column
-               (column-count) breaks HTML5 drag-and-drop: only items in
-               the first column fire drag/drop events reliably across
-               browsers. Reordering via drag is the editor's primary
-               function, so list-length wins over column density.
-               Outer container scrolls when the list is long. -->
-          <div>
+          <!-- Grid layout with grid-auto-flow: column gives top-to-
+               bottom column flow (matching the original column-count
+               visual) without breaking drag-and-drop. Items go down
+               column 1, then column 2, then column 3. Row count is
+               computed from item count + column count so columns
+               balance roughly evenly. -->
+          <div :style="{
+                 display: 'grid',
+                 gridTemplateRows: 'repeat(' + _qsRows + ', auto)',
+                 gridAutoFlow: 'column',
+                 columnGap: '16px',
+                 rowGap: '0'
+               }">
             <template x-for="(item, idx) in _items" :key="item._id || ('qei-'+idx)">
               <div>
                 <template x-if="idx === 0">
