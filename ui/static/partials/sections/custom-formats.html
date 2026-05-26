@@ -28,7 +28,7 @@
                     <button type="button"
                             class="cf-browse-side-chevron"
                             :class="{ open: isCFBrowseParentExpanded(par.parent, par.children) }"
-                            @click="toggleCFBrowseParent(par.parent)"
+                            @click="toggleCFBrowseParent(par.parent, par.children)"
                             aria-label="Toggle expansion">
                       &#9654;
                     </button>

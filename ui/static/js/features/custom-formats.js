@@ -176,25 +176,80 @@ export default {
     },
 
     // Set the sidebar category filter and persist the choice.
+    // CLEARS any explicit chevron-set state on the relevant parent so
+    // the auto-expand-via-active branch in isCFBrowseParentExpanded
+    // takes over. Effect: clicking a label re-opens that parent even
+    // if it was manually collapsed, and other parents auto-close
+    // naturally (their active-match check goes false once active
+    // moves to a different parent). Matches the profile editor's
+    // pattern where label clicks clear the chevron's explicit
+    // override on the same section.
     setCFBrowseCategory(name) {
       this.cfBrowseActiveCategory = name || 'all';
       try { localStorage.setItem('clonarr_cfBrowseCategory', this.cfBrowseActiveCategory); } catch (_) {}
+
+      // Figure out which sidebar parent (if any) the new active filter
+      // belongs to — either directly (parent:X) or via a child's parent.
+      let targetParent = null;
+      if (this.cfBrowseActiveCategory.startsWith('parent:')) {
+        targetParent = this.cfBrowseActiveCategory.slice('parent:'.length);
+      } else if (this.cfBrowseActiveCategory !== 'all') {
+        const tree = this.cfBrowseCategoriesHierarchy(this.activeAppType) || [];
+        for (const par of tree) {
+          if ((par.children || []).some(c => c.displayName === this.cfBrowseActiveCategory)) {
+            targetParent = par.parent;
+            break;
+          }
+        }
+      }
+      // Clear the explicit override on the target parent — auto-expand
+      // (via the active-match check) takes over from here.
+      if (targetParent && Object.prototype.hasOwnProperty.call(this.cfBrowseSidebarExpanded, targetParent)) {
+        const updated = { ...this.cfBrowseSidebarExpanded };
+        delete updated[targetParent];
+        this.cfBrowseSidebarExpanded = updated;
+        try { localStorage.setItem('clonarr_cfBrowseExpanded', JSON.stringify(updated)); } catch (_) {}
+      }
+
+      // For single-child pins, also force the matching main-pane card open.
+      if (this.cfBrowseActiveCategory !== 'all'
+          && !this.cfBrowseActiveCategory.startsWith('parent:')) {
+        this.detailSections = {
+          ...this.detailSections,
+          ['cfb_' + this.cfBrowseActiveCategory]: true,
+        };
+      }
     },
 
     // Toggle a single parent's expansion in the sidebar tree.
-    toggleCFBrowseParent(parent) {
+    // Sets explicit to the inverse of what's CURRENTLY VISIBLE — not
+    // the inverse of the stored explicit flag. The difference matters
+    // when the parent is auto-expanded (via active-filter match) with
+    // no explicit value set: a plain "!stored" toggle would flip
+    // undefined → true (no visible change on first click). Inverting
+    // the visible state means the first chevron click always does
+    // what the user expects (collapse a visibly-open parent).
+    toggleCFBrowseParent(parent, children) {
+      const currentlyVisible = this.isCFBrowseParentExpanded(parent, children);
       this.cfBrowseSidebarExpanded = {
         ...this.cfBrowseSidebarExpanded,
-        [parent]: !this.cfBrowseSidebarExpanded[parent],
+        [parent]: !currentlyVisible,
       };
       try { localStorage.setItem('clonarr_cfBrowseExpanded', JSON.stringify(this.cfBrowseSidebarExpanded)); } catch (_) {}
     },
 
-    // True when a parent is currently expanded. Also auto-expanded
-    // when the active filter targets one of its children (so the
-    // user always sees what they're filtering on).
+    // True when a parent is currently expanded. Explicit chevron-set
+    // state wins (true OR false — so the user can collapse a parent
+    // that's also the active filter target). When the user has never
+    // touched the chevron on this parent (state is undefined), fall
+    // back to auto-expand: open if the parent or any of its children
+    // is the active filter target so the highlighted entry is always
+    // visible. setCFBrowseCategory re-sets the explicit flag to true
+    // when the user re-clicks the parent or one of its children, so
+    // re-pinning after manual collapse re-expands.
     isCFBrowseParentExpanded(parent, children) {
-      if (this.cfBrowseSidebarExpanded[parent]) return true;
+      const explicit = this.cfBrowseSidebarExpanded[parent];
+      if (explicit !== undefined) return explicit;
       const active = this.cfBrowseActiveCategory;
       if (active === 'parent:' + parent) return true;
       if (active && active !== 'all' && !active.startsWith('parent:')) {
@@ -229,16 +284,14 @@ export default {
       return out;
     },
 
-    // True when the category should render expanded. Either the user
-    // explicitly opened it OR a non-empty cfBrowseFilter is active —
-    // search results need to be visible without manual clicks. When
-    // the sidebar pins a single category, that category renders
-    // expanded by default so the user sees its CFs immediately.
+    // True when the category should render expanded. Search results
+    // need to be visible without manual clicks (cfBrowseFilter branch);
+    // otherwise the explicit detailSections flag wins. setCFBrowseCategory
+    // sets that flag to true when the sidebar pins a single child
+    // category, so card-auto-expansion-on-sidebar-click still works —
+    // but the chevron and "Collapse all" can override it because they
+    // also write to detailSections.
     isCFCategoryExpanded(cat) {
-      if (this.cfBrowseActiveCategory && this.cfBrowseActiveCategory !== 'all'
-          && this.cfBrowseActiveCategory === cat.displayName) {
-        return true;
-      }
       return !!this.cfBrowseFilter || !!this.detailSections['cfb_' + cat.displayName];
     },
 
