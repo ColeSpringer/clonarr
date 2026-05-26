@@ -180,14 +180,14 @@
           <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
             <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
-            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Update all, Update profile, or Auto-sync.'"></button>
             <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openImportedSyncModalAsNew()" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>
         </template>
         <template x-if="!profileDetail?.detail?.imported">
           <span class="sp-action-buttons-native" style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Sync All, Sync Now, or Auto-Sync.'"></button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Update all, Update profile, or Auto-sync.'"></button>
             <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>

@@ -637,7 +637,7 @@ export default {
       this.confirmModal = {
         show: true,
         title: 'Reset TRaSH Data',
-        message: 'Delete the local TRaSH Guides cache and pull metadata?\n\nUser settings, instances, sync rules, custom profiles, and custom CFs are not deleted.\n\nAfter reset, Pull downloads a fresh TRaSH cache. If it lands on the same TRaSH commit your rules already synced, Pull will not force Arr profiles to resync. Use Sync All after Pull if you want to force an Arr refresh.',
+        message: 'Delete the local TRaSH Guides cache and pull metadata?\n\nUser settings, instances, sync rules, custom profiles, and custom CFs are not deleted.\n\nAfter reset, Pull downloads a fresh TRaSH cache. If it lands on the same TRaSH commit your rules already synced, Pull will not force Arr profiles to resync. Use Update all after Pull if you want to force an Arr refresh.',
         confirmLabel: 'Reset data',
         onConfirm: () => this._resetTrashDataConfirmed(),
       };
@@ -659,7 +659,7 @@ export default {
         }
         await this.loadTrashStatus();
         this.clearTrashDerivedCaches();
-        this.showToast('TRaSH data reset. Pull downloads fresh data; use Sync All after Pull for a forced Arr refresh.', 'info', 7000);
+        this.showToast('TRaSH data reset. Pull downloads fresh data; use Update all after Pull for a forced Arr refresh.', 'info', 7000);
       } catch (e) {
         this.showToast('Failed to reset TRaSH data: ' + e.message, 'error', 6000);
       } finally {
@@ -2208,7 +2208,7 @@ export default {
           return;
         }
         await this.loadAutoSyncRules();
-        this.showToast('Changes applied. Will sync on next Sync All / Sync Now / Auto-Sync.', 'success', 6000);
+        this.showToast('Changes applied. Will sync on next Update all / Update profile / Auto-sync.', 'success', 6000);
         // Auto-close the editor after a clean Apply — leaves the user
         // back where they came from (Sync Rules tab / TRaSH Profiles
         // grid). Pre-fix the user had to manually click Cancel to leave
@@ -2455,7 +2455,7 @@ export default {
         return builderOnly ? r.profileSource === 'imported' : r.profileSource !== 'imported';
       });
       if (!rules.length) {
-        this.showToast(`Sync All (${inst.name}): no profiles with auto-sync enabled`, 'warning', 4000);
+        this.showToast(`Update all (${inst.name}): no profiles with auto-sync enabled`, 'warning', 4000);
         return;
       }
       // Pre-flight reachability check — bail out with ONE friendly toast
@@ -2468,11 +2468,11 @@ export default {
         const probeBody = await probe.json().catch(() => ({}));
         if (!probe.ok || probeBody.connected === false) {
           const detail = probeBody.error || `${inst.name} is not reachable — check that the instance is running.`;
-          this.showToast(`Sync All (${inst.name}): ${detail}`, 'error', 8000);
+          this.showToast(`Update all (${inst.name}): ${detail}`, 'error', 8000);
           return;
         }
       } catch (e) {
-        this.showToast(`Sync All (${inst.name}): could not reach ${inst.name} — ${e.message}`, 'error', 8000);
+        this.showToast(`Update all (${inst.name}): could not reach ${inst.name} — ${e.message}`, 'error', 8000);
         return;
       }
       // quickSync expects a sync-history-entry shape. Adapt each rule
@@ -2517,7 +2517,7 @@ export default {
       const errors = results.filter(r => !r.ok).length;
       const toastType = errors === results.length ? 'error' : errors > 0 ? 'warning' : 'info';
       this.showToast({
-        title: `Sync All (${inst.name})`,
+        title: `Update all (${inst.name})`,
         message: errors > 0
           ? `${results.length - errors} succeeded, ${errors} failed.`
           : `${results.length} profile${results.length === 1 ? '' : 's'} synced.`,
