@@ -30,10 +30,14 @@
       <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
         <button type="button" class="btn btn-sm" @click="cancelCloneCF()" :disabled="cloneModal.saving">Cancel</button>
         <button type="button" class="btn btn-sm"
+                @click="openCloneInEditor()"
+                :disabled="cloneModal.saving || !cloneModal.name.trim()">Edit</button>
+        <button type="button" class="btn btn-sm"
                 style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
                 @click="commitCloneCF()"
                 :disabled="cloneModal.saving || !cloneModal.name.trim()"
-                x-text="cloneModal.saving ? 'Saving…' : 'Save'"></button>
+                x-text="cloneModal.saving ? 'Saving…' : 'Save'"
+                x-tt="'Save the clone with the current name. Use Edit instead if you want to change the conditions or scores first.'"></button>
       </div>
     </div>
   </div>

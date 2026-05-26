@@ -804,11 +804,29 @@ export default {
     // / outside-click). Nothing is created server-side until commit.
     cloneCFRow(cf, appType) {
       const baseName = (cf?.name || 'Custom Format').replace(/\s+\(Copy(?:\s+\d+)?\)$/, '');
+      // Walk existing CFs to avoid proposing a name that already exists.
+      // First try "Name (Copy)"; if taken, try "Name (Copy 2)", "(Copy 3)",
+      // etc. Without this the user gets a confusing 409 collision error
+      // on Save when they're just trying to make a second clone of the
+      // same source CF. Must include BOTH the TRaSH catalog (cfs) AND
+      // the user's own custom CFs (customCFs) — the previous clone went
+      // into customCFs, so checking only cfs misses the collision.
+      const data = this.cfBrowseData?.[appType] || {};
+      const existingNames = new Set([
+        ...(data.cfs || []).map(c => c.name),
+        ...(data.customCFs || []).map(c => c.name),
+      ]);
+      let candidate = `${baseName} (Copy)`;
+      let counter = 2;
+      while (existingNames.has(candidate)) {
+        candidate = `${baseName} (Copy ${counter})`;
+        counter++;
+      }
       this.cloneModal = {
         open: true,
         sourceCF: cf,
         sourceAppType: appType,
-        name: `${baseName} (Copy)`,
+        name: candidate,
         saving: false,
         error: '',
       };
@@ -821,6 +839,76 @@ export default {
 
     cancelCloneCF() {
       this.cloneModal = { open: false, sourceCF: null, sourceAppType: '', name: '', saving: false, error: '' };
+    },
+
+    // Edit-mode alternative to commitCloneCF: instead of POSTing the
+    // new CF straight away, this opens the CF editor pre-filled with
+    // the source CF's specs / scores / flags + the auto-suffixed name
+    // from the modal. The user reviews/edits in the full editor and
+    // saves from there (saveCFEditor handles the POST). Useful when
+    // the user wants to tweak conditions before committing the clone.
+    async openCloneInEditor() {
+      const m = this.cloneModal;
+      if (!m || !m.sourceCF) return;
+      const newName = (m.name || '').trim();
+      if (!newName) {
+        this.cloneModal.error = 'Name is required';
+        return;
+      }
+      const cf = m.sourceCF;
+      const appType = m.sourceAppType;
+
+      // Resolve source data the same way commitCloneCF does so the
+      // editor sees identical specs / flags / scores whether the
+      // source is a custom CF or a TRaSH catalog entry.
+      let rawSpecs = cf?.specifications || [];
+      let trashSourceCF = null;
+      if (cf?.trashId && !cf?.isCustom) {
+        const cfs = this.cfBrowseData?.[appType]?.cfs || [];
+        trashSourceCF = cfs.find(c => c.trash_id === cf.trashId) || null;
+        if (!rawSpecs.length) rawSpecs = trashSourceCF?.specifications || [];
+      }
+
+      const includeInRename = !!(cf?.rawCustom?.includeInRename
+        ?? trashSourceCF?.includeCustomFormatWhenRenaming
+        ?? cf?.includeCustomFormatWhenRenaming);
+
+      // trash_scores lives at different keys depending on source:
+      // TRaSH catalog uses snake_case (trash_scores), custom CFs use
+      // camelCase (trashScores). Pick whichever is non-empty.
+      const scoresMap = cf?.rawCustom?.trashScores
+        || trashSourceCF?.trash_scores
+        || cf?.trash_scores
+        || {};
+
+      const description = cf?.rawCustom?.description
+        || trashSourceCF?.description
+        || cf?.description
+        || '';
+
+      // Close the modal first so the editor takes focus cleanly.
+      this.cancelCloneCF();
+
+      // Boot the editor in CREATE mode (so Save creates a new CF
+      // rather than overwriting the source), then overwrite the
+      // empty form openCFEditor seeded with the pre-filled clone
+      // data. arrSpecToEditorSpec normalises TRaSH-shape fields into
+      // the Arr-shape array the editor expects.
+      await this.openCFEditor('create', appType);
+      this.cfEditorForm = {
+        id: '',
+        name: newName,
+        appType,
+        category: 'Custom',
+        newCategory: '',
+        includeInRename,
+        specifications: (rawSpecs || []).map(s => this.arrSpecToEditorSpec(s)),
+        trashId: '',
+        trashScores: Object.entries(scoresMap).map(([k, v]) => ({
+          _key: ++this.cfEditorScoreCounter, context: k, score: v,
+        })),
+        description,
+      };
     },
 
     // Step 2 of clone: actually POST the new CF using the user's
