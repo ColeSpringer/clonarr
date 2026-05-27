@@ -66,7 +66,17 @@ export default {
 
     getAllSelectedCFIds() {
       const ids = this.getSelectedCFIds();
-      const extraIds = Object.keys(this.extraCFs).filter(tid => !this._isOrphanCustomTrashId(tid));
+      const sel = this.selectedOptionalCFs || {};
+      // Skip extras the user has explicitly toggled off (sel[tid]===false).
+      // Without this filter, toggling off an Additional CF that was opted
+      // in earlier (and so carries a score in extraCFs) silently re-adds
+      // it to selectedCFs via the unconditional append — visible as the
+      // CF "reactivating itself" on every reopen. Mirror filter lives in
+      // buildSyncBody's scoreOverrides loop so the rule's scoreOverride
+      // entry for the same CF also drops out of the persisted payload.
+      const extraIds = Object.keys(this.extraCFs).filter(tid =>
+        !this._isOrphanCustomTrashId(tid) && sel[tid] !== false
+      );
       return extraIds.length > 0 ? [...ids, ...extraIds] : ids;
     },
 
@@ -1763,12 +1773,18 @@ export default {
       // See _isOrphanCustomTrashId for the guard that handles the Reset
       // window safely.
       const allScoreOverrides = {};
+      const selForExtras = this.selectedOptionalCFs || {};
       for (const [tid, score] of Object.entries(this.cfScoreOverrides)) {
         if (this._isOrphanCustomTrashId(tid)) continue;
         allScoreOverrides[tid] = score;
       }
       for (const [tid, score] of Object.entries(this.extraCFs)) {
         if (this._isOrphanCustomTrashId(tid)) continue;
+        // Mirror the sel-filter from getAllSelectedCFIds: an extra the
+        // user toggled off must NOT survive in scoreOverrides either,
+        // or applyRuleStateToEditor on reopen re-populates extraCFs
+        // from the persisted scoreOverride and the toggle springs back.
+        if (selForExtras[tid] === false) continue;
         allScoreOverrides[tid] = score;
       }
       if (Object.keys(allScoreOverrides).length > 0) body.scoreOverrides = allScoreOverrides;
