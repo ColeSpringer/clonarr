@@ -1399,9 +1399,23 @@ func (ts *TrashStore) parseAppData(app string) (AppData, error) {
 }
 
 // Regex patterns for stripping markdown/HTML from CF descriptions.
+//
+// reMarkdownLn captures two groups: link text ($1) and URL ($2). The URL
+// portion uses `(?:[^()]|\([^()]*\))*` so links whose destination itself
+// contains a paren pair survive matching — common with Wikipedia
+// disambiguators like `(streaming_service)` in
+// `https://en.wikipedia.org/wiki/VRV_(streaming_service)`. The original
+// `[^)]*` form stopped at the first `)`, leaving the outer close-paren
+// plus any trailing Jekyll attribute syntax (`{:target="_blank" rel="..."}`)
+// orphaned in the rendered description.
+//
+// The optional third group consumes the Jekyll attribute block so it
+// doesn't leak into the rendered output, but the value is discarded —
+// every emitted anchor gets a fixed `target=_blank rel="noopener
+// noreferrer"` regardless of what TRaSH's attribute block said.
 var (
 	reHTML        = regexp.MustCompile(`<[^>]+>`)
-	reMarkdownLn  = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)(\{[^}]*\})?`)
+	reMarkdownLn  = regexp.MustCompile(`\[([^\]]+)\]\(((?:[^()]|\([^()]*\))*)\)(\{[^}]*\})?`)
 	reComment     = regexp.MustCompile(`<!--[\s\S]*?-->`)
 	reTemplate    = regexp.MustCompile(`\{\{[^}]+\}\}`)
 	reIncludeMd   = regexp.MustCompile(`\{!\s*include-markdown\s+"[^"]+"\s*!\}`)
@@ -1452,7 +1466,13 @@ func cleanDescription(raw string) string {
 	s := reComment.ReplaceAllString(raw, "")
 	s = reHTML.ReplaceAllString(s, "")
 	s = reTitleLine.ReplaceAllString(s, "")
-	s = reMarkdownLn.ReplaceAllString(s, "$1")
+	// Convert markdown links to clickable anchors. Frontend's sanitizeHTML
+	// already gates href to http/https only and force-sets rel="noopener
+	// noreferrer" on any anchor with target, so the strict markdown-link
+	// shape we emit here passes through cleanly. Jekyll attribute block
+	// ($3) is intentionally discarded — uniform attribute output prevents
+	// TRaSH's per-link attr overrides from breaking the sanitize allowlist.
+	s = reMarkdownLn.ReplaceAllString(s, `<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>`)
 	s = reTemplate.ReplaceAllString(s, "")
 	s = reIncludeMd.ReplaceAllString(s, "")
 	s = reSnippetIncl.ReplaceAllString(s, "")

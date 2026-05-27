@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -379,5 +380,58 @@ func TestCategoryTier_SQPCaseInsensitive(t *testing.T) {
 		if got != want {
 			t.Errorf("CategoryTier(%q) = %d, want %d", cat, got, want)
 		}
+	}
+}
+
+func TestCleanDescription_MarkdownLinkWithParensInURL(t *testing.T) {
+	// Wikipedia disambiguator pattern: URL itself contains a paren pair.
+	// Pre-fix, reMarkdownLn stopped at the first `)` and left the closing
+	// paren of the link plus any trailing Jekyll attribute syntax in the
+	// output ("VRV Wikipedia page){:target=...}"). Lock that behaviour in.
+	// Output is an anchor tag with uniform target/rel — the link text
+	// stays clickable; the optional Jekyll attribute block is stripped.
+	anchor := func(text, href string) string {
+		return `<a href="` + href + `" target="_blank" rel="noopener noreferrer">` + text + `</a>`
+	}
+	cases := []struct {
+		name, in, want string
+	}{
+		{
+			name: "basic link",
+			in:   `Visit [the docs](https://example.com).`,
+			want: `Visit ` + anchor("the docs", "https://example.com") + `.`,
+		},
+		{
+			name: "url contains balanced parens",
+			in:   `See [VRV Wikipedia page](https://en.wikipedia.org/wiki/VRV_(streaming_service)) for more.`,
+			want: `See ` + anchor("VRV Wikipedia page", "https://en.wikipedia.org/wiki/VRV_(streaming_service)") + ` for more.`,
+		},
+		{
+			name: "link followed by Jekyll attribute block",
+			in:   `[VRV Wikipedia page](https://en.wikipedia.org/wiki/VRV_(streaming_service)){:target="_blank" rel="noopener noreferrer"}.`,
+			want: anchor("VRV Wikipedia page", "https://en.wikipedia.org/wiki/VRV_(streaming_service)") + `.`,
+		},
+		{
+			name: "two links on one line, one with parens, one without",
+			in:   `[Videoland](https://en.wikipedia.org/wiki/Videoland_(Netherlands)){:target="_blank"} and [TRaSH](https://trash-guides.info).`,
+			want: anchor("Videoland", "https://en.wikipedia.org/wiki/Videoland_(Netherlands)") + ` and ` + anchor("TRaSH", "https://trash-guides.info") + `.`,
+		},
+		{
+			name: "link with no parens in URL still works",
+			in:   `[home](https://trash-guides.info/){:target="_blank" rel="noopener"}`,
+			want: anchor("home", "https://trash-guides.info/"),
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := cleanDescription(c.in)
+			// cleanDescription may add/strip whitespace around paragraph
+			// boundaries; compare logical content by trimming + collapsing.
+			gotNorm := strings.Join(strings.Fields(got), " ")
+			wantNorm := strings.Join(strings.Fields(c.want), " ")
+			if gotNorm != wantNorm {
+				t.Errorf("cleanDescription(%q)\n got  %q\n want %q", c.in, got, c.want)
+			}
+		})
 	}
 }

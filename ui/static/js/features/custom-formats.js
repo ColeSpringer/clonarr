@@ -758,8 +758,14 @@ export default {
       // Bold + italic
       html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
       html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
-      // Links [text](url)
-      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Links [text](url) — URL portion allows ONE level of balanced
+      // parens so Wikipedia disambiguators like
+      // `(streaming_service)` in
+      // `https://en.wikipedia.org/wiki/VRV_(streaming_service)` survive.
+      // Optional trailing Jekyll attribute block `{:attr="val"...}` gets
+      // consumed and discarded so it doesn't leak as plain text in the
+      // CF editor description preview.
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/(?:[^\s()]|\([^()]*\))+)\)(\{:[^}]*\})?/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
       // Lists — split into blocks, detect "- " or "1. " prefix per line
       const blocks = html.split(/\n\n+/).map(block => {
         const lines = block.split('\n');
