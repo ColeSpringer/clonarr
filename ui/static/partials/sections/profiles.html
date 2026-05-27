@@ -661,9 +661,12 @@
                                             <!-- Edit & Sync — opens the profile editor pre-loaded with
                                                  your current Arr state captured as overrides. You inspect,
                                                  keep what you want, revert what you don't, then Save & Sync.
-                                                 Goes through the same engine path as Profile Sync. -->
+                                                 Goes through the same engine path as Profile Sync.
+                                                 Always visible: the editor is also how a user first
+                                                 converts an Arr profile into a Clonarr-managed sync
+                                                 rule, which is a legitimate action even when the
+                                                 profile already matches the TRaSH guide perfectly. -->
                                             <button class="btn btn-sm btn-primary" style="font-size:12px;padding:3px 10px"
-                                                    x-show="compareAdjustedCounts(cr).allDiffs > 0"
                                                     x-tt="'Open the profile editor — review the differences and adjust which to keep as overrides before applying.'"
                                                     @click="openCompareEditor(inst, cr.arrProfileId, cr.trashProfileId)">Edit &amp; Sync &rarr;</button>
                                           </div>

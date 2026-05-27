@@ -241,8 +241,13 @@ export default {
       return tid.replace(/^custom:/, '').substring(0, 12);
     },
 
-    async loadExtraCFList() {
-      const t = this.profileDetail?.instance?.type;
+    async loadExtraCFList(appType) {
+      // Default to the open editor's app type so existing callers keep
+      // working (most flows have profileDetail already set when they
+      // reach here). Callers that run BEFORE openProfileDetail — like
+      // Compare → Edit & Sync's pre-flight check for Arr-only CFs —
+      // pass the appType explicitly.
+      const t = appType || this.profileDetail?.instance?.type;
       if (!t) return;
       // Cache hit: same Arr type as the populated catalog → skip the
       // network round-trip. extraCFGroups is the heavy /all-cfs payload
@@ -4239,6 +4244,45 @@ export default {
         return;
       }
       this.activeAppType = inst.type;
+
+      // Pre-flight: detect CFs that exist in the Arr profile but not in
+      // Clonarr (neither TRaSH guide nor user custom). Without warning,
+      // they silently drop from the editor and get removed from the Arr
+      // profile on the next sync — Clonarr only manages what it knows
+      // about. Load the catalog first, then surface a modal with the
+      // user's three options: cancel, continue without importing, or
+      // import them as Clonarr custom formats and then continue.
+      //
+      // Explicit appType arg because profileDetail isn't set yet — the
+      // default loadExtraCFList() path reads it from profileDetail and
+      // would no-op here.
+      await this.loadExtraCFList(inst.type);
+      const nameToTrashId = {};
+      for (const cf of (this.extraCFAllCFs || [])) {
+        if (cf && cf.name && cf.trashId) nameToTrashId[cf.name] = cf.trashId;
+      }
+      const arrOnlyNames = [];
+      for (const ecf of (comparison.extraCFs || [])) {
+        if (!nameToTrashId[ecf.name]) arrOnlyNames.push(ecf.name);
+      }
+      if (arrOnlyNames.length > 0) {
+        const choice = await this._promptArrOnlyImport(inst, arrOnlyNames);
+        if (choice === 'cancel') return;
+        if (choice === 'import') {
+          const ok = await this._importArrOnlyCFs(inst, arrOnlyNames);
+          if (!ok) return;
+          // Refresh the catalog so the freshly-imported customs resolve
+          // in prefillOverridesFromCompare below — without this, they'd
+          // still land in _compareArrOnlyExtras as if never imported.
+          // Explicit appType again since profileDetail still isn't set.
+          this._extraCFGroupsCachedType = null;
+          this.extraCFAllCFs = [];
+          await this.loadExtraCFList(inst.type);
+        }
+        // 'continue' path falls through with arrOnlyNames left unresolved;
+        // they land in _compareArrOnlyExtras and the sync drops them.
+      }
+
       // restoreFromRule=true: Compare → Edit & Sync is editing an existing
       // rule for the Arr profile we ran compare against. Auto-restore loads
       // the rule's saved state; prefillOverridesFromCompare below layers
@@ -4248,17 +4292,85 @@ export default {
       this.profileDetail._arrProfileName = comparison.arrProfileName || this.resolveArrProfileName(inst.id, arrIdNum) || null;
       this.profileDetail._editLockedArrProfileId = arrIdNum;
       this.resyncTargetArrProfileId = arrIdNum;
-      // Wait for the all-CFs lookup table to load before prefilling — without it,
-      // comparison.extraCFs (which carry only name + arrCFID, no trashID) can't
-      // be mapped to the editor's trashID-keyed extraCFs map. Without this step,
-      // user customs like "!PL Tier 02" / "Dubs Only" / "2.0 Stereo" appear in
-      // Compare's All/Only-diffs view but vanish from Edit & Sync's Additional CFs.
+      // loadExtraCFList is idempotent + cache-gated, so this is a no-op
+      // when the pre-flight already loaded it (covers the rare case where
+      // openProfileDetail invalidated the cache during reset).
       await this.loadExtraCFList();
       // applyRuleStateToEditor already ran via openProfileDetail's auto-restore
       // path if exactly one rule matches (instance + trashProfile). Layer the
       // compare-derived overrides on top so Arr-state-vs-TRaSH-default deltas
       // surface in the editor too.
       this.prefillOverridesFromCompare(comparison);
+    },
+
+    // Returns 'cancel' | 'continue' | 'import' depending on which button
+    // the user clicks in the pre-flight Arr-only-CFs prompt. Uses the
+    // shared confirmModal with its three-button shape (cancel +
+    // secondary + primary) so we don't need a dedicated modal partial.
+    _promptArrOnlyImport(inst, arrOnlyNames) {
+      const appLabel = inst.type === 'radarr' ? 'Radarr' : 'Sonarr';
+      const countLabel = arrOnlyNames.length === 1 ? 'custom format' : 'custom formats';
+      return new Promise(resolve => {
+        this.confirmModal = {
+          show: true,
+          wide: true,
+          title: `${arrOnlyNames.length} ${countLabel} in ${appLabel} not in Clonarr`,
+          message: `These ${countLabel} exist in ${inst.name} but Clonarr doesn't know about them yet. To keep them on this sync rule, import them as Clonarr custom formats first. Otherwise they will be removed from ${appLabel} the next time this rule syncs (Clonarr only manages what it knows about).`,
+          details: arrOnlyNames,
+          cancelLabel: 'Cancel',
+          secondaryLabel: 'Continue without importing',
+          confirmLabel: 'Import and continue',
+          onCancel: () => resolve('cancel'),
+          onSecondary: () => resolve('continue'),
+          onConfirm: () => resolve('import'),
+        };
+      });
+    },
+
+    // POSTs to /api/custom-cfs/import-from-instance with the list of CF
+    // names to pull from the source Arr. Returns true on success, false
+    // when the import fails or returns no added rows (in which case the
+    // caller aborts before opening the editor). Skipped name collisions
+    // get surfaced in the success toast so the user knows some weren't
+    // imported and why.
+    async _importArrOnlyCFs(inst, cfNames) {
+      try {
+        const r = await fetch('/api/custom-cfs/import-from-instance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instanceId: inst.id,
+            cfNames,
+            category: 'Custom',
+            appType: inst.type,
+          }),
+        });
+        if (!r.ok) {
+          let msg = `Import failed (HTTP ${r.status})`;
+          try { const err = await r.json(); if (err?.error) msg = err.error; } catch (_) {}
+          this.showToast(msg, 'error', 8000);
+          return false;
+        }
+        const result = await r.json().catch(() => ({}));
+        const added = Number(result.added) || 0;
+        const skipped = Array.isArray(result.skippedCollisions) ? result.skippedCollisions.length : 0;
+        if (added === 0) {
+          this.showToast('No custom formats were imported (all skipped due to name collisions).', 'warning', 8000);
+          return false;
+        }
+        let msg = `Imported ${added} custom format${added === 1 ? '' : 's'} from ${inst.name}.`;
+        if (skipped > 0) {
+          msg += ` Skipped ${skipped} due to name collisions — those stay in ${inst.type === 'radarr' ? 'Radarr' : 'Sonarr'} unmanaged.`;
+        }
+        this.showToast(msg, 'success', 6000);
+        // Refresh the Custom Formats tab data so the newly-imported CFs
+        // show up there too without requiring a page reload.
+        await this.loadCFBrowse(inst.type);
+        return true;
+      } catch (e) {
+        this.showToast(`Import failed: ${e.message}`, 'error', 8000);
+        return false;
+      }
     },
 
 
@@ -4383,19 +4495,38 @@ export default {
         if (cf && cf.name && cf.trashId) nameToTrashId[cf.name] = cf.trashId;
       }
       const extras = { ...(this.extraCFs || {}) };
+      const selOpt = { ...(this.selectedOptionalCFs || {}) };
       const unresolved = [];
+      let resolvedExtras = false;
       for (const ecf of (comparison.extraCFs || [])) {
         const tid = nameToTrashId[ecf.name];
         if (tid) {
           extras[tid] = ecf.score;
+          // Mark the CF as explicitly enabled so the per-CF toggle in
+          // the editor renders ON (read by `:checked="selectedOptionalCFs[cf.trashId]"`).
+          // Without this, the toggle visually reads false even though
+          // the CF is in extras and would sync correctly — the "X of Y
+          // enabled" counter also reads from this map, so the user
+          // sees "0 of N enabled" while the CF is actually active.
+          selOpt[tid] = true;
+          resolvedExtras = true;
         } else {
           unresolved.push({ arrCFID: ecf.format, name: ecf.name, currentScore: ecf.score });
         }
       }
       this.extraCFs = extras;
+      this.selectedOptionalCFs = selOpt;
       this._compareArrOnlyExtras = unresolved;
 
-      if (anyOverride || (this._compareArrOnlyExtras && this._compareArrOnlyExtras.length > 0)) {
+      // Customize-this-profile must flip on whenever the comparison
+      // surfaced any divergence the user can act on — that includes
+      // resolved Additional CFs (TRaSH-guide or freshly-imported
+      // customs) and unresolved Arr-only CFs alike. Without this,
+      // the editor opens in non-customize mode and the Additional CFs
+      // section stays hidden, so the user thinks the import / extra
+      // didn't take. The save engine still emits extras regardless of
+      // the toggle, but the editor UI gates visibility on it.
+      if (anyOverride || resolvedExtras || (this._compareArrOnlyExtras && this._compareArrOnlyExtras.length > 0)) {
         this.pdOverridesEnabled = true;
       }
       return anyOverride;
