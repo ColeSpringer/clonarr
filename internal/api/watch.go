@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"clonarr/internal/core"
 )
@@ -101,4 +102,29 @@ func (s *Server) handleProfileSyncCheck(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleDriftCheck runs one drift-detection pass synchronously over every
+// eligible auto-sync rule. Bypasses the Sources gate so the user can
+// trigger a manual check even when ArrDrift is disabled — useful while
+// the scheduled drift path is still being designed and the only way to
+// see drift results today is via this endpoint.
+//
+// Returns the per-rule DriftResult list inline so the caller (frontend
+// "Check drift now" button OR curl during development) gets immediate
+// feedback. The aggregate also persists to DriftWatch.LastResult.
+func (s *Server) handleDriftCheck(w http.ResponseWriter, r *http.Request) {
+	if s.Core.DriftRunner == nil {
+		writeError(w, 500, "drift runner not initialised")
+		return
+	}
+	results, err := s.Core.DriftRunner.RunOnce(r.Context())
+	if err != nil {
+		writeError(w, 500, "drift check failed: "+err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{
+		"checkedAt": time.Now().UTC().Format(time.RFC3339),
+		"results":   results,
+	})
 }

@@ -61,6 +61,11 @@ type App struct {
 	// main.go at startup; nil during tests that don't need it.
 	ProfileSyncRunner *ProfileSyncRunner
 
+	// DriftRunner detects Arr-side drift by fetching each rule's current
+	// Arr profile and diffing against BuildArrProfile target. Wired by
+	// main.go at startup; nil during tests that don't need it.
+	DriftRunner *DriftRunner
+
 	// AfterPullCallback runs after a successful TRaSH pull (commit advanced
 	// or not), before AutoSyncAfterPull. Lets main.go register server-level
 	// helpers like api.Server.AutoSyncQualitySizes — which lives in the api

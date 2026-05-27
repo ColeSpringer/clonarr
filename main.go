@@ -125,6 +125,7 @@ func main() {
 	// commits between scheduled Pulls. Hourly internal cadence; user controls
 	// only the on/off toggle via Settings → Pull section.
 	app.ProfileSyncRunner = core.NewProfileSyncRunner(app)
+	app.DriftRunner = core.NewDriftRunner(app)
 
 	// Startup: clean up broken rules (arrProfileId=0). Historical builds
 	// also reset LastSyncCommit here to force every rule to re-evaluate at
