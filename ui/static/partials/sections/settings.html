@@ -342,12 +342,11 @@
                   <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">When the guide publishes new custom formats, score changes, or profile updates upstream.</span>
                 </span>
               </label>
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:not-allowed;font-size:13px;opacity:0.55">
-                <input type="checkbox" disabled style="margin-top:2px">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="checkbox" x-model="config.profileSync.sources.arrDrift" @change="saveProfileSync()" style="margin-top:2px">
                 <span>
                   <span style="font-weight:500">Direct edits in Radarr/Sonarr</span>
-                  <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
-                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">When someone changes scores or settings directly in the Arr UI between clonarr's syncs. Coming in next wave.</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">When someone changes scores or settings directly in the Arr UI between clonarr's syncs. Each rule is compared against what clonarr would push, and any divergence shows as an <em>Arr drift</em> badge on the rule.</span>
                 </span>
               </label>
             </div>

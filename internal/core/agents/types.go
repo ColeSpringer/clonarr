@@ -23,12 +23,14 @@ type Agent struct {
 // Each flag corresponds to a distinct event category in Clonarr's lifecycle.
 // When a flag is false the agent is silently skipped for that event type.
 type Events struct {
-	OnSyncSuccess   bool `json:"onSyncSuccess"`   // auto-sync applied changes successfully
-	OnSyncFailure   bool `json:"onSyncFailure"`   // auto-sync encountered an error
-	OnCleanup       bool `json:"onCleanup"`       // stale rules/history removed during startup cleanup
-	OnRepoUpdate    bool `json:"onRepoUpdate"`    // TRaSH Guides repository pulled new commits
-	OnChangelog     bool `json:"onChangelog"`     // new weekly changelog section detected in TRaSH updates.txt
-	OnUpstreamAhead bool `json:"onUpstreamAhead"` // Profile Sync detected upstream TRaSH commits without pulling (Mode=notify / Mode=delayed)
+	OnSyncSuccess     bool `json:"onSyncSuccess"`     // auto-sync applied changes successfully
+	OnSyncFailure     bool `json:"onSyncFailure"`     // auto-sync encountered an error
+	OnCleanup         bool `json:"onCleanup"`         // stale rules/history removed during startup cleanup
+	OnRepoUpdate      bool `json:"onRepoUpdate"`      // TRaSH Guides repository pulled new commits
+	OnChangelog       bool `json:"onChangelog"`       // new weekly changelog section detected in TRaSH updates.txt
+	OnUpstreamAhead   bool `json:"onUpstreamAhead"`   // Profile Sync detected upstream TRaSH commits without pulling (Mode=notify / Mode=delayed)
+	OnDriftDetected   bool `json:"onDriftDetected"`   // Arr-side drift detected — someone edited the profile directly in Radarr/Sonarr
+	OnDriftReconciled bool `json:"onDriftReconciled"` // previously-detected drift went away (user fixed it, or clonarr re-synced)
 }
 
 // Config holds credentials and options for all supported providers.

@@ -1,0 +1,90 @@
+{{define "modals/status-review"}}
+  <!-- Row-level Quick action modal — opens when the user clicks the
+       status pill on a Sync Rules row. Shows the per-item change list
+       in the same vocabulary as the editor's tabs (General / Quality
+       items / Custom Formats) plus three actions: primary (Apply /
+       Re-sync / Sync), secondary (Open editor — escape hatch for full
+       context), tertiary (Cancel). z-index sits above sticky banners
+       but below confirm-dialog so any nested Discard prompts win. -->
+  <div class="modal-overlay" style="z-index:1500"
+       x-show="statusReviewOpen"
+       @click.self="closeStatusReview()"
+       @keydown.escape.window="if (statusReviewOpen) closeStatusReview()"
+       x-cloak>
+    <div class="modal" style="max-width:640px;display:flex;flex-direction:column;max-height:80vh"
+         role="dialog" aria-modal="true" aria-labelledby="modal-title-status-review"
+         x-trap.noscroll.inert="statusReviewOpen">
+      <h2 id="modal-title-status-review" class="modal-title" x-text="statusReviewTitle()"></h2>
+      <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;line-height:1.5"
+         x-text="statusReviewSubtitle()"></p>
+
+      <div style="overflow-y:auto;flex:1;min-height:0;padding-right:4px"
+           x-data="{ get _c() { return statusReviewChangesByCategory(); } }">
+        <!-- Loading + error states for the Pending kind, which fetches
+             a dry-run from the backend. Drift + Updates resolve sync
+             (PendingChanges already populated by detection runs). -->
+        <div x-show="statusReviewKind === 'pending' && statusReviewPendingLoading"
+             style="padding:16px;color:var(--text-muted);font-size:13px;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span class="spinner"></span>
+          <span>Computing pending changes…</span>
+        </div>
+        <div x-show="statusReviewKind === 'pending' && statusReviewPendingError && !statusReviewPendingLoading"
+             style="padding:16px;color:var(--accent-red);font-size:13px;text-align:center"
+             x-text="statusReviewPendingError"></div>
+        <!-- Empty state — shouldn't usually trip because openStatusReview
+             only opens for actionable statuses, but defensive (e.g. pending
+             after a race that synced between the click and the modal render,
+             or dry-run finding zero changes because rule == Arr current). -->
+        <div x-show="!(statusReviewKind === 'pending' && (statusReviewPendingLoading || statusReviewPendingError)) && (_c.general.length + _c.quality.length + _c.cfs.length) === 0"
+             style="padding:16px;color:var(--text-muted);font-size:13px;text-align:center">
+          No changes to review.
+        </div>
+
+        <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_c.general.length > 0">
+          <div class="sp-ov-cf-section-title">General <span class="sp-ov-cf-section-count" x-text="_c.general.length"></span></div>
+          <div class="sp-ov-cf-list">
+            <template x-for="c in _c.general" :key="'srv-gen-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
+              <div class="sp-ov-cf-row">
+                <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_c.quality.length > 0">
+          <div class="sp-ov-cf-section-title">Quality items <span class="sp-ov-cf-section-count" x-text="_c.quality.length"></span></div>
+          <div class="sp-ov-cf-list">
+            <template x-for="c in _c.quality" :key="'srv-q-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
+              <div class="sp-ov-cf-row">
+                <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_c.cfs.length > 0">
+          <div class="sp-ov-cf-section-title">Custom Formats <span class="sp-ov-cf-section-count" x-text="_c.cfs.length"></span></div>
+          <div class="sp-ov-cf-list">
+            <template x-for="c in _c.cfs" :key="'srv-cf-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
+              <div class="sp-ov-cf-row">
+                <span class="sp-ov-cf-name" x-text="c.affectedName || pdResolveUpdateName(c)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn" @click="closeStatusReview()" :disabled="statusReviewApplying">Cancel</button>
+        <button class="btn" @click="statusReviewOpenEditor()" :disabled="statusReviewApplying">Open editor</button>
+        <button class="btn btn-primary"
+                @click="statusReviewApply()"
+                :disabled="statusReviewApplying || statusReviewTotalChanges() === 0"
+                x-tt="(statusReviewKind === 'drift') ? 'Push Clonarr\'s saved state back to Arr, overwriting the drifted values.' : (statusReviewKind === 'updates') ? 'Pull TRaSH-Guides then sync this rule.' : 'Sync your saved changes to Arr now.'">
+          <span x-show="statusReviewApplying" class="spinner"></span>
+          <span x-show="!statusReviewApplying" x-text="statusReviewActionLabel()"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+{{end}}

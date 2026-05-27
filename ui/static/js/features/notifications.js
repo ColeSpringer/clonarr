@@ -6,6 +6,8 @@ function defaultAgentEvents() {
     onRepoUpdate: false,
     onChangelog: false,
     onUpstreamAhead: false,
+    onDriftDetected: false,
+    onDriftReconciled: false,
   };
 }
 

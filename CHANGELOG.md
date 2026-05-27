@@ -6,6 +6,61 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave — 2026-05-27 (Arr drift detection)
+
+Catch direct edits to your Arr profiles, plus a faster way to act on
+any pending change.
+
+**Arr drift detection**
+
+- New "Arr drift" badge on Sync Rules rows lights up when a profile
+  in Radarr/Sonarr has been edited directly (someone changed scores
+  or settings in the Arr UI without going through Clonarr). Hover
+  the pill to see which fields drifted.
+- Two new notification events under Notifications: "Arr drift
+  detected" and "Arr drift resolved". Opt in per agent to get
+  Discord/NTFY/Apprise messages when drift appears or goes away.
+- Settings has a new "Direct edits in Radarr/Sonarr" toggle under
+  Profile Sync sources. Turn it on to enable scheduled drift checks.
+- The Check button now runs both TRaSH and drift detection in one
+  press, so you see both upstream and Arr-side state together.
+
+**Quick action modal**
+
+- Click the status pill on a Sync Rules row to open a focused modal
+  that lists the changes plus a one-click action:
+  - Arr drift: shows the drifted fields, "Re-sync now" pushes
+    Clonarr's saved state back.
+  - Updates: shows the upcoming TRaSH changes, "Apply updates"
+    pulls and syncs.
+  - Pending: shows what your saved edits will apply, "Sync now"
+    pushes them.
+- Each modal has an "Open editor" button for full context.
+- Hover tooltips on each pill now name the affected items.
+
+**Smaller polish**
+
+- "Out of sync" renamed to "Arr drift". Clearer that the change
+  happened on the Arr side, not in Clonarr.
+- "Arr drift" is now its own tab in the profile editor, separate
+  from "Profile updates", so the two lists do not share space.
+- After a successful sync the Arr drift pill drops to "In sync"
+  immediately instead of waiting for the next scheduled drift pass.
+- Manual operations (Check button, manual sync) no longer fire
+  Discord/NTFY notifications for drift findings. Only scheduled
+  checks do, so you do not get notified about something you are
+  already looking at.
+- Drift detector only flags CF score changes that affect your
+  rule's actual scoring context. SQP profiles will not show CFs
+  as updated when only the default context changed and SQP uses
+  its own context for that CF.
+- Drift detector skips rules with pending TRaSH updates so an
+  unsynced upstream commit is not misclassified as Arr drift.
+- Toast counts on Check and row pills always show the same number
+  now (no more "1 with Arr drift" toast on rows that say "In sync").
+- Check toast lists affected profile names as a bullet list
+  instead of a single line.
+
 ### Update wave — 2026-05-24 (Profile Sync groundwork)
 
 Behind-the-scenes setup for a coming feature. **Your pull behaviour

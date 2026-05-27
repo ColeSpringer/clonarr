@@ -38,7 +38,7 @@
                     <button class="v3-inst-action"
                             @click.stop="checkTrashUpdates()"
                             :disabled="checkingUpdates || pulling"
-                            x-tt="'Check TRaSH-Guides for new upstream changes. No pull, no Arr writes — just detection. Populates Out-of-sync pills.'">Check</button>
+                            x-tt="'Check for TRaSH-Guides updates and Arr-side drift. No pull, no Arr writes, just detection. Populates Updates and Arr drift pills.'">Check</button>
                     <button class="v3-inst-action"
                             @click.stop="updateAllForInstance(inst)"
                             :disabled="updatingInstance === inst.id || pulling"
@@ -137,11 +137,18 @@
                     <div class="v3-last-sync"
                          :class="{ never: !(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId)?.lastSyncTime) }"
                          x-text="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return r?.lastSyncTime ? timeAgo(r.lastSyncTime) : 'Never'; })()"></div>
-                    <!-- Status pill -->
+                    <!-- Status pill — clickable for actionable statuses
+                         (updates / out-of-sync / pending) so the user can
+                         open the Quick action modal without going through
+                         the full editor. -->
                     <div>
                       <template x-if="!sh.orphanedAt">
                         <span class="v3-status"
-                              :class="v3RuleStatus(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
+                              :class="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); const s = v3RuleStatus(r); return s + (['updates','out-of-sync','pending'].includes(s) ? ' clickable' : ''); })()"
+                              :role="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return ['updates','out-of-sync','pending'].includes(v3RuleStatus(r)) ? 'button' : null; })()"
+                              :tabindex="(() => { const r = autoSyncRules.find(rl => rl.instanceId === inst.id && rl.arrProfileId === sh.arrProfileId); return ['updates','out-of-sync','pending'].includes(v3RuleStatus(r)) ? '0' : null; })()"
+                              @click.stop="openStatusReview(inst, sh)"
+                              @keydown.enter.prevent.stop="openStatusReview(inst, sh)"
                               x-tt="v3RuleStatusTip(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"
                               x-text="v3RuleStatusLabel(autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId))"></span>
                       </template>

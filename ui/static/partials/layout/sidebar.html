@@ -293,7 +293,9 @@
       </div>
 
       <!-- Two actions:
-           Check  = ls-remote-only detection (populates Out-of-sync pills).
+           Check  = detection-only pass: checks TRaSH upstream for new
+                    commits AND checks every Arr profile for direct edits.
+                    Populates Updates and Out-of-sync pills. No Arr writes.
            Pull   = data-only refresh (no Arr writes; sync is opt-in via
                     Update all / Update profile / scheduler).
            Both are global; Check is also available per-instance for
@@ -301,7 +303,7 @@
       <div class="sidebar-trash-actions">
         <button class="sidebar-trash-check btn btn-sm"
                 @click="checkTrashUpdates()" :disabled="checkingUpdates || pulling"
-                x-tt="sidebarCollapsed ? 'Check upstream for new TRaSH-Guides commits' : 'Check upstream for new TRaSH-Guides commits. No pull, no Arr writes.'">
+                x-tt="sidebarCollapsed ? 'Check for TRaSH updates and Arr drift' : 'Check for TRaSH-Guides updates and Arr-side drift. Populates Updates and Arr drift pills. No pull, no Arr writes.'">
           <span x-show="checkingUpdates" class="spinner"></span>
           <span x-show="!checkingUpdates && !sidebarCollapsed">Check</span>
           <span x-show="!checkingUpdates && sidebarCollapsed" aria-hidden="true">?</span>

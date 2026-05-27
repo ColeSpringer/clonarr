@@ -110,6 +110,10 @@ func (s *Server) handleProfileSyncCheck(w http.ResponseWriter, r *http.Request) 
 // the scheduled drift path is still being designed and the only way to
 // see drift results today is via this endpoint.
 //
+// Uses RunOnceManual so notification agents (Discord / NTFY / Gotify)
+// do NOT fire — the user is sitting in the UI looking at the result,
+// pushing duplicate notifications on top would just be noise.
+//
 // Returns the per-rule DriftResult list inline so the caller (frontend
 // "Check drift now" button OR curl during development) gets immediate
 // feedback. The aggregate also persists to DriftWatch.LastResult.
@@ -118,7 +122,7 @@ func (s *Server) handleDriftCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "drift runner not initialised")
 		return
 	}
-	results, err := s.Core.DriftRunner.RunOnce(r.Context())
+	results, err := s.Core.DriftRunner.RunOnceManual(r.Context())
 	if err != nil {
 		writeError(w, 500, "drift check failed: "+err.Error())
 		return

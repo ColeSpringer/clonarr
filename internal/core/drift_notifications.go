@@ -1,0 +1,161 @@
+package core
+
+import (
+	"fmt"
+	"strings"
+)
+
+// DriftChangeSummary carries per-rule context for the drift-detected
+// notification — the rule's identity, what diverged, and the count of
+// detail entries so the message can name affected CFs without dumping
+// every line.
+type DriftChangeSummary struct {
+	RuleID         string
+	InstanceName   string
+	ArrProfileName string
+	AppType        string // "radarr" | "sonarr"
+	Summary        []string
+	Details        []DriftDetail
+}
+
+// NotifyDriftDetected fires the "Arr-side drift" notification — triggered
+// when DriftRunner.RunOnce finds the current Arr profile diverges from
+// the rule's target AND the drift signature is different from what was
+// last notified about (fingerprint-based dedup happens in the caller).
+//
+// Dispatches to every notification agent that has OnDriftDetected enabled.
+// No agents opted in → cheap no-op.
+func (app *App) NotifyDriftDetected(summary DriftChangeSummary) {
+	cfg := app.Config.Get()
+
+	hasOptIn := false
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if agent.Events.OnDriftDetected {
+			hasOptIn = true
+			break
+		}
+	}
+	if !hasOptIn {
+		return
+	}
+
+	appLabel := summary.AppType
+	if appLabel == "radarr" {
+		appLabel = "Radarr"
+	} else if appLabel == "sonarr" {
+		appLabel = "Sonarr"
+	}
+
+	title := fmt.Sprintf("Clonarr: drift detected in %s on %s", summary.ArrProfileName, appLabel)
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Someone edited **%s** directly in %s. Its current state no longer matches what Clonarr would sync.",
+		summary.ArrProfileName, summary.InstanceName))
+	if len(summary.Summary) > 0 {
+		lines = append(lines, "")
+		for _, s := range summary.Summary {
+			lines = append(lines, "• "+s)
+		}
+	}
+	if len(summary.Details) > 0 {
+		const maxShown = 6
+		shown := summary.Details
+		extra := 0
+		if len(shown) > maxShown {
+			extra = len(shown) - maxShown
+			shown = shown[:maxShown]
+		}
+		lines = append(lines, "")
+		lines = append(lines, "**Changes:**")
+		for _, d := range shown {
+			lines = append(lines, "• "+formatDriftDetail(d))
+		}
+		if extra > 0 {
+			lines = append(lines, fmt.Sprintf("...and %d more", extra))
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Open Clonarr, go to Sync Rules to review the changes, then re-sync.")
+
+	payload := NotificationPayload{
+		Title:    title,
+		Message:  strings.Join(lines, "\n"),
+		Color:    0xff7b00, // accent-orange (matches the out-of-sync badge planned for the UI)
+		Severity: NotificationSeverityWarning,
+		Route:    NotificationRouteDefault,
+	}
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if !agent.Events.OnDriftDetected {
+			continue
+		}
+		app.DispatchNotificationAgent(agent, payload)
+	}
+}
+
+// NotifyDriftReconciled fires when a rule that was previously in drift
+// is no longer in drift (user fixed the Arr-side change, or clonarr
+// re-synced). Lets the user confirm the issue resolved without checking
+// the UI manually.
+func (app *App) NotifyDriftReconciled(summary DriftChangeSummary) {
+	cfg := app.Config.Get()
+
+	hasOptIn := false
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if agent.Events.OnDriftReconciled {
+			hasOptIn = true
+			break
+		}
+	}
+	if !hasOptIn {
+		return
+	}
+
+	appLabel := summary.AppType
+	if appLabel == "radarr" {
+		appLabel = "Radarr"
+	} else if appLabel == "sonarr" {
+		appLabel = "Sonarr"
+	}
+
+	payload := NotificationPayload{
+		Title: fmt.Sprintf("Clonarr: drift resolved on %s for %s", appLabel, summary.ArrProfileName),
+		Message: fmt.Sprintf("The earlier drift in **%s** on %s is gone. The profile now matches what Clonarr would sync.",
+			summary.ArrProfileName, summary.InstanceName),
+		Color:    0x3fb950, // accent-green
+		Severity: NotificationSeverityInfo,
+		Route:    NotificationRouteDefault,
+	}
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if !agent.Events.OnDriftReconciled {
+			continue
+		}
+		app.DispatchNotificationAgent(agent, payload)
+	}
+}
+
+// formatDriftDetail produces a short human line for one DriftDetail
+// entry. CF score diffs read as "FLUX: 100 → 51"; setting diffs read
+// as "Cutoff: HDTV-1080p → Bluray-1080p"; quality-allowed diffs read
+// as "Bluray-720p allowed: false → true".
+func formatDriftDetail(d DriftDetail) string {
+	switch d.Field {
+	case "score":
+		return fmt.Sprintf("%s score: %v → %v", d.CFName, d.Current, d.Target)
+	case "quality":
+		return fmt.Sprintf("Quality %s allowed: %v → %v", d.CFName, d.Current, d.Target)
+	case "upgradeAllowed":
+		return fmt.Sprintf("Upgrade allowed: %v → %v", d.Current, d.Target)
+	case "cutoff":
+		return fmt.Sprintf("Cutoff: %v → %v", d.Current, d.Target)
+	case "minFormatScore":
+		return fmt.Sprintf("Min Format Score: %v → %v", d.Current, d.Target)
+	case "cutoffFormatScore":
+		return fmt.Sprintf("Cutoff Format Score: %v → %v", d.Current, d.Target)
+	case "minUpgradeFormatScore":
+		return fmt.Sprintf("Min Upgrade Format Score: %v → %v", d.Current, d.Target)
+	case "language":
+		return fmt.Sprintf("Language: %v → %v", d.Current, d.Target)
+	default:
+		return fmt.Sprintf("%s: %v → %v", d.Field, d.Current, d.Target)
+	}
+}

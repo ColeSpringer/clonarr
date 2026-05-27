@@ -182,6 +182,11 @@
    Inherits the family colour + adds button-affordance underline on hover. */
 button.v3-status { background: transparent; border: 0; cursor: pointer; font-family: inherit; }
 button.v3-status:hover { text-decoration: underline; }
+/* Span variant gains pointer-affordance only when status is actionable
+   (updates / out-of-sync / pending — opens Quick action modal). */
+.v3-status.clickable { cursor: pointer; }
+.v3-status.clickable:hover,
+.v3-status.clickable:focus-visible { text-decoration: underline; outline: none; }
 
 /* Auto-sync cell */
 .v3-auto-cell { display: flex; align-items: center; gap: 7px; }

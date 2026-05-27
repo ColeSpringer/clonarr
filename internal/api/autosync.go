@@ -487,8 +487,13 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 				cfg.AutoSync.Rules[i].LastSyncError = ""
 				// Restoration includes the same sync work as a fresh
 				// Save & Sync, so any Profile Sync detection entries
-				// that survived the orphan period are now stale.
+				// that survived the orphan period are now stale, and
+				// any drift fingerprint is reconciled by the push.
 				cfg.AutoSync.Rules[i].PendingChanges = nil
+				if cfg.AutoSync.Rules[i].WatchState != nil {
+					cfg.AutoSync.Rules[i].WatchState.LastDriftFingerprint = ""
+					cfg.AutoSync.Rules[i].WatchState.LastDriftNotifiedAt = now
+				}
 				break
 			}
 		}

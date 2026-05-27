@@ -501,9 +501,18 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 				// UpdateAutoSyncRuleCommit — the rule just successfully
 				// synced, so any Profile Sync detection entries are now
 				// stale and the "Out of sync" pill must drop. WatchState
-				// fingerprint is retained so the next detection tick
-				// doesn't immediately re-fire for the same upstream.
+				// LastUpstreamFingerprint is retained so the next detection
+				// tick doesn't immediately re-fire for the same upstream.
+				// LastDriftFingerprint IS cleared — by pushing target to
+				// Arr we just overwrote whatever drifted, so drift is
+				// reconciled by definition. Without this clear, the
+				// status pill stays stuck on "Out of sync" until the
+				// next scheduled drift pass.
 				cfg.AutoSync.Rules[i].PendingChanges = nil
+				if cfg.AutoSync.Rules[i].WatchState != nil {
+					cfg.AutoSync.Rules[i].WatchState.LastDriftFingerprint = ""
+					cfg.AutoSync.Rules[i].WatchState.LastDriftNotifiedAt = nowSync
+				}
 				syncedCFs := make([]string, 0, len(plan.CFActions))
 				for _, a := range plan.CFActions {
 					syncedCFs = append(syncedCFs, a.TrashID)

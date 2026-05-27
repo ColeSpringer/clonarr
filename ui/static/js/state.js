@@ -88,6 +88,18 @@ export default function baseState() {
     expandedProfileGroups: {},
     pulling: false,
     checkingUpdates: false,
+    // Quick action modal — opens on row-level status pill click. Lets the
+    // user see what changed AND sync without going through the full editor.
+    statusReviewOpen: false,
+    statusReviewKind: '',     // 'drift' | 'updates' | 'pending'
+    statusReviewInst: null,
+    statusReviewSh: null,
+    statusReviewApplying: false,
+    // Pending kind needs a dry-run round-trip to produce an accurate
+    // change list (frontend can't diff resolved-set vs opt-ins-only state).
+    statusReviewPendingPlan: null,
+    statusReviewPendingLoading: false,
+    statusReviewPendingError: '',
     updatingInstance: '', // instance id currently running Update all
     updatingRuleId: '',   // rule id currently running Update profile
     trashResetting: false,

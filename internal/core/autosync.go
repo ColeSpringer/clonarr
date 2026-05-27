@@ -70,16 +70,20 @@ func (app *App) AutoSyncAfterPull(trigger string) {
 	endResult := "ok | tick complete"
 	defer func() { tick.End(endResult) }()
 
-	// Rules already at the current commit are definitively in-sync, so
-	// any lingering PendingChanges on them are stale (e.g. leftovers from
-	// a sync that ran before the post-sync clearing logic was added).
-	// Clear them here so the "Outdated" pill drops for rules the
-	// short-circuit below is about to skip. One Config.Update for all.
+	// Rules already at the current commit are definitively in-sync with
+	// TRaSH upstream, so any lingering TRaSH-source PendingChanges on
+	// them are stale (e.g. leftovers from a sync that ran before the
+	// post-sync clearing logic was added). Clear them so the "Updates"
+	// pill drops for rules the short-circuit below is about to skip.
+	// Drift-source entries are preserved — they reflect Arr-side state,
+	// which the TRaSH-commit comparison says nothing about. Wiping them
+	// here would let the "Arr drift" pill stay set via LastDriftFingerprint
+	// while the modal opens onto an empty list until the next drift pass.
 	app.Config.Update(func(c *Config) {
 		for i := range c.AutoSync.Rules {
 			r := &c.AutoSync.Rules[i]
 			if r.LastSyncCommit == currentCommit && len(r.PendingChanges) > 0 {
-				r.PendingChanges = nil
+				r.PendingChanges = dropTrashPendingChanges(r.PendingChanges)
 			}
 		}
 	})
@@ -1753,10 +1757,18 @@ func (app *App) UpdateAutoSyncRuleCommit(ruleID, commit string, priorGroups map[
 				// Clear pending-changes after successful sync — the rule
 				// is now caught up with whatever upstream commits triggered
 				// those entries, so the "Outdated" pill must go away.
-				// WatchState fingerprint is retained so the next detection
+				// LastUpstreamFingerprint is retained so the next detection
 				// tick doesn't immediately re-fire for the same upstream
 				// (only NEW upstream commits will repopulate pendingChanges).
+				// LastDriftFingerprint IS cleared — the sync just pushed
+				// target state to Arr, so any prior drift is reconciled by
+				// definition. Without this, the "Out of sync" pill stays
+				// stuck until the next scheduled drift pass.
 				cfg.AutoSync.Rules[i].PendingChanges = nil
+				if cfg.AutoSync.Rules[i].WatchState != nil {
+					cfg.AutoSync.Rules[i].WatchState.LastDriftFingerprint = ""
+					cfg.AutoSync.Rules[i].WatchState.LastDriftNotifiedAt = now
+				}
 				if priorGroups != nil {
 					cfg.AutoSync.Rules[i].PriorAvailableGroups = priorGroups
 				}

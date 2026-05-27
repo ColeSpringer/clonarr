@@ -85,20 +85,38 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// Mode dispatch. Unknown / empty Mode falls through to the
-	// detection-only path so a hand-edited bad config can't accidentally
-	// trigger Arr writes.
-	switch cfg.ProfileSync.Mode {
-	case ProfileSyncModeAuto:
-		// Pull-and-sync (= today's Pull behaviour). Empty-clone is a
-		// valid initial state here — Trash.CloneOrPull will populate it.
-		return uw.runPullAndSync(ctx)
-	default:
-		// Notify-only / Delayed modes use the ls-remote-only path for
-		// detection. The runner then fires notifications + per-rule
-		// PendingChange entries without touching Arr.
-		return uw.runDetectionOnly(ctx)
+	// TRaSH-side detection: only runs when the TrashUpstream source is
+	// enabled. Mode controls how findings are acted on. When the source
+	// is off but ArrDrift is on, this whole block is skipped and we
+	// fall through to the drift block below.
+	var trashErr error
+	if cfg.ProfileSync.Sources.TrashUpstream {
+		switch cfg.ProfileSync.Mode {
+		case ProfileSyncModeAuto:
+			// Pull-and-sync (= today's Pull behaviour). Empty-clone is a
+			// valid initial state here — Trash.CloneOrPull will populate it.
+			trashErr = uw.runPullAndSync(ctx)
+		default:
+			// Notify-only / Delayed modes use the ls-remote-only path for
+			// detection. The runner then fires notifications + per-rule
+			// PendingChange entries without touching Arr.
+			trashErr = uw.runDetectionOnly(ctx)
+		}
 	}
+
+	// Arr-side drift detection: runs independently of TRaSH-side checks.
+	// Same tick can do both when both sources are enabled. DriftRunner
+	// handles its own per-rule fingerprint dedup + notification firing,
+	// so calling it on every scheduler tick is fine — repeated drift
+	// state doesn't re-notify.
+	if cfg.ProfileSync.Sources.ArrDrift && uw.app.DriftRunner != nil {
+		// Errors collect into DriftWatch.LastResult.Errors so they're
+		// visible to the user via Settings without bubbling up here and
+		// masking a successful TRaSH-side check.
+		_, _ = uw.app.DriftRunner.RunOnce(ctx)
+	}
+
+	return trashErr
 }
 
 // RunDetectionOnly is the public entry point for the detection-only path.
@@ -572,7 +590,37 @@ func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, ch
 				}
 				emitOne("cf-name", tid, display+" — renamed: "+cdiff.OldName+" → "+cdiff.NewName)
 			}
+			// Score-context relevance gate: only emit cf-score entries
+			// for the ONE context this rule's profile actually resolves
+			// to. Without this, every score-context change on a CF would
+			// flood the rule's pendingChanges even when the rule's
+			// scoring uses a different context that didn't move.
+			// Example: SQP-4 has scoreCtx="sqp-4-ma-hybrid"; WEB Tier 01
+			// changes "default" 1850→1900 but stays at 30 for SQP-4.
+			// Without this filter the user saw "WEB Tier 01 will change"
+			// in the modal, then Apply only changed Extras (the one CF
+			// where scoreCtx actually moved).
+			scoreCtx := profile.TrashScoreSet
+			if scoreCtx == "" {
+				scoreCtx = "default"
+			}
+			relevantCtx := "default"
+			if cf, ok := ad.CustomFormats[tid]; ok && cf != nil {
+				if _, has := cf.TrashScores[scoreCtx]; has {
+					relevantCtx = scoreCtx
+				}
+			}
+			// Rule-level score override pins the score regardless of
+			// what TRaSH says — TRaSH score changes are no-ops for
+			// the rule until the user clears the override.
+			_, hasUserOverride := rule.ScoreOverrides[tid]
 			for ctx, sc := range cdiff.ScoreChanges {
+				if ctx != relevantCtx {
+					continue
+				}
+				if hasUserOverride {
+					continue
+				}
 				label := ctx
 				if label == "default" {
 					label = "default score"
