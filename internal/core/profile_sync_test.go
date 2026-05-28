@@ -143,32 +143,28 @@ func TestDriftWatch_MalformedModeLoadsAsIs(t *testing.T) {
 // (TestUpdateWatch_EmptyPendingChangesRoundTrip removed — PendingChanges
 // moved from subsystem-level UpdateWatch to per-rule storage in Phase C.)
 
-// TestProfileSync_ApplySpecificDeepCopy verifies the second pointer field
-// (ApplySpecific) is also deep-copied, not aliased. Easy to miss when
-// adding new pointer fields — this locks the contract.
-
-// TestProfileSync_ApplySpecificDeepCopy verifies the second pointer field
-// (ApplySpecific) is also deep-copied, not aliased. Easy to miss when
-// adding new pointer fields — this locks the contract.
-func TestProfileSync_ApplySpecificDeepCopy(t *testing.T) {
+// TestProfileSync_ApplyDelayRoundtrip verifies the delayed-apply config
+// value (ApplyDelayMinutes) persists + reads back unchanged. Delayed mode
+// is a per-rule debounce anchored to each rule's pendingChange DetectedAt;
+// the only stored knob is this global minute count.
+func TestProfileSync_ApplyDelayRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	cs := NewConfigStore(dir)
 	if err := cs.Update(func(cfg *Config) {
 		cfg.ProfileSync = &ProfileSync{
-			Mode:          ProfileSyncModeDelayed,
-			ApplyInterval: "specific",
-			ApplySpecific: &PullSchedule{Mode: "daily", Time: "03:00"},
+			Mode:              ProfileSyncModeDelayed,
+			ApplyDelayMinutes: 1440, // 24h
 		}
 	}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 
 	got := cs.Get().ProfileSync
-	got.ApplySpecific.Time = "23:59"
-
-	again := cs.Get().ProfileSync
-	if again.ApplySpecific.Time == "23:59" {
-		t.Error("Get() returned shallow ApplySpecific — mutation leaked to store")
+	if got.ApplyDelayMinutes != 1440 {
+		t.Errorf("ApplyDelayMinutes roundtrip mismatch: got=%d want=1440", got.ApplyDelayMinutes)
+	}
+	if got.Mode != ProfileSyncModeDelayed {
+		t.Errorf("Mode roundtrip mismatch: got=%q want=%q", got.Mode, ProfileSyncModeDelayed)
 	}
 }
 

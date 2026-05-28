@@ -40,14 +40,18 @@ type ProfileSync struct {
 	// Mode controls what happens when detection finds changes:
 	//   "auto"    — apply immediately for auto-sync ON rules; notify auto-sync OFF rules
 	//   "notify"  — never apply automatically; notify all rules
-	//   "delayed" — notify immediately; apply queued for ApplySchedule
+	//   "delayed" — notify immediately; apply each rule ApplyDelayMinutes after
+	//               its OWN change was first detected (per-rule debounce)
 	Mode string `json:"mode"`
 
-	// ApplyInterval / ApplySpecific are ONLY consulted when Mode == "delayed".
-	// In any other Mode the runner ignores them, so empty/nil is fine.
-	// Same value-space as Interval/Specific above.
-	ApplyInterval string        `json:"applyInterval,omitempty"`
-	ApplySpecific *PullSchedule `json:"applySpecific,omitempty"`
+	// ApplyDelayMinutes is ONLY consulted when Mode == "delayed". It is a
+	// per-rule debounce: when a rule's changes are first detected, the apply
+	// fires this many minutes later for THAT rule (anchored to the rule's
+	// oldest pendingChange DetectedAt, which is persisted — so the delay
+	// survives restarts without re-firing or resetting). One global value,
+	// applied independently per rule from each rule's own detection time.
+	// 0 or unset means delayed mode does nothing until configured.
+	ApplyDelayMinutes int `json:"applyDelayMinutes,omitempty"`
 
 	// Runner telemetry — written by ProfileSyncRunner after each run.
 	LastRun      string                `json:"lastRun,omitempty"`      // RFC3339 timestamp

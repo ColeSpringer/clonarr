@@ -104,7 +104,7 @@ func (app *App) AutoSyncAfterPull(trigger string) {
 // filterEligibleRulesForPull returns rules that AutoSyncAfterPull should
 // consider — enabled, not orphaned, not imported, and with a TRaSH
 // commit that's actually changed since the rule's last sync. Pulled out
-// so both pull-tick and SyncSchedule iterations stay readable.
+// so the pull-tick iteration stays readable.
 func filterEligibleRulesForPull(rules []AutoSyncRule, currentCommit string) []AutoSyncRule {
 	out := make([]AutoSyncRule, 0, len(rules))
 	for _, rule := range rules {
@@ -125,59 +125,6 @@ func filterEligibleRulesForPull(rules []AutoSyncRule, currentCommit string) []Au
 	return out
 }
 
-// ForceSyncAllRules runs sync on every active rule unconditionally, ignoring
-// the LastSyncCommit == currentCommit short-circuit that AutoSyncAfterPull
-// uses. Triggered by the SyncSchedule wall-clock timer; the point is to
-// catch Arr-side drift (a user editing scores in Sonarr/Radarr directly,
-// or another tool overwriting clonarr's settings) on a periodic cadence
-// without needing a passive drift detector. Rules that are paused,
-// orphaned, imported, or disabled are still skipped — same gates as the
-// pull-driven path.
-func (app *App) ForceSyncAllRules() {
-	currentCommit := app.Trash.CurrentCommit()
-	if currentCommit == "" {
-		if app.DebugLog != nil {
-			app.DebugLog.Logf(LogAutoSync, "TRaSH data not loaded — skipping ForceSyncAllRules")
-		}
-		return
-	}
-
-	app.CleanupStaleRules()
-	app.MigratePriorAvailableGroups()
-	app.MigratePriorSyncedCFs()
-	app.MigrateExcludedCFs()
-
-	cfg := app.Config.Get()
-	if len(cfg.AutoSync.Rules) == 0 {
-		return
-	}
-	// Per-instance pause check happens inside runRulesPerInstance.
-
-	commitShort := currentCommit
-	if len(currentCommit) > 7 {
-		commitShort = currentCommit[:7]
-	}
-	tick := app.DebugLog.BeginOp(OpAutoSync, SourceAutoSyncSchedule, fmt.Sprintf("commit=%s rules=%d", commitShort, len(cfg.AutoSync.Rules)))
-	endResult := "ok | tick complete"
-	defer func() { tick.End(endResult) }()
-
-	// Force-sync: no LastSyncCommit gate, just filter the per-pass eligibility.
-	candidates := make([]AutoSyncRule, 0, len(cfg.AutoSync.Rules))
-	for _, rule := range cfg.AutoSync.Rules {
-		if !rule.Enabled || rule.OrphanedAt != "" || rule.ProfileSource == "imported" {
-			continue
-		}
-		candidates = append(candidates, rule)
-	}
-	if len(candidates) == 0 {
-		return
-	}
-	changed, noChange, errorCount, changedSummary := app.runRulesPerInstance(candidates, currentCommit, tick)
-	if len(changedSummary) > 0 {
-		tick.Logf("changed: %s", strings.Join(changedSummary, " | "))
-	}
-	endResult = fmt.Sprintf("ok | %d changed, %d no-op, %d errors", changed, noChange, errorCount)
-}
 
 // runRulesPerInstance groups rules by instance, runs a pre-flight
 // reachability check (WaitForInstanceReachable) per instance in

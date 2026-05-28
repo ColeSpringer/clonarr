@@ -112,8 +112,8 @@ func main() {
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		NotifyClient: &http.Client{Timeout: 10 * time.Second},
 		SafeClient:   netsec.NewSafeHTTPClient(10*time.Second, nil),
-		PullUpdateCh: make(chan string, 1),
-		SyncUpdateCh: make(chan struct{}, 1),
+		PullUpdateCh:  make(chan string, 1),
+		ApplyUpdateCh: make(chan struct{}, 1),
 	}
 
 	// Wire up changelog notification callback
@@ -134,7 +134,7 @@ func main() {
 	// every rule even when TRaSH has no new commits, defeating the point.
 	// Now: rules keep their LastSyncCommit across restarts. Sync triggers
 	// only when (a) TRaSH commit advances since last sync of that rule, or
-	// (b) the user enables SyncSchedule for periodic force-resync, or
+	// (b) Arr-side drift is detected (Auto-sync detection), or
 	// (c) the user runs a manual sync.
 	cfgStore.Update(func(cfg *core.Config) {
 		cleaned := make([]core.AutoSyncRule, 0, len(cfg.AutoSync.Rules))
@@ -247,72 +247,6 @@ func main() {
 	mux.Handle("GET /{$}", &api.IndexHandler{Tmpl: indexTmpl, BasePath: basePath, Version: Version})
 	mux.HandleFunc("/partials/", http.NotFound)
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
-
-	// Auto-sync schedule. When the user enables SyncSchedule (separate from
-	// PullSchedule — pull = "fetch new TRaSH data", sync = "push my saved
-	// settings to Arr"), this goroutine arms a wall-clock timer and fires
-	// ForceSyncAllRules at the scheduled instant. Force-sync bypasses the
-	// LastSyncCommit short-circuit so it catches Arr-side drift (manual
-	// edits, third-party tools) without needing a passive drift detector.
-	// Wakes on SyncUpdateCh whenever the config changes.
-	utils.SafeGo("auto-sync-scheduler", func() {
-		var timer *time.Timer
-		var timerCh <-chan time.Time
-
-		stopTimer := func() {
-			if timer != nil {
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				timer = nil
-				timerCh = nil
-			}
-		}
-
-		armFromConfig := func() {
-			stopTimer()
-			cfg := cfgStore.Get()
-			if cfg.SyncSchedule == nil || !cfg.SyncSchedule.Enabled {
-				app.SetNextSyncAt(time.Time{})
-				log.Printf("Auto-sync schedule disabled")
-				return
-			}
-			next := core.NextSyncTime(*cfg.SyncSchedule)
-			if next.IsZero() {
-				app.SetNextSyncAt(time.Time{})
-				log.Printf("Auto-sync schedule disabled (invalid configuration)")
-				return
-			}
-			delay := time.Until(next)
-			if delay <= 0 {
-				log.Printf("Auto-sync schedule: next time %s is in the past — running catch-up immediately", next.Format(time.RFC3339))
-				delay = time.Millisecond
-			}
-			timer = time.NewTimer(delay)
-			timerCh = timer.C
-			app.SetNextSyncAt(next)
-			log.Printf("Auto-sync schedule armed for %s", next.Format(time.RFC3339))
-		}
-
-		armFromConfig()
-
-		for {
-			select {
-			case <-timerCh:
-				log.Printf("Auto-sync schedule firing — force-syncing all enabled rules")
-				app.ForceSyncAllRules()
-				armFromConfig() // re-arm for next occurrence
-			case <-app.SyncUpdateCh:
-				armFromConfig()
-			case <-ctx.Done():
-				stopTimer()
-				return
-			}
-		}
-	})
 
 	// Background: reap expired sessions every 5 min
 	utils.SafeGo("session-cleanup", func() {
@@ -467,6 +401,43 @@ func main() {
 					log.Printf("profile-sync-watcher: %v", err)
 				}
 				rearm() // schedule next fire
+			}
+		}
+	})
+
+	// Delayed-apply scheduler — only does work when Profile Sync Mode is
+	// "delayed" ("Wait before applying"). Detection still runs on the
+	// profile-sync-watcher above (populating pendingChanges + notifying);
+	// THIS goroutine applies each rule ApplyDelayMinutes after THAT rule's
+	// changes were first detected (a per-rule debounce, not a fixed cadence).
+	//
+	// No timer to arm/reset: the deadline is computed from each rule's
+	// persisted pendingChange DetectedAt, so the delay survives restarts for
+	// free (a 7-day delay with 5 days elapsed still has 2 days left at boot;
+	// nothing fires immediately on start). We just poll on a fixed tick and
+	// let RunDelayedApply decide what's due. The wake channel collapses the
+	// poll latency when the user changes Mode/delay in Settings.
+	utils.SafeGo("delayed-apply-scheduler", func() {
+		// 30s poll resolution — fine-grained enough that a 5-minute delay
+		// fires within ~30s of its true deadline, cheap enough to ignore.
+		pollTick := time.NewTicker(30 * time.Second)
+		defer pollTick.Stop()
+		defer app.SetNextApplyAt(time.Time{})
+
+		runOnce := func() {
+			next := app.RunDelayedApply()
+			app.SetNextApplyAt(next) // zero clears the countdown when nothing pending
+		}
+		runOnce() // evaluate any already-due rules at startup (respecting their persisted deadlines)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-app.ApplyUpdateCh:
+				runOnce()
+			case <-pollTick.C:
+				runOnce()
 			}
 		}
 	})

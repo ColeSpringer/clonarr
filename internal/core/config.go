@@ -17,7 +17,7 @@ type Config struct {
 	TrashRepo            TrashRepo                        `json:"trashRepo"`
 	PullInterval         string                           `json:"pullInterval"`                   // Go duration (e.g. "24h", "1h"), "0" to disable, or "specific" for PullSchedule
 	PullSchedule         *PullSchedule                    `json:"pullSchedule,omitempty"`         // nil unless a wall-clock pull schedule has been saved
-	SyncSchedule         *SyncSchedule                    `json:"syncSchedule,omitempty"`         // nil unless an auto-sync schedule has been saved (default disabled even when present)
+	SyncSchedule         *SyncSchedule                    `json:"syncSchedule,omitempty"`         // DEPRECATED — retained only to migrate v2 configs; converted to Auto-sync drift detection on load, then cleared
 	DevMode              bool                             `json:"devMode"`                        // Advanced Mode — enables Profile Builder, Scoring Sandbox, CF Group Builder and Prowlarr settings
 	TrashSchemaFields    bool                             `json:"trashSchemaFields"`              // Show TRaSH-schema fields (trash_id, trash_scores, group, description) in CF editor, Profile Builder, CF Group Builder
 	DebugLogging         bool                             `json:"debugLogging"`                   // Write detailed operations to /config/debug.log
@@ -109,19 +109,13 @@ type DriftDetail struct {
 	Target  any    `json:"target"`
 }
 
-// SyncSchedule holds the optional periodic force-sync schedule. When Enabled,
-// the scheduler runs a force-sync on every active rule at the wall-clock
-// time specified — regardless of whether TRaSH-Guides has new commits. This
-// catches Arr-side drift (a user editing scores directly in Sonarr/Radarr,
-// or another tool overwriting clonarr's settings) without needing a passive
-// drift detector. Independent of PullSchedule. Default disabled — preserves
-// existing "sync only follows pull" behaviour for users who don't enable it.
+// SyncSchedule is the DEPRECATED v2 periodic force-sync schedule. Retained
+// only so v2 configs still parse on load — its single load-time migration
+// (ConfigStore.load) converts an enabled schedule to Auto-sync drift
+// detection, then clears the field. Nothing writes it anymore; only
+// Enabled is read.
 type SyncSchedule struct {
-	Enabled    bool   `json:"enabled"`              // master on/off — default false
-	Mode       string `json:"mode"`                 // "daily", "weekly", "monthly"
-	Time       string `json:"time"`                 // "HH:MM" (24h format)
-	DayOfWeek  int    `json:"dayOfWeek"`            // 0=Sunday..6=Saturday (weekly)
-	DayOfMonth int    `json:"dayOfMonth"`           // 1-28 (monthly)
+	Enabled bool `json:"enabled"`
 }
 
 // ProwlarrConfig holds Prowlarr connection settings for the Scoring Sandbox.
@@ -392,8 +386,8 @@ type Instance struct {
 	URL    string `json:"url"`
 	APIKey string `json:"apiKey"`
 	// AutoSyncPaused, when true, skips non-user-initiated sync for this
-	// instance only. AutoSyncAfterPull, ForceSyncAllRules, and the
-	// sync-schedule timer all silently drop rules belonging to a paused
+	// instance only. AutoSyncAfterPull, the delayed-apply runner, and the
+	// drift detector all silently drop rules belonging to a paused
 	// instance. Manual actions ("Sync now", "Sync all", "Save & Sync"
 	// from the profile editor) are unaffected. Default false. Replaces
 	// the prior global AutoSync.Paused flag — see migrateGlobalPauseToInstances.
@@ -461,13 +455,6 @@ func (cs *ConfigStore) Load() error {
 			cs.config.PullSchedule.DayOfMonth = 28
 		}
 	}
-	if cs.config.SyncSchedule != nil {
-		if d := cs.config.SyncSchedule.DayOfMonth; d < 1 || d > 28 {
-			log.Printf("config: syncSchedule.dayOfMonth=%d clamped to 28 (months with fewer days make 29-31 unreliable)", d)
-			cs.config.SyncSchedule.DayOfMonth = 28
-		}
-	}
-
 	// Migrate old flat notification fields to NotificationAgents slice.
 	// Safe to call under lock — migrateFlatNotifications reads cs.filePath directly.
 	cs.migrateFlatNotifications(data)
@@ -504,9 +491,37 @@ func (cs *ConfigStore) Load() error {
 	// reproduces today's Pull-and-sync behaviour. ArrDrift is opt-in (new
 	// capability, off by default). Zero functional change for existing users
 	// after the migration runs.
-	if cs.migrateProfileSync() {
+	profileSyncMigrated := cs.migrateProfileSync()
+
+	// Migrate the deprecated v2 "Auto Sync Schedule" (periodic force-sync)
+	// to the unified Auto-sync system. An enabled schedule meant "keep my
+	// Arr profiles matching clonarr on a cadence", which Arr-drift detection
+	// plus Apply-automatically now does precisely. Turn those on so the
+	// user's intent survives the upgrade, then clear the old field so it
+	// never lingers. Runs AFTER migrateProfileSync so ProfileSync already
+	// carries the migrated Pull cadence (Interval/Specific) before we layer
+	// the drift source + mode on top. Persisted below so the nil field
+	// sticks to disk — without that, the on-disk schedule would re-trigger
+	// this every boot.
+	syncScheduleMigrated := false
+	if cs.config.SyncSchedule != nil {
+		if cs.config.SyncSchedule.Enabled {
+			if cs.config.ProfileSync == nil {
+				cs.config.ProfileSync = &ProfileSync{}
+			}
+			cs.config.ProfileSync.Sources.ArrDrift = true
+			if cs.config.ProfileSync.Mode == "" {
+				cs.config.ProfileSync.Mode = ProfileSyncModeAuto
+			}
+			log.Printf("config: migrated deprecated Auto Sync Schedule to Auto-sync drift detection (Direct edits in Radarr/Sonarr enabled)")
+		}
+		cs.config.SyncSchedule = nil
+		syncScheduleMigrated = true
+	}
+
+	if profileSyncMigrated || syncScheduleMigrated {
 		if err := cs.saveLocked(); err != nil {
-			log.Printf("Warning: failed to persist ProfileSync migration: %v", err)
+			log.Printf("Warning: failed to persist Auto-sync migration: %v", err)
 		}
 	}
 	return nil
@@ -546,10 +561,6 @@ func (cs *ConfigStore) Get() Config {
 		ps := *cs.config.PullSchedule
 		cfg.PullSchedule = &ps
 	}
-	if cs.config.SyncSchedule != nil {
-		ss := *cs.config.SyncSchedule
-		cfg.SyncSchedule = &ss
-	}
 	if cs.config.DriftWatch != nil {
 		dw := *cs.config.DriftWatch
 		if cs.config.DriftWatch.Schedule != nil {
@@ -571,10 +582,6 @@ func (cs *ConfigStore) Get() Config {
 		if cs.config.ProfileSync.Specific != nil {
 			sp := *cs.config.ProfileSync.Specific
 			ps.Specific = &sp
-		}
-		if cs.config.ProfileSync.ApplySpecific != nil {
-			asp := *cs.config.ProfileSync.ApplySpecific
-			ps.ApplySpecific = &asp
 		}
 		if cs.config.ProfileSync.LastResult != nil {
 			lr := *cs.config.ProfileSync.LastResult

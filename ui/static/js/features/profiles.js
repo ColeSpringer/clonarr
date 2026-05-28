@@ -613,8 +613,10 @@ export default {
               // this as a warning instead of a misleading "success" toast.
               this.showToast('Pull completed but no TRaSH data was loaded (0 CFs, 0 profiles). Check container logs and that /config/data/trash-guides/docs/json/ exists and is readable by the container user.', 'warning', 12000);
             } else if (this.trashStatus.commitHash !== prevCommit && this.trashStatus.lastDiff?.summary) {
-              const summary = this.trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '').replace(/\n/g, ', ').replace(/:,/g, ':');
-              this.showToast('TRaSH updated: ' + summary, 'info', 10000);
+              // Keep the diff's line structure — toast-content is pre-line so
+              // each app + CF renders on its own row. Only strip markdown bold.
+              const summary = this.trashStatus.lastDiff.summary.replace(/\*\*/g, '').trim();
+              this.showToast('TRaSH updated:\n' + summary, 'info', 10000);
             } else {
               this.showToast('TRaSH data up to date', 'info', 3000);
             }

@@ -108,35 +108,6 @@ func validatePullSchedule(sched core.PullSchedule) error {
 	return nil
 }
 
-// validateSyncSchedule mirrors validatePullSchedule for the SyncSchedule
-// field. The schedule itself is only validated when Enabled — disabled
-// schedules can carry partial state without rejecting the whole config
-// (matches the UX of toggling Enabled off without re-entering everything).
-func validateSyncSchedule(sched core.SyncSchedule) error {
-	if !sched.Enabled {
-		return nil // disabled — leave field state alone
-	}
-	if !core.IsValidEnumValue(core.PullScheduleModes, sched.Mode) {
-		return fmt.Errorf("syncSchedule.mode must be one of: %s", strings.Join(core.EnumValues(core.PullScheduleModes), ", "))
-	}
-	if _, _, ok := core.ParsePullScheduleClock(sched.Time); !ok {
-		return fmt.Errorf("syncSchedule.time must be HH:MM in 24-hour format")
-	}
-	if sched.Mode == "weekly" && (sched.DayOfWeek < 0 || sched.DayOfWeek > 6) {
-		return fmt.Errorf("syncSchedule.dayOfWeek must be 0..6")
-	}
-	if sched.Mode == "monthly" && (sched.DayOfMonth < 1 || sched.DayOfMonth > 28) {
-		return fmt.Errorf("syncSchedule.dayOfMonth must be 1..28")
-	}
-	if sched.Mode != "weekly" && (sched.DayOfWeek < 0 || sched.DayOfWeek > 6) {
-		return fmt.Errorf("syncSchedule.dayOfWeek must be 0..6 (Sunday=0..Saturday=6) even when mode is not 'weekly'")
-	}
-	if sched.Mode != "monthly" && sched.DayOfMonth != 0 && (sched.DayOfMonth < 1 || sched.DayOfMonth > 28) {
-		return fmt.Errorf("syncSchedule.dayOfMonth must be 0 (unset) or 1..28 even when mode is not 'monthly'")
-	}
-	return nil
-}
-
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	s.updateConfigMu.Lock()
 	defer s.updateConfigMu.Unlock()
@@ -153,7 +124,6 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		TrashRepo              *core.TrashRepo      `json:"trashRepo,omitempty"`
 		PullInterval           *string              `json:"pullInterval,omitempty"`
 		PullSchedule           *core.PullSchedule   `json:"pullSchedule,omitempty"`
-		SyncSchedule           *core.SyncSchedule   `json:"syncSchedule,omitempty"`
 		DevMode                *bool                `json:"devMode,omitempty"`
 		TrashSchemaFields      *bool                `json:"trashSchemaFields,omitempty"`
 		DebugLogging           *bool                `json:"debugLogging"`
@@ -262,13 +232,6 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.SyncSchedule != nil {
-		if err := validateSyncSchedule(*req.SyncSchedule); err != nil {
-			writeError(w, 400, err.Error())
-			return
-		}
-	}
-
 	// Any save that sets authentication=none requires the current admin password.
 	if req.Authentication != nil && *req.Authentication == "none" && s.AuthStore != nil {
 		if confirm.ConfirmPassword == "" {
@@ -283,7 +246,6 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	pullChanged := false
 	scheduleChanged := false
-	syncScheduleChanged := false
 	authChanged := false
 	err := s.Core.Config.Update(func(cfg *core.Config) {
 		if req.TrashRepo != nil {
@@ -322,11 +284,6 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			} else {
 				cfg.ProfileSync.Specific = nil
 			}
-		}
-		if req.SyncSchedule != nil {
-			sched := *req.SyncSchedule
-			cfg.SyncSchedule = &sched
-			syncScheduleChanged = true
 		}
 		if req.DevMode != nil {
 			cfg.DevMode = *req.DevMode
@@ -383,13 +340,6 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	if syncScheduleChanged {
-		select {
-		case s.Core.SyncUpdateCh <- struct{}{}:
-		default:
-		}
-	}
-
 	// Live-reload auth config so the change takes effect immediately
 	if authChanged && s.AuthStore != nil {
 		cfg := s.Core.Config.Get()

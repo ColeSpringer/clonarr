@@ -19,10 +19,10 @@ import (
 //     count + per-instance pause state, NOT cfg.AutoSync.Enabled — that
 //     mismatch confused at least one third-party widget author (homepage
 //     discussion #6618). This endpoint surfaces the derived state directly.
-//   - "Next sync" requires picking between PullSchedule (TRaSH pull) and
-//     SyncSchedule (independent force-sync). Resolving that on the client
-//     means re-implementing nextPullTimeAt + nextSyncTimeAt. We compute
-//     both here and let integrators show whichever they want.
+//   - "Next pull" (TRaSH fetch) and "Next sync" (delayed-apply write to
+//     Arr) each need wall-clock math the client would otherwise
+//     re-implement. We compute both here and let integrators show
+//     whichever they want.
 func (s *Server) handleWidgetSummary(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Core.Config.Get()
 	trashSt := s.Core.Trash.Status()
@@ -143,10 +143,12 @@ func (s *Server) handleWidgetSummary(w http.ResponseWriter, r *http.Request) {
 	if t := s.nextPullForStatus(); !t.IsZero() {
 		nextPull = t.Format(time.RFC3339)
 	}
-	if cfg.SyncSchedule != nil {
-		if t := core.NextSyncTime(*cfg.SyncSchedule); !t.IsZero() {
-			nextSync = t.Format(time.RFC3339)
-		}
+	// nextSync now reflects the delayed-apply schedule ("Wait before
+	// applying" mode) — the next time clonarr will automatically write
+	// detected changes to Arr. Zero (empty) in Auto/Notify mode, where
+	// apply is inline or manual respectively.
+	if t := s.Core.GetNextApplyAt(); !t.IsZero() {
+		nextSync = t.Format(time.RFC3339)
 	}
 
 	writeJSON(w, map[string]any{

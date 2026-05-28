@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -238,6 +239,32 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 		// upstream activity.
 		summary := uw.detectPerRuleChanges(ctx, cfg, remote, branch, localCommit, upstreamHead)
 
+		// Clear, plain-language log of what detection found + what happens
+		// next, driven by the active Mode. Replaces the bare "per-rule
+		// mapping updated N rule(s)" technical line as the headline. In
+		// delayed mode this is the user's confirmation that the auto-apply
+		// is scheduled (the apply itself logs separately when it fires).
+		if summary != nil && summary.AffectedRuleCount > 0 {
+			names := affectedRuleNames(summary, 8)
+			switch cfg.ProfileSync.Mode {
+			case ProfileSyncModeDelayed:
+				if cfg.ProfileSync.ApplyDelayMinutes > 0 {
+					applyAt := time.Now().Add(time.Duration(cfg.ProfileSync.ApplyDelayMinutes) * time.Minute)
+					log.Printf("profile-sync: TRaSH update affects %d profile(s): %s — will apply automatically around %s (%s delay)",
+						summary.AffectedRuleCount, names, applyAt.Format("15:04"), humanizeMinutes(cfg.ProfileSync.ApplyDelayMinutes))
+				} else {
+					log.Printf("profile-sync: TRaSH update affects %d profile(s): %s — delayed mode but no delay set, will not auto-apply",
+						summary.AffectedRuleCount, names)
+				}
+			case ProfileSyncModeNotify:
+				log.Printf("profile-sync: TRaSH update affects %d profile(s): %s — notify-only, apply manually with Pull",
+					summary.AffectedRuleCount, names)
+			default:
+				log.Printf("profile-sync: TRaSH update affects %d profile(s): %s",
+					summary.AffectedRuleCount, names)
+			}
+		}
+
 		// Aggregate-level notification fires only when this is a NEW
 		// upstream commit we haven't notified about. summary may be nil
 		// (per-rule mapping failed somehow) — NotifyUpstreamUpdate then
@@ -450,6 +477,63 @@ func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Confi
 			})
 		}
 	}
+
+	// Affected sync rules — resolve each affected rule to the profile name
+	// the user recognises. Prefer the Arr profile name from sync history
+	// (what the Sync Rules table shows), fall back to the TRaSH profile name
+	// from the snapshot, then a generic label. Sorted by app + name for
+	// stable notification ordering.
+	instType := make(map[string]string, len(cfg.Instances))
+	for _, in := range cfg.Instances {
+		instType[in.ID] = in.Type
+	}
+	for ruleID := range perRuleUpdates {
+		var rule *AutoSyncRule
+		for i := range cfg.AutoSync.Rules {
+			if cfg.AutoSync.Rules[i].ID == ruleID {
+				rule = &cfg.AutoSync.Rules[i]
+				break
+			}
+		}
+		if rule == nil {
+			continue
+		}
+		appType := instType[rule.InstanceID]
+		name := ""
+		// Arr profile name from sync history (matches the Sync Rules table).
+		for _, h := range cfg.SyncHistory {
+			if h.InstanceID == rule.InstanceID && h.ArrProfileID == rule.ArrProfileID && h.ArrProfileName != "" {
+				name = h.ArrProfileName
+				break
+			}
+		}
+		// Fall back to the TRaSH profile name from the snapshot.
+		if name == "" && rule.TrashProfileID != "" {
+			var profiles []*TrashQualityProfile
+			if appType == "sonarr" {
+				profiles = snap.Sonarr.Profiles
+			} else {
+				profiles = snap.Radarr.Profiles
+			}
+			for _, p := range profiles {
+				if p != nil && p.TrashID == rule.TrashProfileID {
+					name = p.Name
+					break
+				}
+			}
+		}
+		if name == "" {
+			name = fmt.Sprintf("Profile #%d", rule.ArrProfileID)
+		}
+		summary.AffectedRules = append(summary.AffectedRules, AffectedItem{Name: name, AppType: appType})
+	}
+	sort.Slice(summary.AffectedRules, func(i, j int) bool {
+		if summary.AffectedRules[i].AppType != summary.AffectedRules[j].AppType {
+			return summary.AffectedRules[i].AppType < summary.AffectedRules[j].AppType
+		}
+		return summary.AffectedRules[i].Name < summary.AffectedRules[j].Name
+	})
+
 	return summary
 }
 

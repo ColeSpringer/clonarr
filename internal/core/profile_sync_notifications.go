@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // UpstreamChangeSummary carries aggregate detection results so the
@@ -14,6 +15,7 @@ type UpstreamChangeSummary struct {
 	AffectedRuleCount int
 	AffectedCFs       []AffectedItem // Custom Formats whose file changed
 	AffectedProfiles  []AffectedItem // Quality Profiles whose file changed
+	AffectedRules     []AffectedItem // the user's sync rules (by Arr/TRaSH profile name) that are affected
 }
 
 // AffectedItem is one CF or profile that changed upstream AND is in scope
@@ -84,8 +86,19 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string, summary *Upst
 		}
 		renderList("Custom Formats", summary.AffectedCFs)
 		renderList("Quality Profiles", summary.AffectedProfiles)
+		renderList("Your profiles affected", summary.AffectedRules)
 		parts = append(parts, "")
-		parts = append(parts, fmt.Sprintf("Open Clonarr and click **Pull** to apply (`%s` → `%s`).", shortHash(prevCommit), shortHash(newCommit)))
+		// Closing line is mode-aware. In "Wait before applying" mode the user
+		// doesn't click Pull — clonarr applies each rule automatically after
+		// the configured delay, so tell them roughly when that happens.
+		// Notify mode keeps the manual "click Pull" call-to-action.
+		if cfg.ProfileSync != nil && cfg.ProfileSync.Mode == ProfileSyncModeDelayed && cfg.ProfileSync.ApplyDelayMinutes > 0 {
+			applyAt := time.Now().Add(time.Duration(cfg.ProfileSync.ApplyDelayMinutes) * time.Minute)
+			parts = append(parts, fmt.Sprintf("These will be applied automatically around **%s** (%s after detection). No action needed. Open Clonarr first if you want to review or apply sooner.",
+				applyAt.Format("15:04"), humanizeMinutes(cfg.ProfileSync.ApplyDelayMinutes)))
+		} else {
+			parts = append(parts, fmt.Sprintf("Open Clonarr and click **Pull** to apply (`%s` → `%s`).", shortHash(prevCommit), shortHash(newCommit)))
+		}
 		message = strings.Join(parts, "\n")
 	} else {
 		// Degraded fallback — per-rule mapping unavailable or zero matches.
@@ -121,6 +134,23 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// affectedRuleNames renders the summary's affected sync-rule profile names
+// as a comma-joined list, capped at max with a "+N more" tail. Used in log
+// lines where a flat string is cleaner than a bullet list.
+func affectedRuleNames(summary *UpstreamChangeSummary, max int) string {
+	if summary == nil || len(summary.AffectedRules) == 0 {
+		return "(unnamed)"
+	}
+	names := make([]string, 0, len(summary.AffectedRules))
+	for _, r := range summary.AffectedRules {
+		names = append(names, r.Name)
+	}
+	if len(names) <= max {
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:max], ", ") + fmt.Sprintf(", +%d more", len(names)-max)
 }
 
 // buildAffectedSummaryLine renders one of three sentence shapes depending

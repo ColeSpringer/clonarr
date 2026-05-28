@@ -398,34 +398,6 @@ func TestMigratePriorAvailableGroupsPopulatesFromCommit(t *testing.T) {
 	}
 }
 
-func TestForceSyncAllRulesWithNoTrashCommitSkipsMigration(t *testing.T) {
-	dir := t.TempDir()
-	commit := seedTrashGroupGitCommit(t, filepath.Join(dir, "trash-guides"))
-	cfg := NewConfigStore(dir)
-	if err := cfg.Set(&Config{
-		AutoSync: AutoSyncConfig{Rules: []AutoSyncRule{{
-			ID:             "rule-1",
-			Enabled:        true,
-			TrashProfileID: "profile-1",
-			LastSyncCommit: commit,
-		}}},
-	}); err != nil {
-		t.Fatalf("set config: %v", err)
-	}
-	app := &App{
-		Config:   cfg,
-		Trash:    NewTrashStore(dir),
-		DebugLog: NewDebugLogger(dir),
-	}
-
-	app.ForceSyncAllRules()
-
-	got := cfg.Get().AutoSync.Rules[0].PriorAvailableGroups
-	if got != nil {
-		t.Fatalf("PriorAvailableGroups = %#v, want nil when current TRaSH commit is empty", got)
-	}
-}
-
 // TestCleanupDanglingCustomCFsOnRule_StripsBothMaps verifies the helper
 // removes "custom:" IDs from BOTH SelectedCFs (slice) and ScoreOverrides
 // (map), persists via Config.Update, and reports the removed IDs.

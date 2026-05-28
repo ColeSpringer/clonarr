@@ -244,17 +244,17 @@
           </div>
         </div>
 
-        <!-- ===== Profile Sync ===== -->
-        <!-- Dedicated tab for the unified Profile Sync subsystem (Phase E).
-             Houses everything related to "when does clonarr check + what
-             does it do when it finds changes" — schedule cadence, what to
-             watch (Sources), what action to take (Mode), and the legacy
-             Auto-sync Schedule (will deprecate when Delayed-apply ships).
-             TRaSH Guides tab is now purely about repo identity (URL,
-             branch, status, reset). -->
+        <!-- ===== Auto-sync ===== -->
+        <!-- Houses everything related to "when does clonarr check + what
+             does it do when it finds changes": schedule cadence, what to
+             watch (Sources), and what action to take (Mode). The internal
+             settingsSection key stays 'profile-sync' so existing deep links
+             keep working; the user-facing label is "Auto-sync". TRaSH
+             Guides tab is purely about repo identity (URL, branch, status,
+             reset). -->
         <div x-show="settingsSection === 'profile-sync'">
-          <div class="settings-section-title">Profile Sync</div>
-          <div class="settings-section-desc">When clonarr checks for changes and what it does when it finds them. Default mirrors today's Pull-and-sync behaviour — opt in to <em>Just notify me</em> or <em>Wait before applying</em> for finer control.</div>
+          <div class="settings-section-title">Auto-sync</div>
+          <div class="settings-section-desc">When clonarr checks for changes and what it does when it finds them. The default applies updates automatically. Opt in to <em>Just notify me</em> or <em>Wait before applying</em> for finer control.</div>
 
           <div class="setting-row">
             <div class="setting-label">Check for changes</div>
@@ -362,7 +362,7 @@
                        style="margin-top:3px">
                 <span>
                   <span style="font-weight:500">Apply automatically</span>
-                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">clonarr syncs the change to Arr right away — for rules with auto-sync turned on. Rules with auto-sync off get a notification so you can review and apply manually. (Matches today's Pull-and-sync behaviour.)</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">clonarr syncs the change to Arr right away for rules with auto-sync turned on. Rules with auto-sync off get a notification so you can review and apply manually.</span>
                 </span>
               </label>
               <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
@@ -375,90 +375,46 @@
                   <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">No automatic Arr writes. When new TRaSH commits are detected upstream, you get a notification (Discord/NTFY/Apprise — opt in per agent under Notifications) and a "↑ TRaSH updates available" badge in the sidebar. Click <em>Pull</em> when you're ready to apply.</span>
                 </span>
               </label>
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:not-allowed;font-size:13px;opacity:0.55">
-                <input type="radio" name="profile-sync-mode" value="delayed" disabled style="margin-top:3px">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
+                <input type="radio" name="profile-sync-mode" value="delayed"
+                       :checked="config.profileSync.mode === 'delayed'"
+                       @change="config.profileSync.mode = 'delayed'; saveProfileSync()"
+                       style="margin-top:3px">
                 <span>
                   <span style="font-weight:500">Wait before applying — apply on a separate schedule</span>
-                  <span style="background:var(--bg-muted);color:var(--text-muted);padding:0 6px;border-radius:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-left:6px;vertical-align:1px">soon</span>
-                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">Detect changes now, apply on a separate schedule (e.g. nightly 03:00). Useful if you want a controlled apply window regardless of when TRaSH publishes. (Apply schedule UI + behaviour land in the next wave.)</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">Detect changes now (you get the same notification + badge as <em>Just notify me</em>), then apply them automatically after a delay you set below. Useful for a controlled apply window no matter when TRaSH publishes.</span>
                 </span>
               </label>
             </div>
           </div>
 
-          <!-- Legacy Auto-sync Schedule. Will deprecate once the
-               Delayed-apply mode + Apply schedule UI ships. Until then,
-               surfaced here so existing users who rely on it can still
-               configure it from the relevant section. -->
-          <div class="setting-row" style="border-top:1px solid var(--bg-muted);margin-top:14px;padding-top:14px">
-            <div class="setting-label" x-tt="'Periodically force-resync your saved profile settings to Sonarr/Radarr — overwrites any manual changes done in the *arr UI or via other tools. Independent of Pull Interval. Default off; turn on if you want clonarr to keep the profile clean even when no TRaSH updates have happened.'">
-              Auto-sync Schedule
-            </div>
-            <div class="setting-value" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <!-- Apply delay — only shown in "Wait before applying" mode. A
+               per-rule debounce: each rule applies this long after ITS OWN
+               change was first detected. Stored as total minutes
+               (applyDelayMinutes); the number + unit dropdown is a UI
+               convenience over that single value. -->
+          <div class="setting-row" x-show="config.profileSync.mode === 'delayed'" x-cloak>
+            <div class="setting-label">Apply delay</div>
+            <div class="setting-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:13px;color:var(--text-muted)">Wait</span>
+              <input type="number" class="input" style="width:90px" min="1"
+                     :value="applyDelayValue()"
+                     @input="setApplyDelayValue($event.target.value)"
+                     @change="saveProfileSync()"
+                     aria-label="Apply delay amount">
               <select class="input" style="width:130px"
-                      x-model="config.syncSchedule.mode"
-                      @change="config.syncSchedule.enabled = ($el.value !== 'disabled'); if ($el.value !== 'disabled') _syncScheduleSavedMode = $el.value; saveConfig(['syncSchedule'])"
-                      aria-label="Auto-sync schedule mode">
-                <option value="disabled">Disabled</option>
-                <template x-for="m in (manifest.pullScheduleModes || [])" :key="m.value">
-                  <option :value="m.value" x-text="m.label"></option>
-                </template>
+                      :value="applyDelayUnit()"
+                      @change="setApplyDelayUnit($event.target.value); saveProfileSync()"
+                      aria-label="Apply delay unit">
+                <option value="minutes">minutes</option>
+                <option value="hours">hours</option>
+                <option value="days">days</option>
               </select>
-              <select class="input" style="width:140px"
-                      x-show="config.syncSchedule.enabled && config.syncSchedule.mode === 'weekly'"
-                      x-model.number="config.syncSchedule.dayOfWeek"
-                      @change="saveConfig(['syncSchedule'])"
-                      aria-label="Auto-sync schedule day of week">
-                <template x-for="d in [{v:0,l:'Sunday'},{v:1,l:'Monday'},{v:2,l:'Tuesday'},{v:3,l:'Wednesday'},{v:4,l:'Thursday'},{v:5,l:'Friday'},{v:6,l:'Saturday'}]" :key="d.v">
-                  <option :value="d.v" x-text="d.l"></option>
-                </template>
-              </select>
-              <span x-show="config.syncSchedule.enabled && config.syncSchedule.mode === 'monthly'"
-                    x-tt="'Day 1-28 only — months with fewer days (Feb) make 29-31 unreliable, so they are not offered.'">
-                <select class="input" style="width:100px"
-                        x-model.number="config.syncSchedule.dayOfMonth"
-                        @change="saveConfig(['syncSchedule'])"
-                        aria-label="Auto-sync schedule day of month">
-                  <template x-for="d in Array.from({length:28},(_,i)=>i+1)" :key="d">
-                    <option :value="d" x-text="d"></option>
-                  </template>
-                </select>
-              </span>
-              <span x-show="config.syncSchedule.enabled" style="font-size:13px;color:var(--text-muted)">at</span>
-              <select class="input" style="width:72px"
-                      x-show="config.syncSchedule.enabled"
-                      :value="syncScheduleHourValue()"
-                      @change="setSyncScheduleHour($event.target.value); saveConfig(['syncSchedule'])"
-                      aria-label="Auto-sync schedule hour">
-                <template x-for="h in pullScheduleHourOptions()" :key="h.value">
-                  <option :value="h.value" x-text="h.label"></option>
-                </template>
-              </select>
-              <span x-show="config.syncSchedule.enabled" style="font-size:13px;color:var(--text-muted)">:</span>
-              <select class="input" style="width:70px"
-                      x-show="config.syncSchedule.enabled"
-                      :value="syncScheduleMinuteValue()"
-                      @change="setSyncScheduleMinute($event.target.value); saveConfig(['syncSchedule'])"
-                      aria-label="Auto-sync schedule minute">
-                <template x-for="m in pullScheduleMinuteOptions()" :key="m.value">
-                  <option :value="m.value" x-text="m.label"></option>
-                </template>
-              </select>
-              <select class="input" style="width:76px"
-                      x-show="config.syncSchedule.enabled && pullScheduleUses12Hour()"
-                      :value="syncSchedulePeriodValue()"
-                      @change="setSyncSchedulePeriod($event.target.value); saveConfig(['syncSchedule'])"
-                      aria-label="Auto-sync schedule period">
-                <template x-for="p in pullSchedulePeriodOptions()" :key="p.value">
-                  <option :value="p.value" x-text="p.label"></option>
-                </template>
-              </select>
-              <span x-show="!config.syncSchedule.enabled"
-                    style="font-size:12px;color:var(--text-muted)">Sync only follows pull or manual triggers</span>
-              <span x-show="config.syncSchedule.enabled"
-                    style="flex-basis:100%;font-size:12px;color:var(--text-secondary);font-style:italic">Forces a resync of every active rule at this time, overwriting any settings changed directly in Sonarr/Radarr or by other tools.</span>
+              <span style="font-size:13px;color:var(--text-muted)">after a change is detected</span>
+              <span style="flex-basis:100%;font-size:12px;color:var(--text-muted);font-style:italic">Each profile applies on its own clock, counted from when <em>that</em> profile's change was detected, so changes found at different times don't all apply at once. The countdown survives restarts. Detection still follows the <em>Check for changes</em> schedule above.</span>
             </div>
           </div>
+
         </div>
 
         <!-- ===== Notifications ===== -->

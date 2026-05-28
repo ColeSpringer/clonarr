@@ -6,6 +6,35 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave — 2026-05-28 (Auto-sync settings)
+
+The Profile Sync settings section is now called "Auto-sync", and the
+third mode, "Wait before applying", is fully working.
+
+**Wait before applying**
+
+- Pick this mode under Settings, Auto-sync to detect changes now but
+  apply them on a delay you choose (for example 3 hours, or 1 day).
+- The delay is per profile, counted from when that profile's change
+  was first detected. Changes found at different times apply at
+  different times, not all at once.
+- Set the delay as a number plus a unit (minutes, hours, or days).
+- The countdown survives restarts. If you set a 7-day delay and
+  restart after 5 days, there are still 2 days left. Nothing fires
+  early on boot.
+- Notifications and the in-app badge tell you what was detected and
+  roughly when it will be applied.
+
+**Auto Sync Schedule replaced**
+
+- The old "Auto Sync Schedule" (a separate periodic force-resync) is
+  gone. Arr drift detection plus Apply automatically now do the same
+  job more precisely: they sync only when something has actually
+  changed instead of re-pushing everything on a clock.
+- If you had Auto Sync Schedule turned on, the upgrade automatically
+  switches on "Direct edits in Radarr/Sonarr" detection so your Arr
+  profiles keep being kept in sync. No action needed.
+
 ### Update wave — 2026-05-27 (Arr drift detection)
 
 Clonarr can now detect when someone edits a synced Arr profile

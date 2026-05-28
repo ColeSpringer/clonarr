@@ -791,21 +791,29 @@ export function clonarr() {
             }
           }
         } catch (e) { /* network blip — try again next tick */ }
-        // In Notify/Delayed mode, a scheduled check populates per-rule
-        // pendingChanges on the backend without pulling. Reload the
-        // rules list when lastRun advances so the "Outdated" pill +
-        // tooltip appear without requiring a page refresh.
-        if (lastRunChanged) {
-          await this.loadAutoSyncRules();
-        }
+        // Always reload the rules list on the poll tick. Scheduled detection
+        // (TRaSH upstream OR Arr drift) populates per-rule pendingChanges +
+        // drift fingerprints on the backend without any frontend signal — and
+        // drift updates DriftWatch.LastRun, not ProfileSync.LastRun, so the
+        // lastRunChanged check below would miss drift-only detection. An
+        // unconditional reload (the rules endpoint is cheap; the heavier
+        // customizations fetch inside is already gated to the Sync Rules tab)
+        // guarantees pills reflect backend state within one poll cycle
+        // regardless of which detector fired. lastRunChanged is still tracked
+        // for the toast logic below.
+        void lastRunChanged;
+        await this.loadAutoSyncRules();
         // If lastPull changed (scheduled pull completed), reload sync data
         if (this.trashStatus?.lastPull && this.trashStatus.lastPull !== prevPull) {
           // Show pull diff toast for scheduled pulls (only if diff is fresh — newCommit matches current)
           if (this.trashStatus.lastDiff?.summary && this.trashStatus.lastDiff.newCommit === this.trashStatus.commitHash) {
             const diffTime = new Date(this.trashStatus.lastDiff.time).getTime();
             if (Date.now() - diffTime < 60000) { // only if diff is less than 60s old
-              const summary = this.trashStatus.lastDiff.summary.replace(/\*\*/g, '').replace(/^\n/, '').replace(/\n/g, ', ').replace(/:,/g, ':');
-              this.showToast('TRaSH updated: ' + summary, 'info', 10000);
+              // Preserve newlines — toast-content is pre-line, so the diff's
+              // per-app + per-CF lines render as a readable list, not one
+              // comma-run. Strip only the markdown bold markers.
+              const summary = this.trashStatus.lastDiff.summary.replace(/\*\*/g, '').trim();
+              this.showToast('TRaSH updated:\n' + summary, 'info', 10000);
             }
           }
           await this.loadAutoSyncRules();
@@ -831,7 +839,6 @@ export function clonarr() {
         if (!r.ok) return;
         this.config = await r.json();
         this.config.pullSchedule = Object.assign({ mode: 'daily', time: '03:00', dayOfWeek: 0, dayOfMonth: 1 }, this.config.pullSchedule || {});
-        this.config.syncSchedule = Object.assign({ enabled: false, mode: 'daily', time: '04:00', dayOfWeek: 0, dayOfMonth: 1 }, this.config.syncSchedule || {});
         // Profile Sync — defaults match the backend migration so a fresh
         // install with no profileSync block in the API response renders
         // sensibly. Sources subobject is initialised so the checkbox bindings
@@ -844,14 +851,10 @@ export function clonarr() {
           { trashUpstream: true, arrDrift: false },
           this.config.profileSync.sources || {}
         );
-        // UI's mode dropdown uses 'disabled' as a sentinel for "off". Map the
-        // backend's enabled=false (regardless of saved mode) to that sentinel
-        // so the dropdown reflects the actual state. Saved mode is preserved
-        // in a stash so we can restore it if user re-enables.
-        if (!this.config.syncSchedule.enabled) {
-          this._syncScheduleSavedMode = this.config.syncSchedule.mode || 'daily';
-          this.config.syncSchedule.mode = 'disabled';
-        }
+        // Apply delay default — "Wait before applying" stores a single
+        // integer minute count. Default 1440 (24h) so a fresh switch to
+        // delayed mode has a sensible non-zero value.
+        if (!this.config.profileSync.applyDelayMinutes) this.config.profileSync.applyDelayMinutes = 1440;
         // Ensure prowlarr config object exists
         if (!this.config.prowlarr) this.config.prowlarr = { url: '', apiKey: '', enabled: false, radarrCategories: [], sonarrCategories: [] };
         // Back-fill missing arrays for configs saved before category overrides existed.
@@ -1010,69 +1013,6 @@ export function clonarr() {
       return this.setPullScheduleTime(hour, Number(value));
     },
 
-    // ---- Auto-sync schedule clock helpers ----
-    // Parallel to pull-schedule helpers above; same HH/MM/AM-PM dropdown shape
-    // so the Settings UI has consistent design between Pull Interval and
-    // Auto-sync Schedule. Reuses pullScheduleUses12Hour / pullScheduleHourOptions
-    // / pullScheduleMinuteOptions / pullSchedulePeriodOptions (those don't
-    // depend on the schedule — only on browser locale + minute range).
-
-    syncScheduleTimeParts() {
-      const time = this.config?.syncSchedule?.time || '04:00';
-      const match = time.match(/^(\d{2}):(\d{2})$/);
-      if (!match) return { hour: 4, minute: 0 };
-      const hour = Math.max(0, Math.min(23, parseInt(match[1], 10)));
-      const minute = Math.max(0, Math.min(59, parseInt(match[2], 10)));
-      return { hour, minute };
-    },
-
-    syncScheduleHourValue() {
-      const { hour } = this.syncScheduleTimeParts();
-      if (!this.pullScheduleUses12Hour()) return hour;
-      const h = hour % 12;
-      return h === 0 ? 12 : h;
-    },
-
-    syncScheduleMinuteValue() {
-      return this.syncScheduleTimeParts().minute;
-    },
-
-    syncSchedulePeriodValue() {
-      return this.syncScheduleTimeParts().hour < 12 ? 'AM' : 'PM';
-    },
-
-    setSyncScheduleTime(hour, minute) {
-      const h = Math.max(0, Math.min(23, Number(hour) || 0));
-      const m = Math.max(0, Math.min(59, Number(minute) || 0));
-      const next = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-      const changed = this.config.syncSchedule.time !== next;
-      this.config.syncSchedule.time = next;
-      return changed;
-    },
-
-    setSyncScheduleHour(value) {
-      const { hour, minute } = this.syncScheduleTimeParts();
-      let nextHour = Number(value);
-      if (this.pullScheduleUses12Hour()) {
-        const period = hour < 12 ? 'AM' : 'PM';
-        if (nextHour === 12) nextHour = 0;
-        if (period === 'PM') nextHour += 12;
-      }
-      return this.setSyncScheduleTime(nextHour, minute);
-    },
-
-    setSyncScheduleMinute(value) {
-      const { hour } = this.syncScheduleTimeParts();
-      return this.setSyncScheduleTime(hour, Number(value));
-    },
-
-    setSyncSchedulePeriod(value) {
-      const { hour, minute } = this.syncScheduleTimeParts();
-      const isPM = value === 'PM';
-      let nextHour = hour % 12;
-      if (isPM) nextHour += 12;
-      return this.setSyncScheduleTime(nextHour, minute);
-    },
 
     setPullSchedulePeriod(value) {
       const { hour, minute } = this.pullScheduleTimeParts();
@@ -1080,6 +1020,48 @@ export function clonarr() {
       let nextHour = hour % 12;
       if (isPM) nextHour += 12;
       return this.setPullScheduleTime(nextHour, minute);
+    },
+
+    // ---- Delayed-apply delay helpers ----
+    // "Wait before applying" stores a single integer minute count
+    // (config.profileSync.applyDelayMinutes). The Settings UI shows it as a
+    // number + unit (minutes/hours/days); these helpers convert between the
+    // two. Unit is derived from the stored minute count so the UI re-opens
+    // with the friendliest representation (e.g. 1440 → "1 day", not
+    // "1440 minutes"). A transient _applyDelayUnit override lets the user
+    // pick a unit before typing a value without it snapping back.
+    applyDelayUnit() {
+      if (this._applyDelayUnitOverride) return this._applyDelayUnitOverride;
+      const m = this.config?.profileSync?.applyDelayMinutes || 0;
+      if (m > 0 && m % 1440 === 0) return 'days';
+      if (m > 0 && m % 60 === 0) return 'hours';
+      return 'minutes';
+    },
+    applyDelayValue() {
+      const m = this.config?.profileSync?.applyDelayMinutes || 0;
+      switch (this.applyDelayUnit()) {
+        case 'days': return Math.max(1, Math.round(m / 1440));
+        case 'hours': return Math.max(1, Math.round(m / 60));
+        default: return Math.max(1, m);
+      }
+    },
+    _applyDelayToMinutes(value, unit) {
+      const v = Math.max(1, Number(value) || 1);
+      switch (unit) {
+        case 'days': return v * 1440;
+        case 'hours': return v * 60;
+        default: return v;
+      }
+    },
+    setApplyDelayValue(value) {
+      if (!this.config.profileSync) this.config.profileSync = {};
+      this.config.profileSync.applyDelayMinutes = this._applyDelayToMinutes(value, this.applyDelayUnit());
+    },
+    setApplyDelayUnit(unit) {
+      this._applyDelayUnitOverride = unit;
+      // Re-express the current value in the new unit so the stored minute
+      // count matches what the user now sees.
+      this.setApplyDelayValue(this.applyDelayValue());
     },
 
     async saveConfig(fields) {
@@ -1092,24 +1074,6 @@ export function clonarr() {
           if (this.config.pullInterval === 'specific') body.pullSchedule = this.config.pullSchedule;
         }
         if (fields && fields.includes('pullSchedule')) body.pullSchedule = this.config.pullSchedule;
-        if (fields && fields.includes('syncSchedule')) {
-          // Translate UI sentinel 'disabled' back to enabled=false + a real
-          // mode value (backend rejects mode==''). Also normalize time to
-          // HH:MM exactly — some browsers' <input type="time"> emit HH:MM:SS,
-          // which the backend validator (^\d{2}:\d{2}$) would silently reject.
-          const ui = this.config.syncSchedule;
-          const mode = ui.mode === 'disabled' ? (this._syncScheduleSavedMode || 'daily') : ui.mode;
-          body.syncSchedule = {
-            ...ui,
-            enabled: ui.mode !== 'disabled',
-            mode: mode,
-            time: String(ui.time || '').slice(0, 5),
-          };
-          // Mirror the toggle decision back into local state so subsequent
-          // saves (e.g. user picks Disabled then changes time) don't
-          // re-enable inadvertently.
-          this.config.syncSchedule.enabled = body.syncSchedule.enabled;
-        }
         if (fields && fields.includes('devMode')) body.devMode = this.config.devMode;
         if (fields && fields.includes('trashSchemaFields')) body.trashSchemaFields = this.config.trashSchemaFields;
         if (fields && fields.includes('debugLogging')) body.debugLogging = this.config.debugLogging;
@@ -1135,15 +1099,22 @@ export function clonarr() {
       }
     },
 
-    // Save Mode + Sources to /api/profile-sync. Schedule fields (interval,
-    // specific) flow through saveConfig() → PUT /api/config which propagates
-    // to ProfileSync server-side; no need to send them here.
+    // Save Mode + Sources to /api/profile-sync. Detection schedule (interval,
+    // specific) flows through saveConfig() → PUT /api/config. The apply delay
+    // (applyDelayMinutes) IS sent here — it lives only on ProfileSync and is
+    // consulted only in "Wait before applying" mode.
     async saveProfileSync() {
       try {
+        const ps = this.config.profileSync || {};
         const body = {
-          mode: this.config.profileSync.mode,
-          sources: this.config.profileSync.sources,
+          mode: ps.mode,
+          sources: ps.sources,
         };
+        // Only send the apply delay in delayed mode so switching away doesn't
+        // persist a value the backend would otherwise ignore anyway.
+        if (ps.mode === 'delayed') {
+          body.applyDelayMinutes = ps.applyDelayMinutes || 0;
+        }
         const r = await fetch('/api/profile-sync', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

@@ -43,7 +43,7 @@ const (
 	SourceAutoSync            = "auto-sync"
 	SourceAutoPullStartup     = "auto-pull-startup"
 	SourceAutoPullInterval    = "auto-pull-interval"
-	SourceAutoSyncSchedule    = "auto-sync-schedule"
+	SourceDelayedApply        = "delayed-apply" // Profile Sync "Wait before applying" mode — apply schedule fired
 )
 
 // Operation types. Each maps to a class of user-visible action.

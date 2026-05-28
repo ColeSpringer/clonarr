@@ -31,12 +31,11 @@ func (s *Server) handleGetProfileSync(w http.ResponseWriter, r *http.Request) {
 // read-only via API to prevent drifting display state.
 func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeJSON[struct {
-		Interval      *string                     `json:"interval,omitempty"`
-		Specific      *core.PullSchedule          `json:"specific,omitempty"`
-		Sources       *core.ProfileSyncSources    `json:"sources,omitempty"`
-		Mode          *string                     `json:"mode,omitempty"`
-		ApplyInterval *string                     `json:"applyInterval,omitempty"`
-		ApplySpecific *core.PullSchedule          `json:"applySpecific,omitempty"`
+		Interval          *string                  `json:"interval,omitempty"`
+		Specific          *core.PullSchedule       `json:"specific,omitempty"`
+		Sources           *core.ProfileSyncSources `json:"sources,omitempty"`
+		Mode              *string                  `json:"mode,omitempty"`
+		ApplyDelayMinutes *int                     `json:"applyDelayMinutes,omitempty"`
 	}](w, r, 8192)
 	if !ok {
 		return
@@ -47,6 +46,19 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 	if req.Mode != nil && *req.Mode != "" && !core.IsValidProfileSyncMode(*req.Mode) {
 		writeError(w, 400, "invalid mode (must be empty, 'auto', 'notify', or 'delayed')")
 		return
+	}
+	// Clamp apply delay to a sane range: minimum 1 minute (0 would mean
+	// "apply immediately", which is just Auto mode), max 90 days. Negative
+	// is nonsense.
+	if req.ApplyDelayMinutes != nil {
+		if *req.ApplyDelayMinutes < 0 {
+			writeError(w, 400, "applyDelayMinutes must be >= 0")
+			return
+		}
+		if *req.ApplyDelayMinutes > 129600 {
+			writeError(w, 400, "applyDelayMinutes too large (max 90 days)")
+			return
+		}
 	}
 	if err := s.Core.Config.Update(func(cfg *core.Config) {
 		if cfg.ProfileSync == nil {
@@ -65,12 +77,8 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 		if req.Mode != nil {
 			cfg.ProfileSync.Mode = *req.Mode
 		}
-		if req.ApplyInterval != nil {
-			cfg.ProfileSync.ApplyInterval = *req.ApplyInterval
-		}
-		if req.ApplySpecific != nil {
-			asp := *req.ApplySpecific
-			cfg.ProfileSync.ApplySpecific = &asp
+		if req.ApplyDelayMinutes != nil {
+			cfg.ProfileSync.ApplyDelayMinutes = *req.ApplyDelayMinutes
 		}
 	}); err != nil {
 		writeError(w, 500, "failed to save profile-sync settings")
@@ -80,6 +88,12 @@ func (s *Server) handlePutProfileSync(w http.ResponseWriter, r *http.Request) {
 	// effect immediately rather than waiting for the 60s poll-tick fallback.
 	select {
 	case s.Core.PullUpdateCh <- "":
+	default:
+	}
+	// Wake the delayed-apply-scheduler too — Mode + ApplyDelayMinutes changes
+	// need to re-evaluate (or stop) the per-rule debounce immediately.
+	select {
+	case s.Core.ApplyUpdateCh <- struct{}{}:
 	default:
 	}
 	writeJSON(w, map[string]bool{"ok": true})
