@@ -173,7 +173,7 @@ func main() {
 	utils.SafeGo("startup-trash-pull", func() {
 		cfg := cfgStore.Get()
 		repoCloned := false
-		if _, err := os.Stat(filepath.Join(trashStore.DataDir(), ".git")); err == nil {
+		if _, err := os.Stat(filepath.Join(trashStore.DataDir(), ".git")); err == nil { // #nosec G703 -- DataDir is server-side config, not request input; constant ".git" suffix; read-only Stat
 			repoCloned = true
 		}
 

@@ -73,7 +73,7 @@ const (
 	// maskedDiscordWebhook is returned to the UI instead of raw webhook credentials.
 	maskedDiscordWebhook = "https://discord.com/api/webhooks/[MASKED]/[MASKED]"
 	// maskedToken is returned to the UI instead of bearer credentials.
-	maskedToken = "••••••••••••••••"
+	maskedToken = "••••••••••••••••" // #nosec G101 -- UI mask placeholder (bullet chars), not a real secret
 
 	// testTitle is the embed/notification title used by all provider Test methods.
 	testTitle = "Clonarr Test"

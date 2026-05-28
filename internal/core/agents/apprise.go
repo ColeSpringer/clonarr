@@ -72,7 +72,7 @@ func (appriseProvider) FieldSpec() FieldSpec {
 				Name:        "appriseUrls",
 				Kind:        "stringList",
 				Label:       "Notification URLs",
-				Placeholder: "discord://webhook_id/token\nmailto://user:pass@host\ntgram://bot_token/chat_id",
+				Placeholder: "discord://webhook_id/token\nmailto://user:pass@host\ntgram://bot_token/chat_id", // #nosec G101 -- example Apprise URLs shown as UI placeholder text, not a real credential
 				HelpHTML:    `One <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise URL</a> per line. Each URL embeds its own credentials and is masked end-to-end.`,
 				Required:    true,
 			}},

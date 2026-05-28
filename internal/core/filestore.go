@@ -355,7 +355,7 @@ func (fs *FileStore[T, PT]) MigrateFilenames() int {
 			continue
 		}
 		newPath := filepath.Join(fs.dir, expectedFilename)
-		if err := os.WriteFile(newPath, data, 0644); err == nil {
+		if err := os.WriteFile(newPath, data, 0644); err == nil { // #nosec G703 -- filename from sanitizeFilename, a strict [a-z0-9-_!] allowlist that strips path separators and dots, so it cannot escape fs.dir
 			os.Remove(path)
 			delete(claimed, name)
 			claimed[expectedFilename] = true
