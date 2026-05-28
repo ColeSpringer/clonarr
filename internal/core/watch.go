@@ -94,14 +94,25 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 	if cfg.ProfileSync.Sources.TrashUpstream {
 		switch cfg.ProfileSync.Mode {
 		case ProfileSyncModeAuto:
-			// Pull-and-sync (= today's Pull behaviour). Empty-clone is a
-			// valid initial state here — Trash.CloneOrPull will populate it.
+			// Auto mode applies auto-sync-ON rules AND badges auto-sync-OFF
+			// rules. Detection must run BEFORE the pull: it diffs
+			// local-vs-upstream, so once the pull advances local to upstream
+			// there is nothing left to detect. It writes per-rule
+			// PendingChanges for every non-orphaned rule, including the
+			// auto-sync-OFF ones that runPullAndSync's filterEligibleRulesForPull
+			// skips. runPullAndSync then applies the ON rules and clears their
+			// badge on success (UpdateAutoSyncRuleCommit); OFF rules keep their
+			// "Updates" badge. fireAggregateNotify=false: the pull fires its own
+			// NotifyRepoUpdate, and OnUpstreamAhead ("you should pull") is
+			// nonsensical when we are about to auto-pull. Empty-clone is a valid
+			// initial state: detection no-ops and CloneOrPull populates it.
+			_ = uw.runDetectionOnly(ctx, false)
 			trashErr = uw.runPullAndSync(ctx)
 		default:
 			// Notify-only / Delayed modes use the ls-remote-only path for
 			// detection. The runner then fires notifications + per-rule
 			// PendingChange entries without touching Arr.
-			trashErr = uw.runDetectionOnly(ctx)
+			trashErr = uw.runDetectionOnly(ctx, true)
 		}
 	}
 
@@ -127,13 +138,13 @@ func (uw *ProfileSyncRunner) Run(ctx context.Context) error {
 func (uw *ProfileSyncRunner) RunDetectionOnly(ctx context.Context) error {
 	uw.refreshMu.Lock()
 	defer uw.refreshMu.Unlock()
-	return uw.runDetectionOnly(ctx)
+	return uw.runDetectionOnly(ctx, true)
 }
 
 // runDetectionOnly performs the ls-remote-only check. Empty-clone guard
 // applies — comparing against an empty local HEAD would surface every
 // upstream commit as "new" and spam the notification path.
-func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
+func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context, fireAggregateNotify bool) error {
 	// Unconditional sweep of legacy "profile-modified" generic entries —
 	// they're superseded by the granular profile-quality-* / profile-name
 	// / profile-formatitem-* types. Runs every detection tick so a single
@@ -265,12 +276,21 @@ func (uw *ProfileSyncRunner) runDetectionOnly(ctx context.Context) error {
 			}
 		}
 
-		// Aggregate-level notification fires only when this is a NEW
-		// upstream commit we haven't notified about. summary may be nil
-		// (per-rule mapping failed somehow) — NotifyUpstreamUpdate then
-		// falls back to a degraded commit-hash-only message.
-		if priorUpstream != upstreamHead {
-			uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead, summary)
+		// Notification. In notify / delayed / manual-Check paths
+		// (fireAggregateNotify) the aggregate "TRaSH updates available"
+		// message fires once per new upstream commit. In auto mode
+		// (fireAggregateNotify is false) the pull below applies the
+		// auto-sync-ON rules, so instead we notify only about auto-sync-OFF
+		// rules that have a new change-set; they need a manual update. Both
+		// reuse the OnUpstreamAhead event. summary may be nil if the per-rule
+		// mapping failed, in which case the aggregate path falls back to a
+		// commit-hash-only message.
+		if fireAggregateNotify {
+			if priorUpstream != upstreamHead {
+				uw.app.NotifyUpstreamUpdate(localCommit, upstreamHead, summary)
+			}
+		} else if summary != nil && len(summary.ManualUpdateRules) > 0 {
+			uw.app.NotifyManualUpdateNeeded(summary.ManualUpdateRules)
 		}
 	}
 	return nil
@@ -526,13 +546,24 @@ func (uw *ProfileSyncRunner) detectPerRuleChanges(ctx context.Context, cfg Confi
 			name = fmt.Sprintf("Profile #%d", rule.ArrProfileID)
 		}
 		summary.AffectedRules = append(summary.AffectedRules, AffectedItem{Name: name, AppType: appType})
-	}
-	sort.Slice(summary.AffectedRules, func(i, j int) bool {
-		if summary.AffectedRules[i].AppType != summary.AffectedRules[j].AppType {
-			return summary.AffectedRules[i].AppType < summary.AffectedRules[j].AppType
+		// Auto-mode manual-update list: rules with auto-sync OFF and a NEW
+		// change-set (shouldNotify) are skipped by the apply pass, so the
+		// caller notifies the user to apply them by hand. shouldNotify gives
+		// per-rule dedup so repeated ticks with no new change stay silent.
+		if !rule.Enabled && perRuleUpdates[ruleID].shouldNotify {
+			summary.ManualUpdateRules = append(summary.ManualUpdateRules, AffectedItem{Name: name, AppType: appType})
 		}
-		return summary.AffectedRules[i].Name < summary.AffectedRules[j].Name
-	})
+	}
+	sortAffected := func(items []AffectedItem) {
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].AppType != items[j].AppType {
+				return items[i].AppType < items[j].AppType
+			}
+			return items[i].Name < items[j].Name
+		})
+	}
+	sortAffected(summary.AffectedRules)
+	sortAffected(summary.ManualUpdateRules)
 
 	return summary
 }

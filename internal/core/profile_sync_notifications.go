@@ -16,6 +16,12 @@ type UpstreamChangeSummary struct {
 	AffectedCFs       []AffectedItem // Custom Formats whose file changed
 	AffectedProfiles  []AffectedItem // Quality Profiles whose file changed
 	AffectedRules     []AffectedItem // the user's sync rules (by Arr/TRaSH profile name) that are affected
+	// ManualUpdateRules is the subset of affected rules that have auto-sync
+	// OFF and a NEW change-set since the last detection. In auto mode these
+	// are skipped by the apply pass, so the runner notifies the user to apply
+	// them by hand. Populated only with rules whose per-rule shouldNotify is
+	// true, so repeated detection ticks with no new change stay silent.
+	ManualUpdateRules []AffectedItem
 }
 
 // AffectedItem is one CF or profile that changed upstream AND is in scope
@@ -120,6 +126,79 @@ func (app *App) NotifyUpstreamUpdate(prevCommit, newCommit string, summary *Upst
 		// semantically these are both "TRaSH-Guides repo state changed"
 		// notifications and belong in the same channel.
 		Route: NotificationRouteUpdates,
+	}
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if !agent.Events.OnUpstreamAhead {
+			continue
+		}
+		app.DispatchNotificationAgent(agent, payload)
+	}
+}
+
+// NotifyManualUpdateNeeded fires in auto mode for sync rules that have
+// auto-sync turned OFF but whose TRaSH source just changed upstream. The
+// auto-apply pass skips those rules, so the user has to apply them by hand.
+//
+// Dedup is the caller's job: rules only land in the list when their per-rule
+// shouldNotify is true (change-set is new since last detection), and in auto
+// mode the pull advances the local clone to upstream so the next tick finds
+// no diff. Together that means one notification per new change, not one per
+// scheduler tick.
+//
+// Reuses the OnUpstreamAhead event ("TRaSH updates available") so it shares
+// the user's existing updates toggle and updates channel. No agents opted in
+// or empty list => cheap no-op.
+func (app *App) NotifyManualUpdateNeeded(rules []AffectedItem) {
+	if len(rules) == 0 {
+		return
+	}
+	cfg := app.Config.Get()
+
+	hasOptIn := false
+	for _, agent := range cfg.AutoSync.NotificationAgents {
+		if agent.Events.OnUpstreamAhead {
+			hasOptIn = true
+			break
+		}
+	}
+	if !hasOptIn {
+		return
+	}
+
+	n := len(rules)
+	title := fmt.Sprintf("Clonarr: %d profile%s with auto-sync off need a manual update", n, plural(n))
+
+	var parts []string
+	parts = append(parts, fmt.Sprintf("TRaSH-Guides changed %d of your profile%s that have auto-sync turned **off**. Clonarr will not apply these automatically.", n, plural(n)))
+	parts = append(parts, "")
+	const maxShown = 8
+	shown := rules
+	extra := 0
+	if len(shown) > maxShown {
+		extra = len(shown) - maxShown
+		shown = shown[:maxShown]
+	}
+	for _, it := range shown {
+		appLabel := it.AppType
+		if appLabel == "radarr" {
+			appLabel = "Radarr"
+		} else if appLabel == "sonarr" {
+			appLabel = "Sonarr"
+		}
+		parts = append(parts, fmt.Sprintf("• %s (%s)", it.Name, appLabel))
+	}
+	if extra > 0 {
+		parts = append(parts, fmt.Sprintf("...and %d more", extra))
+	}
+	parts = append(parts, "")
+	parts = append(parts, "Open Clonarr, go to Sync Rules, and run a manual update on these profiles to apply the changes.")
+
+	payload := NotificationPayload{
+		Title:    title,
+		Message:  strings.Join(parts, "\n"),
+		Color:    0x58a6ff, // accent-blue (matches the Updates badge)
+		Severity: NotificationSeverityInfo,
+		Route:    NotificationRouteUpdates,
 	}
 	for _, agent := range cfg.AutoSync.NotificationAgents {
 		if !agent.Events.OnUpstreamAhead {
