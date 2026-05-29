@@ -332,6 +332,7 @@ export default function baseState() {
     qsAutoSync: {},      // per app-type: { enabled, type }
     confirmModal: { show: false, title: '', message: '', confirmLabel: '', cancelLabel: '', secondaryLabel: '', hideCancel: false, onConfirm: null, onCancel: null, onSecondary: null },
     inputModal: { show: false, title: '', message: '', value: '', placeholder: '', confirmLabel: '', onConfirm: null, onCancel: null },
+    cloneProfileModal: { open: false, sh: null, sourceInstanceId: '', appType: '', sourceName: '', name: '', targetInstanceId: '', saving: false, error: '' },
     sandboxCopyModal: { show: false, title: '', text: '', copied: false },
     // Import
     importedProfiles: { radarr: [], sonarr: [] },

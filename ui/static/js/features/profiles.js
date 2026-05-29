@@ -2400,37 +2400,59 @@ export default {
       }
     },
 
-    async cloneProfile(inst, sh) {
-      const name = await new Promise(resolve => {
-        this.inputModal = {
-          show: true,
-          title: 'Clone Profile',
-          message: `Create a copy of "${sh.arrProfileName}" with all overrides and settings.`,
-          placeholder: 'New profile name',
-          value: sh.arrProfileName + ' (Copy)',
-          confirmLabel: 'Clone',
-          onConfirm: (val) => resolve(val),
-          onCancel: () => resolve(null)
-        };
-      });
-      if (!name || !name.trim()) return;
-      // Resolve importedProfileId from rule if missing in history
+    cloneProfile(inst, sh) {
+      // Open the clone-profile modal. Target instance defaults to the source
+      // but can be changed to any other instance of the same app-type, so a
+      // configured profile can be replicated to e.g. Radarr 4K in one step.
+      this.cloneProfileModal = {
+        open: true,
+        sh,
+        sourceInstanceId: inst.id,
+        appType: inst.type,
+        sourceName: sh.arrProfileName,
+        name: sh.arrProfileName + ' (Copy)',
+        targetInstanceId: inst.id,
+        saving: false,
+        error: ''
+      };
+    },
+
+    cancelCloneProfile() {
+      this.cloneProfileModal.open = false;
+    },
+
+    async confirmCloneProfile() {
+      const m = this.cloneProfileModal;
+      const name = (m.name || '').trim();
+      if (!name) { m.error = 'Name is required'; return; }
+      // Read the live <select> value as the source of truth. Alpine-binding the
+      // selected value on a <select> with x-for-generated <option>s is
+      // unreliable: the initial value can mismatch the displayed option, so a
+      // user who keeps the default selection would otherwise submit a stale
+      // value. Reading the chosen option directly at submit is WYSIWYG.
+      const sel = document.getElementById('clone-profile-instance');
+      const targetInstanceId = (sel && sel.value) || m.targetInstanceId;
+      if (!targetInstanceId) { m.error = 'Pick a target instance'; return; }
+      const sh = m.sh;
+      m.saving = true;
+      m.error = '';
+      // Resolve importedProfileId from the SOURCE rule if the history entry
+      // doesn't carry it. importedProfileId is app-type scoped, so it stays
+      // valid on a same-app-type target.
       let importedProfileId = sh.importedProfileId || '';
       if (!importedProfileId) {
-        const rule = this.autoSyncRules.find(r => r.instanceId === inst.id && r.arrProfileId === sh.arrProfileId);
+        const rule = this.autoSyncRules.find(r => r.instanceId === m.sourceInstanceId && r.arrProfileId === sh.arrProfileId);
         if (rule?.importedProfileId) importedProfileId = rule.importedProfileId;
       }
       const body = {
-        instanceId: inst.id,
+        instanceId: targetInstanceId,
         profileTrashId: sh.profileTrashId,
         importedProfileId,
         arrProfileId: 0, // create mode
-        profileName: name.trim(),
+        profileName: name,
         selectedCFs: Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]),
         // Clone preserves the historical state including user opt-outs so the
-        // copied profile reflects exactly what the source synced — without
-        // this, every CF the user had opted out of at the time of the source
-        // sync would silently re-appear in the cloned profile.
+        // copied profile reflects exactly what the source synced.
         excludedCFs: Array.isArray(sh.excludedCFs) ? sh.excludedCFs.slice() : [],
         scoreOverrides: sh.scoreOverrides || null,
         qualityOverrides: sh.qualityOverrides || null,
@@ -2446,14 +2468,20 @@ export default {
         });
         const result = await r.json();
         if (result.error || result.errors?.length) {
-          this.showToast(`Clone failed: ${result.error || result.errors[0]}`, 'error', 8000);
+          m.error = `Clone failed: ${result.error || result.errors[0]}`;
+          m.saving = false;
           return;
         }
-        this.showToast(`Cloned "${sh.arrProfileName}" → "${name.trim()}"`, 'info', 5000);
-        await this.loadSyncHistory(inst.id);
+        const targetInst = this.instances.find(i => i.id === targetInstanceId);
+        const targetLabel = targetInst ? targetInst.name : 'instance';
+        m.open = false;
+        m.saving = false;
+        this.showToast(`Cloned "${sh.arrProfileName}" → "${name}" on ${targetLabel}`, 'info', 5000);
+        await this.loadSyncHistory(targetInstanceId);
         await this.loadAutoSyncRules();
       } catch (e) {
-        this.showToast(`Clone error: ${e.message}`, 'error', 8000);
+        m.error = `Clone error: ${e.message}`;
+        m.saving = false;
       }
     },
 

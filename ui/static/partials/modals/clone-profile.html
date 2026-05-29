@@ -1,0 +1,55 @@
+{{define "modals/clone-profile"}}
+  <!-- Clone Profile Modal. Opened from the clone action on a Sync Rules row.
+       Pick a name and a target instance, then Clone (POST /api/sync/apply in
+       create mode) or Cancel. Only instances of the source app-type are
+       offered, since CFs, quality definitions and the TRaSH profile are
+       app-type specific. -->
+  <template x-if="cloneProfileModal && cloneProfileModal.open">
+  <div class="modal-overlay" @keydown.escape.window="cancelCloneProfile()">
+    <div class="modal" style="max-width:480px" role="dialog" aria-modal="true" aria-labelledby="modal-title-clone-profile" x-trap.noscroll.inert="cloneProfileModal.open">
+      <h2 id="modal-title-clone-profile" class="modal-title">Clone Profile</h2>
+
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
+        Create a copy of
+        <strong x-text="cloneProfileModal.sourceName"></strong>
+        with all its overrides, CF selections and scores. Pick a new name and which instance it goes to.
+      </p>
+
+      <div class="form-group">
+        <label for="clone-profile-name-input">New profile name</label>
+        <input id="clone-profile-name-input" class="input" type="text"
+               x-model="cloneProfileModal.name"
+               @keydown.enter.prevent="confirmCloneProfile()"
+               placeholder="New profile name">
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="clone-profile-instance">Target instance</label>
+        <select id="clone-profile-instance" class="input"
+                x-init="$nextTick(() => { $el.value = cloneProfileModal.targetInstanceId })"
+                @change="cloneProfileModal.targetInstanceId = $event.target.value">
+          <template x-for="inst in instancesOfType(cloneProfileModal.appType)" :key="inst.id">
+            <option :value="inst.id" x-text="inst.name + (inst.id === cloneProfileModal.sourceInstanceId ? ' (source)' : '')"></option>
+          </template>
+        </select>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+          Only same-type instances are shown. The copy carries the same TRaSH profile, CF selections and scores into the chosen instance.
+        </div>
+      </div>
+
+      <div x-show="cloneProfileModal.error" x-cloak
+           style="margin-top:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent-red) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);border-radius:4px;color:var(--accent-red);font-size:12px"
+           x-text="cloneProfileModal.error"></div>
+
+      <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" @click="cancelCloneProfile()" :disabled="cloneProfileModal.saving">Cancel</button>
+        <button type="button" class="btn btn-sm"
+                style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
+                @click="confirmCloneProfile()"
+                :disabled="cloneProfileModal.saving || !cloneProfileModal.name.trim() || !cloneProfileModal.targetInstanceId"
+                x-text="cloneProfileModal.saving ? 'Cloning…' : 'Clone'"></button>
+      </div>
+    </div>
+  </div>
+  </template>
+{{end}}
