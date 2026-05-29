@@ -983,6 +983,52 @@ button.sp-summary-active:focus-visible {
   white-space: nowrap;
   min-width: 0;
 }
+/* Leading control + name share the first grid cell so the score column
+   stays aligned. Fixed-width control slot keeps every name lined up
+   whether the row shows a toggle, an exclude (x), or nothing. */
+.sp-ov-cf-namecell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.sp-ov-cf-ctrl {
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+/* Overview rows are denser than the Profile default tab (2px padding,
+   13px text), so even toggle-sm reads as oversized here. Shrink below
+   toggle-sm so the switch sits proportionally in the compact rows. */
+.sp-ov-cf-ctrl .toggle { width: 18px; height: 10px; }
+.sp-ov-cf-ctrl .toggle .slider { border-radius: 5px; }
+.sp-ov-cf-ctrl .toggle .slider:before { width: 6px; height: 6px; left: 2px; bottom: 2px; }
+.sp-ov-cf-ctrl .toggle input:checked + .slider:before { transform: translateX(8px); }
+/* Required-CF exclude: small + muted by default, red on hover. Avoids the
+   wall-of-red that a permanent accent-coloured glyph produced. */
+.sp-ov-cf-exclude {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 1px 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  font-family: inherit;
+}
+.sp-ov-cf-exclude:hover { color: var(--accent-red); }
+.sp-ov-cf-section-optional {
+  margin-left: 7px;
+  font-size: 10px;
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
 /* Updates panel rows have plenty of room (no score column) and the
    entry text is descriptive — let the full label render and wrap when
    needed instead of truncating at the default name-column width. */

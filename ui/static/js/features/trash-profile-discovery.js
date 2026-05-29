@@ -1289,6 +1289,18 @@ export default {
       this.selectedOptionalCFs = updated;
     },
 
+    // Deactivate a non-required CF (optional in-profile or additional) from
+    // the Profile overview's active lists. Writes selectedOptionalCFs[id] =
+    // false so the CF drops out of the enabled set and its row disappears on
+    // re-render. Re-activating happens on the Profile default tab, since the
+    // overview only lists active CFs.
+    spDeactivateOverviewCF(trashId) {
+      if (!trashId) return;
+      const updated = { ...(this.selectedOptionalCFs || {}) };
+      updated[trashId] = false;
+      this.selectedOptionalCFs = updated;
+    },
+
     // Customize-mode entry confirmation. Profile customization can
     // change scores, exclude required CFs, add extras — each of which
     // shifts how Sonarr/Radarr selects releases. A user who flips

@@ -1462,7 +1462,7 @@
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs(null)" :key="'flat-all-'+cf.trashId">
                 <div class="sp-ov-cf-row">
-                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score"
                           :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
@@ -1491,11 +1491,16 @@
             <div>
               <template x-for="section in spOverviewEnabledCFs()" :key="'ov-all-'+section.source">
                 <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
-                  <div class="sp-ov-cf-section-title" x-text="section.source"></div>
+                  <div class="sp-ov-cf-section-title">
+                    <span x-text="section.source"></span>
+                    <template x-if="section.cfs.length && section.cfs.every(cf => !cf._isRequired)">
+                      <span class="sp-ov-cf-section-optional">optional</span>
+                    </template>
+                  </div>
                   <div class="sp-ov-cf-list">
                     <template x-for="cf in section.cfs" :key="'grp-all-'+cf.trashId">
                       <div class="sp-ov-cf-row">
-                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score"
                                 :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
@@ -1542,7 +1547,7 @@
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs('optional-in-profile')" :key="'flat-opt-'+cf.trashId">
                 <div class="sp-ov-cf-row">
-                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                   </template>
@@ -1572,7 +1577,7 @@
                   <div class="sp-ov-cf-list">
                     <template x-for="cf in section.cfs.filter(c => !c._isRequired)" :key="cf.trashId">
                       <div class="sp-ov-cf-row">
-                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                         </template>
@@ -1616,7 +1621,7 @@
             <div class="sp-ov-cf-list">
               <template x-for="cf in spOverviewFlatCFs('additional')" :key="'flat-add-'+cf.trashId">
                 <div class="sp-ov-cf-row">
-                  <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                  <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                   </template>
@@ -1646,7 +1651,7 @@
                   <div class="sp-ov-cf-list">
                     <template x-for="cf in section.cfs" :key="cf.trashId">
                       <div class="sp-ov-cf-row">
-                        <span class="sp-ov-cf-name" x-text="cf.name"></span>
+                        <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                         </template>
@@ -2003,6 +2008,35 @@
   the active-class / arrow expressions from spOverviewSort keeps
   the partial self-contained.
 */}}
+{{define "_sp-overview-cf-control"}}
+  <!-- Leading control for Profile overview active-CF rows, mirroring the
+       Profile default tab. Optional (non-required) CF: a small toggle,
+       always shown; switching it off removes the CF from the profile.
+       Required CF: a small exclude (x), only when Customize is on. The
+       fixed-width slot keeps every name aligned whether or not a control
+       renders. Both actions drop the CF from the enabled set, so the row
+       disappears on re-render (the overview lists active CFs only). -->
+  <span class="sp-ov-cf-ctrl">
+    <template x-if="!cf._isRequired">
+      <label class="toggle toggle-sm sp-ov-cf-toggle" @click.stop
+             x-tt="'Turn this optional CF off (removes it from the profile)'">
+        <input type="checkbox"
+               :checked="selectedOptionalCFs[cf.trashId] !== false"
+               @change="spDeactivateOverviewCF(cf.trashId)"
+               :aria-label="'Remove ' + cf.name + ' from the profile'">
+        <span class="slider"></span>
+      </label>
+    </template>
+    <template x-if="cf._isRequired">
+      <template x-if="pdOverridesEnabled">
+        <button type="button" class="sp-ov-cf-exclude"
+                @click="spToggleRequiredCF(cf.trashId)"
+                :aria-label="'Exclude required CF ' + cf.name"
+                x-tt="'Exclude this required CF from the profile'">&times;</button>
+      </template>
+    </template>
+  </span>
+{{end}}
 {{define "_sp-overview-cf-header"}}
   <div class="sp-ov-cf-row sp-ov-cf-header" role="row">
     <button class="sp-ov-cf-header-cell"
