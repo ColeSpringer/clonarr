@@ -6,7 +6,7 @@
 
 A fully visual TRaSH Guides sync tool for Radarr and Sonarr. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes — no YAML configs, no CLI, just a browser.
 
-Build profiles from scratch or start from TRaSH templates, compare your Arr profiles against TRaSH to see what's missing or wrong, test how releases score in the Scoring Sandbox, track every change with sync history and rollback, and sync to multiple Radarr and Sonarr instances. Auto-sync keeps your profiles in sync when TRaSH Guides updates, with Discord and Gotify notifications.
+Build profiles from scratch or start from TRaSH templates, compare your Arr profiles against TRaSH to see what's missing or wrong, test how releases score in the Scoring Sandbox, track every change with sync history and rollback, and sync to multiple Radarr and Sonarr instances. Auto-sync keeps your profiles current when TRaSH Guides updates, or when a profile is edited directly in Radarr/Sonarr, with notifications to Discord, Gotify, Pushover, ntfy, and Apprise.
 
 Free, open source, and self-hosted.
 
@@ -16,95 +16,42 @@ Free, open source, and self-hosted.
 
 ## Features
 
-### Profile Sync
-- Browse all TRaSH Quality Profiles (SQP-1 through SQP-5, HD Bluray, UHD Remux, Anime, language-specific, and more)
-- Sync profiles to Radarr/Sonarr — creates quality groups, sets cutoff, applies CF scores
-- **Create** new profiles or **Update** existing ones with dry-run preview
-- **Sync behavior rules** (Add/Remove/Reset) — control how sync handles missing CFs, score overrides, and removed CFs
-- **Override system** — customize language (Radarr), scores, cutoff, quality items, and upgrades per-instance without modifying the TRaSH profile
-- **Auto-sync** — automatically sync when TRaSH Guides updates, with Discord and Gotify notifications
-- **Sortable sync rules** — sort by TRaSH Profile or Arr Profile name
+Navigation is grouped into **Library**, **Tools**, and **App** (shown as a left sidebar by default, or a top bar if you prefer; set it under Settings > Display). Here is what each part does, in plain English.
 
-### Compare
-- Compare your Arr profiles against TRaSH Guides side-by-side
-- **Table layout** for Required CFs and CF Groups — see current vs TRaSH values at a glance
-- **Profile Settings comparison** — Language, Upgrade Allowed, Min/Cutoff scores
-- **Filter chips** — All / Only diffs / Wrong score / Missing / Extra / Matching
-- **Golden Rule picker** — automatically selects the correct HD/UHD variant based on what's in use
-- **Per-card Sync selected** — choose which changes to apply per section (not all-or-nothing)
-- **Score override badges** — shows when a score difference is intentional (from your sync rule overrides)
-- **Toggle all** per card header for quick select/deselect
+### Library
 
-### Sync History & Rollback
-- **History tab** — dedicated change log for all synced profiles between TRaSH Sync and Compare
-- **Ring-buffer storage** — last 10 change events per profile (syncs with no changes don't create entries)
-- **CF set-diff tracking** — catches all CF changes including score-0 CFs (group enable/disable)
-- **Detailed change log** — CFs added/removed, scores before/after, quality items toggled, settings changed
-- **Sortable columns** — TRaSH Profile, Arr Profile, Last Changed, Events
-- **Rollback** — restore a profile to a previous state with one click. Auto-disables auto-sync to prevent overwrite
+**Profiles**
+- **Sync a profile** - push a TRaSH quality profile into Radarr or Sonarr. Create a new profile or update an existing one, with a dry-run preview that shows exactly what will change before anything is written.
+- **Customize a profile** - before syncing, add or remove custom formats, change scores, and adjust quality items, language, cutoff, and upgrade settings. Your changes live on the sync rule; the underlying guide profile is never modified.
+- **Auto-sync** - keep profiles up to date automatically. Clonarr can sync when the guide changes, and detect "drift" when someone edits a profile directly in Radarr/Sonarr. Rules with auto-sync turned off still get an "updates available" flag so you can review and apply yourself. Auto-sync can be paused per instance.
+- **Clone a sync rule** - copy a configured profile, with all its customizations, under a new name, into the same instance or another one of the same type.
+- **Sync history and rollback** - a change log per profile (custom formats added/removed, scores before and after, quality and setting changes), with one-click rollback to a previous state.
+- **Compare** - view your Arr profile against the guide profile side by side, so you can see what is missing, wrong, or extra.
 
-### Custom Formats
-- Browse all TRaSH Custom Formats organized by category (Audio, HDR, Streaming, Unwanted, etc.)
-- Create and update CFs with spec-level comparison
-- **CF Creator** — build custom CFs with regex specs, test patterns, and TRaSH-compatible scoring
+**Custom Formats**
+- Browse every custom format in the guide, grouped by category, with conditions and descriptions.
+- Create or import your own custom formats, clone existing ones, and organize them into your own categories.
+- Use any custom format, guide or your own, in a profile via **Customize this profile > Additional CF**.
 
-### Profile Builder
-- Build custom profiles from scratch or start from a TRaSH template
-- **Init card with tabs** — choose between TRaSH template or import from Arr instance
-- **General + Quality cards** — matching the Edit view's visual language with blue/purple stripes
-- **Import from instance** — pulls all CFs including score-0 extras via sync history, resolves custom CFs
-- **Shared Quality Items editor** — drag-and-drop quality ordering and grouping (same editor as Edit view)
-- **TRaSH group system** — formatItems (mandatory CFs) + CF groups (optional, toggleable)
-- **Three-state CF pills** — Req (required in group), Opt (optional in group), Fmt (in formatItems)
-- **Golden Rule and Miscellaneous** variant dropdowns as sub-section in Quality card
-- **Export** — TRaSH JSON (strict official format) + optional group includes snippets. Recyclarr YAML export is currently paused while we verify the output against current Recyclarr docs
-- **Import** — Recyclarr YAML, TRaSH JSON, Clonarr backup, Arr instance profiles. `.yml` files and Recyclarr include files are supported in both paste and upload modes
+**Media Management**
+- **Quality Definitions** - sync the guide's recommended quality sizes (min/preferred/max per quality) to your instance, or set your own per-quality values.
+- **File Naming** - browse and apply the guide's recommended folder and file naming schemes, including Plex, Emby, and Jellyfin variants.
 
-### Scoring Sandbox
-- Test how releases score against any profile — paste release names or search via Prowlarr
-- Compact table with matched CFs, quality, group, score, and PASS/FAIL per release
-- **Custom Prowlarr search categories** — configurable per app type for indexers that don't cascade root IDs
-- **Numeric release group fallback** — correctly parses trailing numeric groups (e.g. `-126811`)
-- **Per-row selection and filter** — check rows and filter to selected subset
-- **Drag reorder** — manually sort the release list
-- **Copy-box modal** — shareable plain-text summary per release with title, CFs, and scores
-- **Profile comparison** — score the same releases against two profiles side-by-side
-- **Score editor** — temporarily modify CF scores and add/remove CFs to test changes
-- **Language CFs excluded** — language-aware CFs stripped from scoring (Parse API can't evaluate without TMDB context)
-- Sortable columns (score, quality, group, status)
+### Tools
 
-### Profile Detail & Edit
-- **General + Quality cards** with per-section override toggles (blue/purple stripe design)
-- **Inline Quality Items editor** — expand inside the Quality card with drag-and-drop grouping
-- **Override summary bar** — shows active overrides with per-section reset
-- **Sonarr language handling** — language field hidden for Sonarr (removed in Sonarr v4)
+- **Maintenance** - back up and restore your profiles and custom formats, and clean up: remove orphaned scores, bulk-delete custom formats with a keep-list, find unused quality profiles, and compare an instance against the guide.
+- **Advanced** (developer options, off by default) - a **Profile Builder** to build a profile from scratch or import one from Recyclarr, an Arr instance, or a backup; a **Scoring Sandbox** to test how releases score against a profile (paste release names or search through Prowlarr); and a **CF Group Builder**. These are power-user and developer tools, hidden behind a toggle.
 
-### Quality Size & File Naming
-- Sync TRaSH quality size recommendations to your instance
-- Per-quality custom overrides with auto-sync option
-- Browse and apply TRaSH naming schemes (movies + series)
+### App
 
-### Settings
-- **Sidebar layout** — left navigation with sections: Instances, TRaSH Guides, Prowlarr, Notifications, Display, Advanced
-- Settings for Prowlarr connection, search categories, auto-sync, Discord/Gotify notifications, and debug logging
+- **Notifications** - send events to Discord, Gotify, Pushover, ntfy, and Apprise. For each agent you pick which events it receives: sync succeeded, sync failed, cleanup, repository updated, new changelog, TRaSH updates available, drift detected, and drift reconciled.
+- **Display** - theme (system/light/dark), UI scale (compact/default/large), content alignment (centered or left-aligned), and navigation style (left sidebar or top bar). Times are shown in your own locale.
+- **Security** - configurable: require login always or only from outside your local network, mark trusted networks and proxies, use an API key, host behind a reverse-proxy subpath, and a login brute-force rate limit. See [Authentication](#authentication) below for details.
+- **Multiple instances** - manage as many Radarr and Sonarr instances as you like, switching between them from the top of the app.
 
-### Maintenance
-- Instance comparison — see how your instance differs from TRaSH
-- Orphaned score cleanup
-- Bulk CF deletion with keep-list
-- Backup and restore profiles + CFs
+Browser back and forward navigation work throughout (each section and tab has its own URL).
 
-### Other
-- **Browser navigation** — back/forward buttons work (URL hash routing with History API)
-- **TRaSH changelog** — clickable dropdown in header showing recent guide updates
-- **Notifications** — Discord, Gotify, Pushover, NTFY, Apprise (auto-sync results, TRaSH update summaries, configurable priority per severity)
-- **Reverse-proxy subpath hosting** — host at `https://your-domain.com/clonarr` via `URL_BASE` env var
-- **Login brute-force protection** — 5 failed attempts/IP/minute → temporary 429 lockout
-- **Advanced Mode** — Profile Builder, Scoring Sandbox, CF Group Builder, and contributor-only TRaSH schema fields when enabled
-- **Multi-instance** — manage multiple Radarr and Sonarr instances
-- **Dynamic language support** — all languages from your Arr instance available in dropdowns
-
-New to Clonarr? See the [Getting Started guide](docs/GETTING-STARTED.md) for a step-by-step walkthrough with screenshots.
+New to Clonarr? See the [Getting Started guide](docs/GETTING-STARTED.md) for a quick step-by-step walkthrough.
 
 ## Quick Start
 
@@ -127,7 +74,7 @@ Open the Web UI at `http://your-host:6060`.
 1. Open `http://your-host:6060` — you'll be redirected to `/setup` on first run to create an admin account (see [Authentication](#authentication) below)
 2. After login, go to **Settings** and add your Radarr/Sonarr instance (URL + API key)
 3. Click **Pull** in the header to clone the TRaSH Guides repository
-4. Browse profiles on the **Radarr** or **Sonarr** tab and click **Sync** to deploy
+4. Go to **Profiles > TRaSH Profiles**, pick a profile, and click **Use profile** to configure and sync it
 
 The TRaSH repository is cloned to `/config/data/trash-guides/` and updated automatically (default: every 24 hours).
 

@@ -6,6 +6,25 @@ A ground-up redesign that's been on `:preview` since 2026-05-14 lands
 on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
 only get this build if you've opted into one of the test channels.
 
+### Update wave - 2026-05-29 (Clone across instances + Profile overview editing)
+
+**Clone a profile to a different instance**
+
+- The Clone button on the Sync Rules page now lets you pick which
+  instance to clone into. You can copy a synced profile from one
+  Radarr (or Sonarr) to another of the same type. Before, Clone only
+  made a copy on the same instance.
+
+**Manage Custom Formats from the Profile overview**
+
+- On a profile's Overview tab, optional Custom Formats now have a
+  switch you can turn off to drop them from the profile, right where
+  you see them.
+- With "Customize this profile" turned on, you can also exclude a
+  required Custom Format and change its score from the same tab.
+- Groups that are fully optional are labeled "optional" so you can
+  tell at a glance which Custom Formats are safe to switch off.
+
 ### Update wave — 2026-05-28 (Auto-sync settings)
 
 The Profile Sync settings section is now called "Auto-sync", and the
