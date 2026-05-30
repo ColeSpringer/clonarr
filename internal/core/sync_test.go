@@ -171,7 +171,7 @@ func TestResolveScore_ZeroWhenNoMatch(t *testing.T) {
 	}
 }
 
-// --- customCFToArr ---
+// --- CustomCFToArr ---
 
 func TestCustomCFToArr_Basic(t *testing.T) {
 	cf := &CustomCF{
@@ -189,7 +189,7 @@ func TestCustomCFToArr_Basic(t *testing.T) {
 		},
 	}
 
-	result := customCFToArr(cf)
+	result := CustomCFToArr(cf)
 
 	if result.Name != "Test CF" {
 		t.Errorf("expected name 'Test CF', got %q", result.Name)
@@ -217,7 +217,7 @@ func TestCustomCFToArr_EmptySpecs(t *testing.T) {
 		Specifications: nil,
 	}
 
-	result := customCFToArr(cf)
+	result := CustomCFToArr(cf)
 	if len(result.Specifications) != 0 {
 		t.Errorf("expected 0 specs, got %d", len(result.Specifications))
 	}
