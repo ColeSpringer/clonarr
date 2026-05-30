@@ -318,6 +318,44 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	// Merge: cfSetDetails (set diff, zero-score cases) + result.CFDetails (creates/updates)
 	allCFDetails := append(cfSetDetails, result.CFDetails...)
+	// Prior TRaSH commit for Sync History attribution on Updated CFs.
+	// Read the existing rule's LastSyncCommit before it gets overwritten
+	// further down. First-time syncs have no prior rule, leaving the
+	// commit empty so BuildCFCommitsFromDetails returns nil cleanly.
+	// Also check whether the rule had a drift fingerprint pending: if
+	// so, this manual API hit is conceptually a drift-apply (user
+	// clicked Apply on the drift modal, or auto-mode pushed the saved
+	// state back), and the History chip should reflect that instead of
+	// the generic "Manual" label.
+	priorCommit := ""
+	driftPending := false
+	for _, r := range s.Core.Config.Get().AutoSync.Rules {
+		if r.InstanceID == inst.ID && r.ArrProfileID == req.ArrProfileID {
+			priorCommit = r.LastSyncCommit
+			if r.WatchState != nil && r.WatchState.LastDriftFingerprint != "" {
+				driftPending = true
+			}
+			break
+		}
+	}
+	currentTrashCommit := s.Core.Trash.CurrentCommit()
+	triggerSource := source
+	if driftPending {
+		// Drift fingerprint is set, but TRaSH has also advanced since
+		// the last sync (priorCommit != currentTrashCommit). Stale
+		// drift + a new TRaSH commit means the user is most likely
+		// here to pull the update, not to reconcile drift. Prefer the
+		// TRaSH-update label so the chip matches what actually drove
+		// the sync. Genuine drift-only sync (TRaSH unchanged) still
+		// labels as drift_apply correctly.
+		if priorCommit != "" && currentTrashCommit != "" && priorCommit != currentTrashCommit {
+			// TRaSH advanced. Keep the original source (Manual /
+			// Builder etc.) so the chip reads as the user's actual
+			// click, not a drift apply.
+		} else {
+			triggerSource = core.SourceDriftApply
+		}
+	}
 	var changes *core.SyncChanges
 	if len(allCFDetails) > 0 || len(result.ScoreDetails) > 0 ||
 		len(result.QualityDetails) > 0 || len(result.SettingsDetails) > 0 {
@@ -326,6 +364,8 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 			ScoreDetails:    result.ScoreDetails,
 			QualityDetails:  result.QualityDetails,
 			SettingsDetails: result.SettingsDetails,
+			CFCommits:       core.BuildCFCommitsFromDetails(s.Core.Trash, inst.Type, allCFDetails, result.ScoreDetails, priorCommit, currentTrashCommit),
+			CFSpecDiffs:     result.CFSpecDiffs,
 		}
 	}
 
@@ -352,6 +392,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		ScoresUpdated:     result.ScoresUpdated,
 		LastSync:          now,
 		Changes:           changes,
+		TriggerType:       core.TriggerTypeFromSource(triggerSource),
 	}
 	// AppliedAt freezes the "when changes landed" timestamp. Only set when
 	// the entry carries real changes — baseline / no-op entries leave it

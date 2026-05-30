@@ -311,13 +311,23 @@ type QSOverride struct {
 
 // SyncChanges captures the detailed changes made during a sync.
 // Stored only when the sync actually modified something (not on no-op syncs).
-// The string slices come directly from the sync result's *Details fields —
-// human-readable and display-ready (e.g. "BHDStudio: 1000 → 2240").
+// The string slices come directly from the sync result's *Details fields,
+// human-readable and display-ready (e.g. "BHDStudio: 1000 -> 2240").
+// CFCommits resolves each "Updated: <name>" CFDetails entry back to the
+// TRaSH-Guides commits that touched the CF between the prior sync and
+// this one. Keyed by CF name. nil for pre-v3.0.x entries and for syncs
+// where no TRaSH-side attribution was available.
 type SyncChanges struct {
-	CFDetails       []string `json:"cfDetails,omitempty"`
-	ScoreDetails    []string `json:"scoreDetails,omitempty"`
-	QualityDetails  []string `json:"qualityDetails,omitempty"`
-	SettingsDetails []string `json:"settingsDetails,omitempty"`
+	CFDetails       []string                    `json:"cfDetails,omitempty"`
+	ScoreDetails    []string                    `json:"scoreDetails,omitempty"`
+	QualityDetails  []string                    `json:"qualityDetails,omitempty"`
+	SettingsDetails []string                    `json:"settingsDetails,omitempty"`
+	CFCommits       map[string][]TrashCommitRef `json:"cfCommits,omitempty"`
+	// CFSpecDiffs is the Phase 2 structured CF spec diff per Updated /
+	// Created entry. Keyed by CF name so the History UI joins it with
+	// the matching "Updated: <CF>" or "Created: <CF>" row. Nil on
+	// pre-Phase-2 entries; the UI skips rendering when absent.
+	CFSpecDiffs     map[string]*CFSpecDiff      `json:"cfSpecDiffs,omitempty"`
 }
 
 // HasChanges returns true if any change category has entries.
@@ -370,6 +380,15 @@ type SyncHistoryEntry struct {
 	// case UI falls back to LastSync).
 	AppliedAt string       `json:"appliedAt,omitempty"`
 	Changes   *SyncChanges `json:"changes,omitempty"`
+	// TriggerType records why this sync ran: "trash_update" (TRaSH-Guides
+	// upstream advanced and AutoSync re-applied), "manual" (user clicked
+	// Sync / Apply from the UI), "drift_apply" (drift detection rolled
+	// the divergence back), "delayed_apply" (Wait-before-applying
+	// schedule fired), "restore" (orphaned-profile restore), "rollback"
+	// (revert to a previous history state). Empty on entries from before
+	// the field existed; UI treats the absence as "Manual" so old rows
+	// keep a sensible chip.
+	TriggerType string `json:"triggerType,omitempty"`
 	// OrphanedAt mirrors the field on the rule — set when the entry
 	// belongs to a profile that has been detected as deleted in Arr.
 	// Lets the UI gray out / badge orphaned history rows independently
@@ -650,6 +669,30 @@ func (cs *ConfigStore) Get() Config {
 			if len(sh.Changes.SettingsDetails) > 0 {
 				c.SettingsDetails = make([]string, len(sh.Changes.SettingsDetails))
 				copy(c.SettingsDetails, sh.Changes.SettingsDetails)
+			}
+			if len(sh.Changes.CFCommits) > 0 {
+				c.CFCommits = make(map[string][]TrashCommitRef, len(sh.Changes.CFCommits))
+				for k, refs := range sh.Changes.CFCommits {
+					if len(refs) == 0 {
+						continue
+					}
+					copied := make([]TrashCommitRef, len(refs))
+					copy(copied, refs)
+					c.CFCommits[k] = copied
+				}
+			}
+			if len(sh.Changes.CFSpecDiffs) > 0 {
+				// Map of pointers - copy each diff to a fresh value
+				// and re-point so callers can mutate the returned
+				// config without leaking into the store.
+				c.CFSpecDiffs = make(map[string]*CFSpecDiff, len(sh.Changes.CFSpecDiffs))
+				for k, diff := range sh.Changes.CFSpecDiffs {
+					if diff == nil {
+						continue
+					}
+					copied := *diff
+					c.CFSpecDiffs[k] = &copied
+				}
 			}
 			cfg.SyncHistory[i].Changes = &c
 		}

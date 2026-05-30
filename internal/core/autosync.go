@@ -606,6 +606,8 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string, parent 
 			ScoreDetails:    result.ScoreDetails,
 			QualityDetails:  result.QualityDetails,
 			SettingsDetails: result.SettingsDetails,
+			CFCommits:       BuildCFCommitsFromDetails(app.Trash, inst.Type, allCFDetails, result.ScoreDetails, rule.LastSyncCommit, currentCommit),
+			CFSpecDiffs:     result.CFSpecDiffs,
 		}
 	}
 	now := time.Now().Format(time.RFC3339)
@@ -631,6 +633,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string, parent 
 		ScoresUpdated:     result.ScoresUpdated,
 		LastSync:          now,
 		Changes:           changes,
+		TriggerType:       parent.SourceTrigger(),
 	}
 	// Freeze AppliedAt on real-change entries so the History tab's "Last
 	// Changed" column shows when changes actually landed, not when the last

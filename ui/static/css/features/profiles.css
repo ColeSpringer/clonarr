@@ -333,6 +333,52 @@ button.v3-status:hover { text-decoration: underline; }
   width: 130px; flex-shrink: 0;
   color: var(--text-primary); font-weight: 500;
 }
+/* Trigger-type chip rendered between time and summary on each history
+   row. Conveys WHY this sync ran (TRaSH update, manual click, Arr
+   drift, etc.). Per-type colors keep the at-a-glance scan readable
+   without forcing the user to read the label every time. */
+.v3-hist-event-trigger {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  margin-right: 4px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.v3-hist-event-trigger-trash_update {
+  background: var(--accent-green-bg, rgba(74,222,128,0.12));
+  color: var(--accent-green);
+  border-color: var(--accent-green-bg, rgba(74,222,128,0.18));
+}
+.v3-hist-event-trigger-manual {
+  background: var(--accent-blue-bg, rgba(96,165,250,0.12));
+  color: var(--accent-blue);
+  border-color: var(--accent-blue-bg, rgba(96,165,250,0.18));
+}
+.v3-hist-event-trigger-drift_apply {
+  background: var(--accent-orange-bg, rgba(251,146,60,0.14));
+  color: var(--accent-orange);
+  border-color: var(--accent-orange-bg, rgba(251,146,60,0.22));
+}
+.v3-hist-event-trigger-delayed_apply {
+  background: rgba(168,85,247,0.14);
+  color: rgb(192,132,252);
+  border-color: rgba(168,85,247,0.22);
+}
+.v3-hist-event-trigger-restore {
+  background: var(--fill-blue-soft, rgba(59,130,246,0.10));
+  color: var(--accent-sky, rgb(56,189,248));
+  border-color: var(--fill-blue-soft, rgba(59,130,246,0.18));
+}
+.v3-hist-event-trigger-rollback {
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
 .v3-hist-event-summary {
   flex: 1; min-width: 0;
   display: flex; align-items: baseline; gap: 6px;
@@ -387,6 +433,77 @@ button.v3-status:hover { text-decoration: underline; }
   color: var(--text-body);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
   font-size: 11.5px;
+}
+/* TRaSH-Guides commit attribution rendered inline after each
+   "Updated: <CF>" line in the history detail. Small monospace pills
+   point at the GitHub PR (preferred) or commit that produced the
+   change. Multiple refs flow with a small gap so a CF touched by
+   two PRs in the same window still reads cleanly. */
+.v3-hist-cf-commits {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 8px;
+}
+.v3-hist-cf-commit-link {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-blue);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  text-decoration: none;
+  line-height: 1.5;
+}
+.v3-hist-cf-commit-link:hover {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-bg, rgba(96,165,250,0.12));
+}
+/* "+N more" badge for cases where the sync bridged many TRaSH commits.
+   Non-link, neutral styling so the eye doesn't read it as another
+   destination. Full count is in the tooltip. */
+.v3-hist-cf-commit-more {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  line-height: 1.5;
+  cursor: default;
+}
+/* Phase 2: per-CF spec-diff bullets rendered under each "Updated:" or
+   "Created:" row. Indented relative to the row, color-coded by action
+   (added green, removed red, changed amber) so the eye scans the
+   shape of the change before reading the names. */
+.v3-hist-cf-diff {
+  margin: 4px 0 6px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.v3-hist-cf-diff-line {
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  line-height: 1.4;
+  padding-left: 4px;
+  border-left: 2px solid transparent;
+}
+.v3-hist-cf-diff-add {
+  color: var(--accent-green);
+  border-left-color: var(--accent-green);
+}
+.v3-hist-cf-diff-remove {
+  color: var(--accent-red);
+  border-left-color: var(--accent-red);
+}
+.v3-hist-cf-diff-change {
+  color: var(--accent-orange);
+  border-left-color: var(--accent-orange);
 }
 
 /* ============================================================

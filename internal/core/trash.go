@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -230,6 +231,10 @@ type TrashStore struct {
 	pullError         string                         // last pull error (empty = OK)
 	lastChangelogDate string                         // tracks last seen changelog date for new-section detection
 	onNewChangelog    func(section ChangelogSection) // called when updates.txt has a new date section
+	cfPathMu          sync.Mutex                     // protects cfPathIndex
+	cfPathIndex       map[string]map[string]string   // appType -> CF display name -> repo-relative JSON path; lazy-built, nil-out on pull
+	repoURLMu         sync.Mutex                     // protects repoURL
+	repoURL           string                         // cached origin URL for PR/commit link construction; "" until first resolve / cleared on pull
 }
 
 // SetOnNewChangelog sets the callback for when updates.txt has a new date section.
@@ -309,6 +314,12 @@ func (ts *TrashStore) Reset() error {
 	ts.pullError = ""
 	ts.lastChangelogDate = ""
 	ts.mu.Unlock()
+
+	// Reset drops every file under dataDir, so the lazy CF-name-to-path
+	// index now points at paths that no longer exist and the cached
+	// origin URL belongs to a now-deleted clone. Invalidate so the
+	// next attribution lookup rebuilds against the post-reset state.
+	ts.invalidateLazyCaches()
 	return nil
 }
 
@@ -1236,6 +1247,11 @@ func (ts *TrashStore) loadAndSwap() error {
 	ts.pullError = ""
 	ts.lastChangelogDate = newChangelogDate
 	ts.mu.Unlock()
+
+	// Drop the lazy caches (CF-name-to-path index and origin URL) so any
+	// rename/addition or branch-switch in this pull is picked up by the
+	// next Sync History attribution lookup.
+	ts.invalidateLazyCaches()
 
 	// Notify if changelog has a new section (for separate Discord notification)
 	if newChangelogDate != "" && newChangelogDate != prevChangelogDate && prevChangelogDate != "" && ts.onNewChangelog != nil {
@@ -2952,4 +2968,340 @@ func categorizeCFByName(name string) string {
 	}
 
 	return "Other"
+}
+
+// --- TRaSH commit attribution for Sync History ---
+//
+// TrashCommitRef points back at the TRaSH-Guides commit (or PR, when the
+// commit subject ends with "(#NNN)") that touched a CF's JSON file between
+// two sync points. Persisted on SyncChanges so the History UI can render
+// a clickable link next to each "Updated: <name>" entry, answering the
+// tester's question "where did this change come from?" without sending
+// them to git themselves.
+
+// TrashCommitRef is a single TRaSH-Guides upstream commit attributable to
+// a CF change. URL points at the PR when known, otherwise at the commit.
+type TrashCommitRef struct {
+	Hash    string `json:"hash"`              // short SHA (typically 7 chars)
+	PR      int    `json:"pr,omitempty"`      // PR number extracted from "(#NNN)" subject suffix, 0 if absent
+	Subject string `json:"subject"`           // first line of the commit message
+	URL     string `json:"url"`               // GitHub PR or commit URL
+}
+
+// trashPRSuffixRe captures the PR number from a commit subject ending in
+// "(#NNN)" (with optional trailing whitespace). TRaSH-Guides uses the
+// GitHub PR-merge default style, so this hits the common case.
+var trashPRSuffixRe = regexp.MustCompile(`\(#(\d+)\)\s*$`)
+
+// defaultTrashRepoURL is the fallback link base when the configured TRaSH
+// repo has no origin remote (or the origin lookup fails). Matches the
+// upstream that ships in the default Unraid template, so attribution
+// links still resolve for the vast majority of users.
+const defaultTrashRepoURL = "https://github.com/TRaSH-Guides/Guides"
+
+// commitURLBase returns the GitHub base URL of the configured TRaSH repo,
+// derived from `git remote get-url origin` in the local clone. Cached
+// between pulls so testers running a fork (e.g. clonarr-trash-test) get
+// pills that link to THEIR repo, not the upstream. Falls back to the
+// canonical TRaSH-Guides URL when no origin is set.
+func (ts *TrashStore) commitURLBase() string {
+	ts.repoURLMu.Lock()
+	defer ts.repoURLMu.Unlock()
+	if ts.repoURL != "" {
+		return ts.repoURL
+	}
+	ts.repoURL = ts.fetchRepoOriginURL()
+	return ts.repoURL
+}
+
+func (ts *TrashStore) fetchRepoOriginURL() string {
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+	if ts.dataDir == "" {
+		return defaultTrashRepoURL
+	}
+	cmd := exec.Command("git", "-C", ts.dataDir, "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return defaultTrashRepoURL
+	}
+	return normalizeRepoOriginURL(strings.TrimSpace(string(out)))
+}
+
+// normalizeRepoOriginURL turns whatever `git remote get-url origin`
+// returned (SSH or HTTPS, with or without .git suffix) into a plain
+// https://host/owner/repo string suitable for appending /pull/<n> or
+// /commit/<sha>.
+func normalizeRepoOriginURL(raw string) string {
+	if raw == "" {
+		return defaultTrashRepoURL
+	}
+	// SSH form: git@github.com:user/repo.git -> https://github.com/user/repo
+	if strings.HasPrefix(raw, "git@") {
+		rest := strings.TrimPrefix(raw, "git@")
+		rest = strings.Replace(rest, ":", "/", 1)
+		raw = "https://" + rest
+	}
+	raw = strings.TrimSuffix(raw, ".git")
+	raw = strings.TrimSuffix(raw, "/")
+	if raw == "" {
+		return defaultTrashRepoURL
+	}
+	return raw
+}
+
+// GetCFCommitsBetween returns the TRaSH-Guides commits that touched the
+// JSON file backing cfName between priorSHA (exclusive) and currentSHA
+// (inclusive). Returns nil on any failure (missing bounds, unknown CF,
+// git error) - callers treat that as "no attribution available" and
+// render the entry without a link.
+func (ts *TrashStore) GetCFCommitsBetween(appType, cfName, priorSHA, currentSHA string) []TrashCommitRef {
+	if priorSHA == "" || currentSHA == "" || priorSHA == currentSHA {
+		return nil
+	}
+	if cfName == "" {
+		return nil
+	}
+	path := ts.cfNameToPath(appType, cfName)
+	if path == "" {
+		return nil
+	}
+
+	// Resolve the URL base BEFORE we acquire the outer repoMu read lock:
+	// commitURLBase()'s cache-miss path takes its own repoMu.RLock, and
+	// Go's sync.RWMutex is not recursive - holding RLock here while
+	// re-RLocking would deadlock if a CloneOrPull writer is queued in
+	// between. By resolving up front we hit the cache on the inner call
+	// (or take the lock cleanly once) before holding repoMu ourselves.
+	base := ts.commitURLBase()
+
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+	if ts.dataDir == "" {
+		return nil
+	}
+
+	cmd := exec.Command("git", "-C", ts.dataDir, "log",
+		"--no-merges",
+		"--format=%h%x00%s",
+		priorSHA+".."+currentSHA,
+		"--", path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		// Most common cause: priorSHA no longer reachable after a force-
+		// push on the TRaSH side, or path renamed between bounds. Both
+		// are recoverable next sync; just skip attribution this round.
+		return nil
+	}
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return nil
+	}
+	lines := strings.Split(trimmed, "\n")
+	refs := make([]TrashCommitRef, 0, len(lines))
+	for _, line := range lines {
+		parts := strings.SplitN(line, "\x00", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		hash := parts[0]
+		subject := parts[1]
+		pr := 0
+		if m := trashPRSuffixRe.FindStringSubmatch(subject); len(m) == 2 {
+			if n, err := strconv.Atoi(m[1]); err == nil {
+				pr = n
+			}
+		}
+		url := ""
+		if pr > 0 {
+			url = fmt.Sprintf("%s/pull/%d", base, pr)
+		} else {
+			url = fmt.Sprintf("%s/commit/%s", base, hash)
+		}
+		refs = append(refs, TrashCommitRef{Hash: hash, PR: pr, Subject: subject, URL: url})
+	}
+	return refs
+}
+
+// cfNameToPath resolves a CF display name to its repo-relative JSON path
+// using a lazy index built from docs/json/<app>/cf/*.json. The index is
+// invalidated after each TRaSH pull so renames and additions show up
+// without a restart. Returns "" when no match exists (custom CF, typo,
+// or upstream-not-pulled-yet).
+func (ts *TrashStore) cfNameToPath(appType, cfName string) string {
+	ts.cfPathMu.Lock()
+	if ts.cfPathIndex == nil {
+		ts.cfPathIndex = ts.buildCFPathIndex()
+	}
+	idx := ts.cfPathIndex
+	ts.cfPathMu.Unlock()
+	if idx == nil {
+		return ""
+	}
+	appMap, ok := idx[appType]
+	if !ok {
+		return ""
+	}
+	return appMap[cfName]
+}
+
+// buildCFPathIndex scans docs/json/{radarr,sonarr}/cf for *.json and maps
+// each file's "name" field to its repo-relative path. Caller holds
+// cfPathMu. Failure to read any single file is silently skipped - the
+// missing CF just won't get attribution in the History UI.
+func (ts *TrashStore) buildCFPathIndex() map[string]map[string]string {
+	ts.repoMu.RLock()
+	defer ts.repoMu.RUnlock()
+	if ts.dataDir == "" {
+		return nil
+	}
+	idx := map[string]map[string]string{
+		"radarr": {},
+		"sonarr": {},
+	}
+	for _, app := range []string{"radarr", "sonarr"} {
+		dir := filepath.Join(ts.dataDir, "docs/json", app, "cf")
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			full := filepath.Join(dir, e.Name())
+			// #nosec G304 - path is composed of trusted ts.dataDir +
+			// known fixed segments + filename returned by os.ReadDir
+			// of that directory. No external input enters this path.
+			data, err := os.ReadFile(full)
+			if err != nil {
+				continue
+			}
+			var meta struct {
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(data, &meta); err != nil {
+				continue
+			}
+			if meta.Name == "" {
+				continue
+			}
+			idx[app][meta.Name] = filepath.Join("docs/json", app, "cf", e.Name())
+		}
+	}
+	return idx
+}
+
+// invalidateLazyCaches drops the lazy CF-name-to-path map AND the cached
+// origin URL so the next commit-attribution lookup picks up any renames,
+// new CFs, or remote-URL changes. Called after each successful TRaSH
+// pull, so testers who switch the TRaSH branch (or repo) don't need a
+// restart for the History links to follow.
+func (ts *TrashStore) invalidateLazyCaches() {
+	ts.cfPathMu.Lock()
+	ts.cfPathIndex = nil
+	ts.cfPathMu.Unlock()
+	ts.repoURLMu.Lock()
+	ts.repoURL = ""
+	ts.repoURLMu.Unlock()
+}
+
+// BuildCFCommitsFromDetails resolves TRaSH-Guides commit attribution for
+// CF and score detail entries between priorSHA and currentSHA. Same
+// underlying lookup either way - the CF's JSON file is what changed in
+// both "Updated:" CFDetails and "X: N -> M" ScoreDetails (the latter
+// because trash_scores live inside each CF JSON). Other prefixes
+// ("Now in profile:", set-diff lines) are not from TRaSH-side changes
+// and get skipped. Returns nil when no attribution is available.
+func BuildCFCommitsFromDetails(ts *TrashStore, appType string, cfDetails, scoreDetails []string, priorSHA, currentSHA string) map[string][]TrashCommitRef {
+	if ts == nil || priorSHA == "" || currentSHA == "" || priorSHA == currentSHA {
+		return nil
+	}
+	if len(cfDetails) == 0 && len(scoreDetails) == 0 {
+		return nil
+	}
+	// Collect unique names first so one CF that appears in both lists
+	// (e.g. its spec changed AND its score moved in the same window)
+	// only triggers a single git log invocation.
+	names := map[string]struct{}{}
+	for _, d := range cfDetails {
+		if name := extractNameFromCFDetail(d); name != "" {
+			names[name] = struct{}{}
+		}
+	}
+	for _, d := range scoreDetails {
+		if name := extractNameFromScoreDetail(d); name != "" {
+			names[name] = struct{}{}
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	out := map[string][]TrashCommitRef{}
+	for name := range names {
+		refs := ts.GetCFCommitsBetween(appType, name, priorSHA, currentSHA)
+		if len(refs) > 0 {
+			out[name] = refs
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// extractNameFromCFDetail strips the "Updated: " / "Created: " prefix
+// from a CFDetails entry and returns the CF name. Empty string for
+// other prefixes (set-diff lines) that don't represent TRaSH-side
+// changes.
+func extractNameFromCFDetail(d string) string {
+	if rest, ok := strings.CutPrefix(d, "Updated: "); ok {
+		return rest
+	}
+	if rest, ok := strings.CutPrefix(d, "Created: "); ok {
+		return rest
+	}
+	return ""
+}
+
+// extractNameFromScoreDetail handles the four ScoreDetails formats:
+//   - "Repack2: +36 → +6"                              (Name: ...)
+//   - "1.0 Mono: 9000 → 0 (reset - no longer in...)"   (Name: ...)
+//   - "Score set: x264 (-10000)"                       (Score set: Name (...))
+//   - "Score cleared: x264 (was -10000)"               (Score cleared: Name (...))
+//
+// CF names containing ": " (e.g. "Language: Not French", which sync.go
+// emits as "Language: Not French: +1500 → +0") force the generic path
+// to anchor on the arrow rather than the first colon-space - taking
+// the first ": " would strand the name at "Language" and lose
+// attribution. Returns "" when the line doesn't match a known format.
+func extractNameFromScoreDetail(d string) string {
+	if rest, ok := strings.CutPrefix(d, "Score set: "); ok {
+		if idx := strings.Index(rest, " ("); idx > 0 {
+			return rest[:idx]
+		}
+		return rest
+	}
+	if rest, ok := strings.CutPrefix(d, "Score cleared: "); ok {
+		if idx := strings.Index(rest, " ("); idx > 0 {
+			return rest[:idx]
+		}
+		return rest
+	}
+	// Generic "Name: value → value" case. Anchor on the arrow first to
+	// split name from value, then take the rightmost ": " in the prefix
+	// as the separator. Handles CF names with embedded ": ".
+	arrowIdx := strings.Index(d, " → ")
+	if arrowIdx < 0 {
+		arrowIdx = strings.Index(d, " -> ")
+	}
+	if arrowIdx < 0 {
+		return ""
+	}
+	prefix := d[:arrowIdx]
+	if idx := strings.LastIndex(prefix, ": "); idx > 0 {
+		return prefix[:idx]
+	}
+	return ""
 }

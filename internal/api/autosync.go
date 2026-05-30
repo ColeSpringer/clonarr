@@ -534,6 +534,7 @@ func (s *Server) handleRestoreAutoSyncRule(w http.ResponseWriter, r *http.Reques
 		ScoresUpdated:     result.ScoresUpdated,
 		LastSync:          now,
 		AppliedAt:         now,
+		TriggerType:       core.TriggerRestore,
 		Changes: &core.SyncChanges{
 			SettingsDetails: []string{fmt.Sprintf("Restored profile (created new ArrProfileID %d)", result.ArrProfileID)},
 		},

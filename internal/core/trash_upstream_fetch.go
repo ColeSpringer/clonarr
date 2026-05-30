@@ -280,6 +280,16 @@ type CFDiff struct {
 	NewName           string
 	ScoreChanges      map[string]ScoreChange // score-context key → old/new
 	SpecsChanged      bool
+	// SpecDiff is the structured spec diff between old and new
+	// Specifications, populated when SpecsChanged is true and both
+	// sides parsed cleanly. Used by the TRaSH Last Updated /
+	// Pending-updates panel to render "+ added X / ~ changed Y"
+	// bullets instead of the bare "conditions changed" label. Nil
+	// when the bytes differ but neither side parses (rare; e.g. an
+	// upstream CF schema change). Reuses the diff engine defined
+	// in cf_diff.go so the History row, Pending panel, pre-pull
+	// preview, and drift modal can all share one source of truth.
+	SpecDiff          *CFSpecDiff
 	RenameFlagChanged bool
 	RenameFlagNow     bool
 }
@@ -356,8 +366,43 @@ func DiffCFSnapshots(oldCF, newCF *CFSnapshot) CFDiff {
 	// heterogeneous spec types.
 	if string(oldCF.Specifications) != string(newCF.Specifications) {
 		diff.SpecsChanged = true
+		// Compute the structured per-condition delta so the Pending /
+		// TRaSH Last Updated panels can render concrete bullets
+		// instead of the bare "conditions changed" placeholder. Parse
+		// both sides into the TrashCF shape the diff engine expects;
+		// silently skip on parse failure (caller still has SpecsChanged
+		// as the fallback signal).
+		if oldT, oldErr := snapshotToTrashCF(oldCF); oldErr == nil {
+			if newT, newErr := snapshotToTrashCF(newCF); newErr == nil {
+				if sd := DiffCFSpecs(oldT, newT); sd.HasAny() {
+					diff.SpecDiff = sd
+				}
+			}
+		}
 	}
 	return diff
+}
+
+// snapshotToTrashCF inflates a CFSnapshot into the TrashCF shape used
+// by DiffCFSpecs. Only Specifications is parsed; the other fields
+// (Name, IncludeInRename, TrashScores) are copied straight across so
+// the diff engine can compare on them too if/when callers want it.
+func snapshotToTrashCF(s *CFSnapshot) (*TrashCF, error) {
+	if s == nil {
+		return &TrashCF{}, nil
+	}
+	specs := []CFSpecification{}
+	if len(s.Specifications) > 0 {
+		if err := json.Unmarshal(s.Specifications, &specs); err != nil {
+			return nil, err
+		}
+	}
+	return &TrashCF{
+		Name:            s.Name,
+		IncludeInRename: s.IncludeInRename,
+		TrashScores:     s.TrashScores,
+		Specifications:  specs,
+	}, nil
 }
 
 // QualityProfileSnapshot is the subset of a TRaSH quality-profile JSON

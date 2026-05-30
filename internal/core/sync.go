@@ -919,6 +919,12 @@ type SyncResult struct {
 	CFDetails       []string `json:"cfDetails,omitempty"`       // e.g. "Created: HDR", "Updated: Hulu"
 	ScoreDetails    []string `json:"scoreDetails,omitempty"`    // e.g. "BHDStudio: 1000 → 2240"
 	SettingsDetails []string `json:"settingsDetails,omitempty"` // e.g. "Cutoff Score: 10000 → 8000"
+	// CFSpecDiffs is the Phase 2 structured field-level diff per
+	// updated/created CF. Keyed by CF display name (same key as
+	// CFCommits) so the History UI can join attribution + diff
+	// per row. nil when no diff was computed (e.g. pre-update GET
+	// failed) - downstream treats nil as "no spec diff to show".
+	CFSpecDiffs     map[string]*CFSpecDiff `json:"cfSpecDiffs,omitempty"`
 	ProfileCreated  bool     `json:"profileCreated,omitempty"`
 	ArrProfileID    int      `json:"arrProfileId,omitempty"`
 	ArrProfileName  string   `json:"arrProfileName,omitempty"`
@@ -989,6 +995,22 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 	// Track created CF name → Arr ID for score assignment
 	createdCFIDs := make(map[string]int)
 
+	// Phase 2.2: capture pre-update Arr CF snapshot for spec-diff
+	// attribution. ExecuteSyncPlan re-lists below at line 1028 for
+	// the nameToID map, but THAT call sees post-update state. Diff
+	// requires the BEFORE snapshot, so we list once more up front.
+	// Failure here is non-fatal: missing snapshot = "Updated: X"
+	// rows just don't get a spec diff (CFCommits attribution still
+	// works on its own).
+	existingArrByID := map[int]*arr.ArrCF{}
+	existingArrByName := map[string]*arr.ArrCF{}
+	if preList, perr := client.ListCustomFormats(); perr == nil {
+		for i := range preList {
+			existingArrByID[preList[i].ID] = &preList[i]
+			existingArrByName[preList[i].Name] = &preList[i]
+		}
+	}
+
 	// Apply CF creates/updates
 	for _, action := range plan.CFActions {
 		var arrCF *arr.ArrCF
@@ -1010,9 +1032,29 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			createdCFIDs[action.Name] = created.ID
 			result.CFsCreated++
 			result.CFDetails = append(result.CFDetails, "Created: "+action.Name)
+			// Created CFs have no "before" - DiffCFSpecs(nil, after)
+			// emits the full spec list as AddedConditions, which the
+			// History UI can render as "what TRaSH added in this CF".
+			afterCF := arrCFToTrashCF(arrCF)
+			if diff := DiffCFSpecs(nil, afterCF); diff.HasAny() {
+				if result.CFSpecDiffs == nil {
+					result.CFSpecDiffs = map[string]*CFSpecDiff{}
+				}
+				result.CFSpecDiffs[action.Name] = diff
+			}
 			time.Sleep(100 * time.Millisecond)
 
 		case "update":
+			// Capture the live Arr state before we send the update so
+			// the post-sync history row can show what actually shifted.
+			// Look up by ID first (stable), name as fallback for the
+			// rare case where ID drift happened mid-sync.
+			var beforeCF *TrashCF
+			if before := existingArrByID[action.ArrID]; before != nil {
+				beforeCF = arrCFToTrashCF(before)
+			} else if before := existingArrByName[action.Name]; before != nil {
+				beforeCF = arrCFToTrashCF(before)
+			}
 			_, err := client.UpdateCustomFormat(action.ArrID, arrCF)
 			if err != nil {
 				result.Errors = append(result.Errors, friendlyArrErr("update", action.Name, err))
@@ -1020,6 +1062,15 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			}
 			result.CFsUpdated++
 			result.CFDetails = append(result.CFDetails, "Updated: "+action.Name)
+			if beforeCF != nil {
+				afterCF := arrCFToTrashCF(arrCF)
+				if diff := DiffCFSpecs(beforeCF, afterCF); diff.HasAny() {
+					if result.CFSpecDiffs == nil {
+						result.CFSpecDiffs = map[string]*CFSpecDiff{}
+					}
+					result.CFSpecDiffs[action.Name] = diff
+				}
+			}
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
@@ -1425,7 +1476,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			for i := range targetProfile.FormatItems {
 				fi := &targetProfile.FormatItems[i]
 				if fi.Score != 0 && !syncedArrIDs[fi.Format] {
-					result.ScoreDetails = append(result.ScoreDetails, fmt.Sprintf("%s: %d → 0 (reset — no longer in profile)", fi.Name, fi.Score))
+					result.ScoreDetails = append(result.ScoreDetails, fmt.Sprintf("%s: %d → 0 (reset - no longer in profile)", fi.Name, fi.Score))
 					fi.Score = 0
 					updated = true
 					result.ScoresZeroed++

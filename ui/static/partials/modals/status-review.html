@@ -8,10 +8,9 @@
        but below confirm-dialog so any nested Discard prompts win. -->
   <div class="modal-overlay" style="z-index:1500"
        x-show="statusReviewOpen"
-       @click.self="closeStatusReview()"
        @keydown.escape.window="if (statusReviewOpen) closeStatusReview()"
        x-cloak>
-    <div class="modal" style="max-width:640px;display:flex;flex-direction:column;max-height:80vh"
+    <div class="modal" style="max-width:640px;display:flex;flex-direction:column;max-height:80vh;padding:24px"
          role="dialog" aria-modal="true" aria-labelledby="modal-title-status-review"
          x-trap.noscroll.inert="statusReviewOpen">
       <h2 id="modal-title-status-review" class="modal-title" x-text="statusReviewTitle()"></h2>
@@ -40,12 +39,12 @@
           No changes to review.
         </div>
 
-        <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_c.general.length > 0">
+        <div class="sp-ov-cf-section" style="--cat: var(--app-color)" x-show="_c.general.length > 0">
           <div class="sp-ov-cf-section-title">General <span class="sp-ov-cf-section-count" x-text="_c.general.length"></span></div>
           <div class="sp-ov-cf-list">
             <template x-for="c in _c.general" :key="'srv-gen-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
               <div class="sp-ov-cf-row">
-                <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+                <span class="sp-ov-cf-name" style="white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;line-height:1.45;padding:2px 0" x-text="c.affectedName || c.affectedId"></span>
               </div>
             </template>
           </div>
@@ -56,7 +55,7 @@
           <div class="sp-ov-cf-list">
             <template x-for="c in _c.quality" :key="'srv-q-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
               <div class="sp-ov-cf-row">
-                <span class="sp-ov-cf-name" x-text="c.affectedName || c.affectedId"></span>
+                <span class="sp-ov-cf-name" style="white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;line-height:1.45;padding:2px 0" x-text="c.affectedName || c.affectedId"></span>
               </div>
             </template>
           </div>
@@ -67,7 +66,7 @@
           <div class="sp-ov-cf-list">
             <template x-for="c in _c.cfs" :key="'srv-cf-'+(c.affectedId||'')+(c.changeType||'')+(c.affectedName||'')">
               <div class="sp-ov-cf-row">
-                <span class="sp-ov-cf-name" x-text="c.affectedName || pdResolveUpdateName(c)"></span>
+                <span class="sp-ov-cf-name" style="white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;line-height:1.45;padding:2px 0" x-text="c.affectedName || pdResolveUpdateName(c)"></span>
               </div>
             </template>
           </div>

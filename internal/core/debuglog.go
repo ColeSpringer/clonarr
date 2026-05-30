@@ -44,7 +44,53 @@ const (
 	SourceAutoPullStartup     = "auto-pull-startup"
 	SourceAutoPullInterval    = "auto-pull-interval"
 	SourceDelayedApply        = "delayed-apply" // Profile Sync "Wait before applying" mode — apply schedule fired
+	SourceDriftApply          = "drift-apply"   // Arr-side drift detected, divergence rolled back via push
 )
+
+// History entry trigger types. These map Operation.Source values into
+// the user-facing vocabulary the Sync History UI chips against. Public
+// because both core and api packages need to label their entries.
+const (
+	TriggerTrashUpdate  = "trash_update"
+	TriggerManual       = "manual"
+	TriggerDriftApply   = "drift_apply"
+	TriggerDelayedApply = "delayed_apply"
+	TriggerRestore      = "restore"
+	TriggerRollback     = "rollback"
+)
+
+// SourceTrigger returns the trigger type associated with this op's
+// Source, nil-safe so callers can call op.SourceTrigger() without
+// guarding for the no-op case. Used at SyncHistoryEntry construction
+// to label history rows.
+func (op *Operation) SourceTrigger() string {
+	if op == nil {
+		return ""
+	}
+	return TriggerTypeFromSource(op.Source)
+}
+
+// TriggerTypeFromSource maps a debug-log Source string to the trigger
+// type stored on SyncHistoryEntry. Unknown sources return "" so the UI
+// can fall back to a neutral chip rather than mis-attributing.
+func TriggerTypeFromSource(source string) string {
+	switch source {
+	case SourceAutoSync, SourceAutoPullStartup, SourceAutoPullInterval:
+		return TriggerTrashUpdate
+	case SourceDelayedApply:
+		return TriggerDelayedApply
+	case SourceDriftApply:
+		return TriggerDriftApply
+	case SourceManualTrashRule, SourceManualBuilder, SourceManualPull:
+		return TriggerManual
+	case SourceManualResume:
+		return TriggerRestore
+	case SourceManualRollback:
+		return TriggerRollback
+	default:
+		return ""
+	}
+}
 
 // Operation types. Each maps to a class of user-visible action.
 const (

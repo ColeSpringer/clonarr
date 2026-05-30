@@ -391,7 +391,7 @@
                         <span x-text="sh.arrProfileName"></span>
                       </div>
                       <div class="v3-last-sync" :class="{ never: !sh.changes }"
-                           x-text="sh.changes ? timeAgo(sh.appliedAt || sh.lastSync) : '—'"></div>
+                           x-text="sh.changes ? timeAgo((sh.lastSync || '') > (sh.appliedAt || '') ? sh.lastSync : (sh.appliedAt || sh.lastSync)) : '—'"></div>
                       <div style="text-align:center">
                         <span class="v3-hist-events" :class="{ zero: historyEventCount(inst.id, sh.arrProfileId) === 0 }"
                               x-text="historyEventCount(inst.id, sh.arrProfileId) > 0 ? historyEventCount(inst.id, sh.arrProfileId) : '—'"></span>
@@ -438,6 +438,18 @@
                                 <span class="v3-hist-event-status v3-hist-event-status-ok" aria-hidden="true">&#10003;</span>
                                 <span class="v3-hist-event-time"
                                       x-text="new Date(entry.appliedAt || entry.lastSync).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})"></span>
+                                <!-- Trigger-type chip: explains WHY this sync ran
+                                     (TRaSH update / Arr drift / manual click /
+                                     delayed apply / restore / rollback). Empty
+                                     on pre-Fase-3 history rows; UI skips the
+                                     chip silently instead of showing an
+                                     "Unknown" badge. -->
+                                <template x-if="entry.triggerType">
+                                  <span class="v3-hist-event-trigger"
+                                        :class="'v3-hist-event-trigger-' + entry.triggerType"
+                                        x-tt="({trash_update:'Auto-sync after a TRaSH-Guides pull. Upstream commits changed something this rule covers.',manual:'You clicked Update / Apply in the UI. No drift pending and no TRaSH-Guides advance behind it.',drift_apply:'Drift was detected on the Arr side and pushed back to your saved state.',delayed_apply:'The Wait before applying schedule fired. Detected changes earlier and applied now.',restore:'An orphaned profile (deleted in Arr) was recreated from the saved state.',rollback:'You rolled this profile back to a previous History point.'}[entry.triggerType] || 'Sync trigger: ' + entry.triggerType)"
+                                        x-text="({trash_update:'TRaSH update',manual:'Manual',drift_apply:'Arr drift',delayed_apply:'Delayed apply',restore:'Restore',rollback:'Rollback'}[entry.triggerType] || entry.triggerType)"></span>
+                                </template>
                                 <span class="v3-hist-event-summary"
                                       x-tt="(() => { const c = entry.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + '. Click for details.' : 'No changes'; })()">
                                   <span class="v3-hist-event-count"
@@ -456,7 +468,58 @@
                                   <div>
                                     <div class="v3-hist-detail-label">Custom Formats</div>
                                     <template x-for="d in entry.changes.cfDetails" :key="d">
-                                      <div class="v3-hist-detail-line" x-text="d"></div>
+                                      <div class="v3-hist-detail-line"
+                                           x-data="{ get cfName() { return d.startsWith('Updated: ') || d.startsWith('Created: ') ? d.slice(9) : ''; } }">
+                                        <span x-text="d"></span>
+                                        <template x-if="cfName && entry.changes.cfCommits?.[cfName]?.length">
+                                          <span class="v3-hist-cf-commits">
+                                            <!-- Cap at 3 commit pills inline so a sync
+                                                 that bridged many TRaSH updates doesn't
+                                                 wallpaper the row. Extras roll up into
+                                                 a "+N more" non-link badge with the
+                                                 full count in its tooltip. -->
+                                            <template x-for="(ref, ri) in entry.changes.cfCommits[cfName].slice(0, 3)" :key="ref.hash">
+                                              <a :href="ref.url" target="_blank" rel="noopener"
+                                                 class="v3-hist-cf-commit-link"
+                                                 :title="ref.subject"
+                                                 x-text="ref.pr ? ('PR #' + ref.pr) : ref.hash"></a>
+                                            </template>
+                                            <template x-if="entry.changes.cfCommits[cfName].length > 3">
+                                              <span class="v3-hist-cf-commit-more"
+                                                    :title="'+' + (entry.changes.cfCommits[cfName].length - 3) + ' more TRaSH commits touched this CF in the sync window'"
+                                                    x-text="'+' + (entry.changes.cfCommits[cfName].length - 3) + ' more'"></span>
+                                            </template>
+                                          </span>
+                                        </template>
+                                        <!-- Phase 2: per-CF structured spec diff. Lists
+                                             added / removed / changed conditions, setting
+                                             changes, and score changes under the row. -->
+                                        <template x-if="cfName && entry.changes.cfSpecDiffs?.[cfName]"
+                                                  x-data="{ get diff() { return entry.changes.cfSpecDiffs[cfName]; } }">
+                                          <div class="v3-hist-cf-diff">
+                                            <template x-for="c in (diff.addedConditions || [])" :key="'add-'+c.name">
+                                              <div class="v3-hist-cf-diff-line v3-hist-cf-diff-add"
+                                                   x-text="'+ added: ' + c.name + (c.value ? ' (' + c.value + ')' : '') + (c.negate ? ' [negated]' : '')"></div>
+                                            </template>
+                                            <template x-for="c in (diff.removedConditions || [])" :key="'rem-'+c.name">
+                                              <div class="v3-hist-cf-diff-line v3-hist-cf-diff-remove"
+                                                   x-text="'- removed: ' + c.name + (c.value ? ' (' + c.value + ')' : '')"></div>
+                                            </template>
+                                            <template x-for="c in (diff.changedConditions || [])" :key="'chg-'+c.name+'-'+c.field">
+                                              <div class="v3-hist-cf-diff-line v3-hist-cf-diff-change"
+                                                   x-text="'~ ' + c.name + ' ' + c.field + ': ' + c.before + ' → ' + c.after"></div>
+                                            </template>
+                                            <template x-for="s in (diff.settingsChanges || [])" :key="'set-'+s.field">
+                                              <div class="v3-hist-cf-diff-line v3-hist-cf-diff-change"
+                                                   x-text="'~ setting ' + s.field + ': ' + s.before + ' → ' + s.after"></div>
+                                            </template>
+                                            <template x-for="s in (diff.scoreChanges || [])" :key="'sc-'+s.context">
+                                              <div class="v3-hist-cf-diff-line v3-hist-cf-diff-change"
+                                                   x-text="'~ score (' + s.context + '): ' + s.before + ' → ' + s.after"></div>
+                                            </template>
+                                          </div>
+                                        </template>
+                                      </div>
                                     </template>
                                   </div>
                                 </template>
@@ -464,7 +527,33 @@
                                   <div :style="entry.changes.cfDetails?.length > 0 ? 'margin-top:8px' : ''">
                                     <div class="v3-hist-detail-label">Scores</div>
                                     <template x-for="d in entry.changes.scoreDetails" :key="d">
-                                      <div class="v3-hist-detail-line" x-text="d"></div>
+                                      <div class="v3-hist-detail-line"
+                                           x-data="{ get cfName() {
+                                             const a = d.match(/^Score (?:set|cleared): ([^(]+?)\s*\(/);
+                                             if (a) return a[1];
+                                             /* Anchor on the arrow so CF names with ': ' (e.g.
+                                                'Language: Not French') don't get stranded at the
+                                                first colon. Greedy match before ': value'. */
+                                             const b = d.match(/^(.+):\s+[+-]?\d/);
+                                             return b ? b[1] : '';
+                                           } }">
+                                        <span x-text="d"></span>
+                                        <template x-if="cfName && entry.changes.cfCommits?.[cfName]?.length">
+                                          <span class="v3-hist-cf-commits">
+                                            <template x-for="(ref, ri) in entry.changes.cfCommits[cfName].slice(0, 3)" :key="ref.hash">
+                                              <a :href="ref.url" target="_blank" rel="noopener"
+                                                 class="v3-hist-cf-commit-link"
+                                                 :title="ref.subject"
+                                                 x-text="ref.pr ? ('PR #' + ref.pr) : ref.hash"></a>
+                                            </template>
+                                            <template x-if="entry.changes.cfCommits[cfName].length > 3">
+                                              <span class="v3-hist-cf-commit-more"
+                                                    :title="'+' + (entry.changes.cfCommits[cfName].length - 3) + ' more TRaSH commits touched this CF in the sync window'"
+                                                    x-text="'+' + (entry.changes.cfCommits[cfName].length - 3) + ' more'"></span>
+                                            </template>
+                                          </span>
+                                        </template>
+                                      </div>
                                     </template>
                                   </div>
                                 </template>

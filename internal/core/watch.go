@@ -745,7 +745,29 @@ func (uw *ProfileSyncRunner) buildPerRuleUpdates(cfg Config, snap *TrashData, ch
 				emitOne("cf-score", tid+":"+ctx, cfName+" — "+label+": "+fmt.Sprintf("%d → %d", sc.Old, sc.New))
 			}
 			if cdiff.SpecsChanged {
-				emitOne("cf-specs", tid, cfName+" — conditions changed")
+				// Prefer per-condition bullets when the structured
+				// diff parsed cleanly, so the Pending-updates panel
+				// shows "+ added X / ~ Y changed" rather than the
+				// bare "conditions changed" placeholder. Falls back
+				// when SpecDiff is nil (parse failure or weird
+				// upstream shape).
+				if cdiff.SpecDiff != nil {
+					for _, c := range cdiff.SpecDiff.AddedConditions {
+						label := c.Name
+						if c.Value != "" {
+							label += ": " + c.Value
+						}
+						emitOne("cf-specs", tid+":+"+c.Name, cfName+" - added "+label)
+					}
+					for _, c := range cdiff.SpecDiff.RemovedConditions {
+						emitOne("cf-specs", tid+":-"+c.Name, cfName+" - removed "+c.Name)
+					}
+					for _, c := range cdiff.SpecDiff.ChangedConditions {
+						emitOne("cf-specs", tid+":~"+c.Name+":"+c.Field, cfName+" - "+c.Name+" "+c.Field+": "+c.Before+" -> "+c.After)
+					}
+				} else {
+					emitOne("cf-specs", tid, cfName+" - conditions changed")
+				}
 			}
 			if cdiff.RenameFlagChanged {
 				state := "no"
