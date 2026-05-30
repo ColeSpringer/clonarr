@@ -17,7 +17,7 @@
       <a class="topnav-logo" :href="navHref('profiles')">
         <img src="icons/clonarr.png?v={{.Version}}" alt="" class="topnav-logo-img">
         <span class="topnav-logo-name">Clonarr</span>
-        <span class="topnav-logo-version" x-text="config.version ? 'v' + config.version : ''"></span>
+        <span class="topnav-logo-version" x-text="config.version ? (/^\d/.test(config.version) ? 'v' : '') + config.version : ''"></span>
       </a>
 
       <div class="topnav-row-spacer"></div>

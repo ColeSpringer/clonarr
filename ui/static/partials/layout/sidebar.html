@@ -12,7 +12,7 @@
       <img class="sidebar-logo" src="icons/clonarr.png?v={{.Version}}" alt="">
       <span class="sidebar-name" x-show="!sidebarCollapsed">Clonarr</span>
       <span class="sidebar-version" x-show="!sidebarCollapsed"
-            x-text="config.version ? 'v' + config.version : ''"></span>
+            x-text="config.version ? (/^\d/.test(config.version) ? 'v' : '') + config.version : ''"></span>
     </div>
 
     <!-- Accent stripe — color reflects active app. Separates the brand
