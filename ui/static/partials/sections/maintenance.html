@@ -12,7 +12,7 @@
 
         <template x-if="instancesOfType(activeAppType).length > 0">
           <div>
-            <!-- Shared header — RADARR/SONARR tag + instance picker.
+            <!-- Shared header - RADARR/SONARR tag + instance picker.
                  Maintenance keeps its OWN picker state (maintenanceInstanceId)
                  separate from Media Management's mediaInstanceId because the
                  destructive cleanup ops on this page should require an
@@ -50,7 +50,7 @@
               <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType">
                 <div class="card" style="padding:16px;margin-bottom:12px">
                   <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Backup &amp; Restore</div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Download instance profiles and custom formats as JSON, or restore from a previous backup. Backups are a safe point-in-time snapshot — make one before any destructive cleanup action.</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Download instance profiles and custom formats as JSON, or restore from a previous backup. Backups are a safe point-in-time snapshot - make one before any destructive cleanup action.</div>
                   <div style="display:flex;gap:8px">
                     <button class="btn btn-sm btn-primary" @click="openBackupModal(maintenanceInstance)">Backup</button>
                     <button class="btn btn-sm" @click="openRestoreModal(maintenanceInstance)">Restore</button>
@@ -72,7 +72,7 @@
 
               <template x-if="maintenanceInstance && maintenanceInstance.type === activeAppType">
                 <div>
-                  <!-- ===== Keep List — settings, affects every delete action below ===== -->
+                  <!-- ===== Keep List - settings, affects every delete action below ===== -->
                   <div class="maintenance-section-label">Keep List</div>
                   <div class="card maintenance-card maintenance-card-settings" style="overflow:visible">
                     <div style="display:flex;gap:16px">
@@ -126,7 +126,7 @@
                     </div>
                   </div>
 
-                  <!-- ===== Find & remove — scan-then-act workflows ===== -->
+                  <!-- ===== Find & remove - scan-then-act workflows ===== -->
                   <div class="maintenance-section-label">Find &amp; remove</div>
 
                   <div class="card maintenance-card">
@@ -143,7 +143,7 @@
                     <div class="maintenance-card-body">
                       <div>
                         <div class="maintenance-card-title">Unused Custom Formats <span class="maintenance-card-caveat">(Clonarr-managed only)</span></div>
-                        <div class="maintenance-card-desc">Finds CFs in this Arr instance that are not referenced by any Clonarr sync rule (selectedCFs, score overrides, or required by the rule's TRaSH/imported profile) and are not used for renaming. <strong>Assumes Clonarr is the sole tool managing CFs on this instance</strong> — CFs added via the Arr UI directly, or via Recyclarr / Notifiarr / other tools, will appear here as "unused". Review the preview list carefully. Keep List protection still applies.</div>
+                        <div class="maintenance-card-desc">Finds CFs in this Arr instance that are not referenced by any Clonarr sync rule (selectedCFs, score overrides, or required by the rule's TRaSH/imported profile) and are not used for renaming. <strong>Assumes Clonarr is the sole tool managing CFs on this instance</strong> - CFs added via the Arr UI directly, or via Recyclarr / Notifiarr / other tools, will appear here as "unused". Review the preview list carefully. Keep List protection still applies.</div>
                       </div>
                       <button class="qs-mode-btn" @click="cleanupScan('unused-by-clonarr')" :disabled="cleanupScanning">Scan</button>
                     </div>
@@ -153,7 +153,7 @@
                     <div class="maintenance-card-body">
                       <div>
                         <div class="maintenance-card-title">Reset Non-Synced Scores</div>
-                        <div class="maintenance-card-desc">Finds CFs with non-zero scores that weren't set by Clonarr (not part of any synced profile). Resets their scores to 0. Useful for cleaning up scores set manually or by other tools like Recyclarr.</div>
+                        <div class="maintenance-card-desc">Finds CFs with non-zero scores that are NOT in any of your synced profiles. Useful for cleaning up scores set manually or by other tools (Recyclarr, Notifiarr, etc) on CFs Clonarr doesn't manage. For drift INSIDE a synced profile (score doesn't match what Clonarr expects), use Sync Rules &rarr; Sync instead.</div>
                       </div>
                       <button class="qs-mode-btn" @click="cleanupScan('reset-unsynced-scores')" :disabled="cleanupScanning">Scan</button>
                     </div>
@@ -173,13 +173,13 @@
                     <div class="maintenance-card-body">
                       <div>
                         <div class="maintenance-card-title">Unused Quality Profiles</div>
-                        <div class="maintenance-card-desc">Lists every quality profile on this instance with usage counts across <span x-text="activeAppType === 'sonarr' ? 'series' : 'movies'"></span>, import lists<span x-show="activeAppType === 'radarr'">, and collections</span>. Profiles with zero usage everywhere can be safely removed. Arr refuses to delete profiles still in use anywhere — those show up as in-use with their usage breakdown.</div>
+                        <div class="maintenance-card-desc">Lists every quality profile on this instance with usage counts across <span x-text="activeAppType === 'sonarr' ? 'series' : 'movies'"></span>, import lists<span x-show="activeAppType === 'radarr'">, and collections</span>. Profiles with zero usage everywhere can be safely removed. Arr refuses to delete profiles still in use anywhere - those show up as in-use with their usage breakdown.</div>
                       </div>
                       <button class="qs-mode-btn" @click="cleanupScan('unused-profiles')" :disabled="cleanupScanning">Scan</button>
                     </div>
                   </div>
 
-                  <!-- ===== Destructive actions — both Delete All buttons share the RED treatment ===== -->
+                  <!-- ===== Destructive actions - both Delete All buttons share the RED treatment ===== -->
                   <div class="maintenance-section-label maintenance-section-danger">Destructive actions</div>
 
                   <div class="card maintenance-card maintenance-card-danger">
@@ -196,7 +196,7 @@
                     <div class="maintenance-card-body">
                       <div>
                         <div class="maintenance-card-title maintenance-card-title-danger">Delete All Custom Formats &amp; Scores</div>
-                        <div class="maintenance-card-desc">Complete fresh start — removes all CFs and resets their scores to 0 across every profile (respects Keep List). This cannot be undone.</div>
+                        <div class="maintenance-card-desc">Complete fresh start - removes all CFs and resets their scores to 0 across every profile (respects Keep List). This cannot be undone.</div>
                       </div>
                       <button class="qs-mode-btn maintenance-btn-danger" @click="cleanupScan('delete-cfs-and-scores')" :disabled="cleanupScanning">Scan</button>
                     </div>

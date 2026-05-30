@@ -4,7 +4,7 @@
     <div class="modal-overlay" @click.self="cleanupResult = null" @keydown.escape.window="cleanupResult = null">
       <div class="modal" style="max-width:700px" role="dialog" aria-modal="true" aria-labelledby="modal-title-cleanup-result" x-trap.noscroll.inert="cleanupResult">
         <div class="modal-header">
-          <h2 id="modal-title-cleanup-result" class="modal-title" x-text="cleanupActionLabel(cleanupResult.action) + ' — ' + cleanupResult.instance"></h2>
+          <h2 id="modal-title-cleanup-result" class="modal-title" x-text="cleanupActionLabel(cleanupResult.action) + ' - ' + cleanupResult.instance"></h2>
           <button class="modal-close" aria-label="Close cleanup result" @click="cleanupResult = null">&times;</button>
         </div>
         <div class="modal-body" style="max-height:500px;overflow-y:auto">
@@ -14,14 +14,14 @@
               <div style="font-size:32px;margin-bottom:8px">&#10003;</div>
               <div style="color:var(--accent-green);font-size:15px;font-weight:600;margin-bottom:12px">Cleanup Complete</div>
               <div style="font-size:13px;color:var(--text-muted)">
-                <!-- Counters: deleted / scoresReset / etc. — skip the
+                <!-- Counters: deleted / scoresReset / etc. - skip the
                      skipped array here so it doesn't render as
                      "skipped: [object Object]". Special-cased below. -->
                 <template x-for="[k,v] in Object.entries(cleanupResult.applyResult).filter(([k]) => k !== 'skipped')" :key="k">
                   <div x-text="k + ': ' + v" style="margin:2px 0"></div>
                 </template>
               </div>
-              <!-- Protected by keep list — list every CF that was
+              <!-- Protected by keep list - list every CF that was
                    skipped because its name is on the user's keep list.
                    Shows up when the scan returned candidates that the
                    apply-side defense-in-depth filtered out. -->
@@ -48,7 +48,7 @@
           <template x-if="cleanupResult.applied === undefined">
             <div>
               <template x-if="cleanupResult.affectCount === 0">
-                <div style="text-align:center;padding:24px;color:var(--accent-green);font-size:14px">Nothing to clean up — all clear.</div>
+                <div style="text-align:center;padding:24px;color:var(--accent-green);font-size:14px">Nothing to clean up - all clear.</div>
               </template>
               <template x-if="cleanupResult.affectCount > 0">
                 <div>
@@ -71,7 +71,7 @@
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> duplicate <span x-text="cleanupResult.affectCount === 1 ? 'CF' : 'CFs'"></span> out of <span x-text="cleanupResult.totalCount"></span> total. The first occurrence in each group is kept; the rest are flagged for removal.</span>
                         </template>
                         <template x-if="cleanupResult.action === 'unused-profiles'">
-                          <span><strong x-text="cleanupResult.affectCount"></strong> of <span x-text="cleanupResult.totalCount"></span> quality <span x-text="cleanupResult.totalCount === 1 ? 'profile' : 'profiles'"></span> on this instance <span x-text="cleanupResult.affectCount === 1 ? 'is' : 'are'"></span> not in use anywhere and can be removed. Arr refuses to delete profiles still in use — see the "In use" tab for the usage breakdown.</span>
+                          <span><strong x-text="cleanupResult.affectCount"></strong> of <span x-text="cleanupResult.totalCount"></span> quality <span x-text="cleanupResult.totalCount === 1 ? 'profile' : 'profiles'"></span> on this instance <span x-text="cleanupResult.affectCount === 1 ? 'is' : 'are'"></span> not in use anywhere and can be removed. Arr refuses to delete profiles still in use - see the "In use" tab for the usage breakdown.</span>
                         </template>
                         <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> <span x-text="cleanupResult.affectCount === 1 ? 'CF with a non-zero score' : 'CFs with non-zero scores'"></span> that aren't part of any synced profile. Scores will be reset to 0.</span>
@@ -83,7 +83,7 @@
                           <span>Found <strong x-text="cleanupResult.affectCount"></strong> unmanaged items out of <span x-text="cleanupResult.totalCount"></span> total CFs.
                             <template x-if="cleanupResult.items.some(i => i.renamingFlag)">
                               <span style="color:var(--text-muted)">
-                                (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> rename-only — see info below)
+                                (<span x-text="cleanupResult.items.filter(i => i.renamingFlag).length"></span> rename-only - see info below)
                               </span>
                             </template>
                           </span>
@@ -126,14 +126,38 @@
                         </div>
                       </template>
 
+                      <!-- Per-row selection toolbar - shown for every cleanup
+                           action that exposes per-row selection. Presets pre-fill
+                           the checkboxes; the footer button acts on the current
+                           selection. "Select safe" is unused-by-clonarr specific
+                           (split between rename-only and the rest). -->
+                      <template x-if="cleanupHasSelection() && cleanupVisibleItems().length > 0">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:var(--text-muted);flex-wrap:wrap">
+                          <span x-text="'Selected ' + cleanupSelCount() + ' of ' + cleanupVisibleItems().length"></span>
+                          <span aria-hidden="true">·</span>
+                          <button class="btn" style="padding:3px 9px;font-size:11px" @click="cleanupSelAll()">Select all</button>
+                          <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag)">
+                            <button class="btn" style="padding:3px 9px;font-size:11px" @click="cleanupSelSafe()" x-tt="'Pick every non rename-only CF in this view'">Select safe</button>
+                          </template>
+                          <button class="btn" style="padding:3px 9px;font-size:11px" @click="cleanupSelClear()">Clear</button>
+                        </div>
+                      </template>
+
                       <!-- Duplicate-specific table: pair each removable duplicate
                            with the original being kept, side-by-side. Backend ships
-                           "Duplicate of {name}" in the detail field — we strip the
+                           "Duplicate of {name}" in the detail field - we strip the
                            prefix client-side for the right column. -->
                       <template x-if="cleanupResult.action === 'duplicates'">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500;width:32px;text-align:center">
+                                <input type="checkbox"
+                                       :checked="cleanupSelAllVisible()"
+                                       x-effect="$el.indeterminate = cleanupSelSomeVisible()"
+                                       @change="cleanupSelToggleAllVisible()"
+                                       aria-label="Select all duplicates">
+                              </th>
                               <th style="padding:6px 8px;font-weight:500">Will be removed</th>
                               <th style="padding:6px 8px;font-weight:500;width:24px;text-align:center"></th>
                               <th style="padding:6px 8px;font-weight:500">Kept as original</th>
@@ -142,6 +166,12 @@
                           <tbody>
                             <template x-for="item in cleanupResult.items" :key="item.id">
                               <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;text-align:center">
+                                  <input type="checkbox"
+                                         :checked="!!cleanupSelected[item.id]"
+                                         @change="cleanupSelToggle(item.id)"
+                                         :aria-label="'Select ' + item.name">
+                                </td>
                                 <td style="padding:6px 8px;color:var(--text-primary);font-family:'SF Mono',Monaco,monospace;font-size:11.5px" x-text="item.name"></td>
                                 <td style="padding:6px 8px;color:var(--text-muted);text-align:center">&rarr;</td>
                                 <td style="padding:6px 8px;color:var(--text-secondary);font-family:'SF Mono',Monaco,monospace;font-size:11.5px"
@@ -152,12 +182,12 @@
                         </table>
                       </template>
 
-                      <!-- Unused Profiles — filter tabs (Unused / In use) + dedicated table
+                      <!-- Unused Profiles - filter tabs (Unused / In use) + dedicated table
                            with per-axis usage chips. Radarr shows Collections column; Sonarr
                            drops it via x-show on the column. -->
                       <template x-if="cleanupResult.action === 'unused-profiles'">
                         <div>
-                          <!-- Filter tabs — same pattern as unused-by-clonarr -->
+                          <!-- Filter tabs - same pattern as unused-by-clonarr -->
                           <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
                             <button class="btn"
                               :style="cleanupFilter === 'all' ? 'background:var(--accent-blue-strong);border-color:var(--accent-blue-strong);color:var(--text-on-accent)' : ''"
@@ -173,19 +203,29 @@
 
                           <!-- Compact one-line-per-profile layout. Click to expand
                                shows the usage breakdown as chips. Avoids the table-
-                               layout struggles entirely — each row sizes naturally to
+                               layout struggles entirely - each row sizes naturally to
                                profile name length, no column-width juggling. -->
                           <div style="display:flex;flex-direction:column;gap:4px">
                             <template x-for="item in (cleanupFilter === 'managed' ? (cleanupResult.managedItems || []) : cleanupResult.items)" :key="item.id"
                                       x-data="{ open: false }">
                               <div style="border:1px solid var(--border-muted);border-radius:5px;background:var(--bg-card)">
+                                <div style="display:flex;align-items:stretch">
+                                <template x-if="cleanupFilter !== 'managed'">
+                                  <label style="display:flex;align-items:center;padding:0 4px 0 12px;cursor:pointer">
+                                    <input type="checkbox"
+                                           :checked="!!cleanupSelected[item.id]"
+                                           @change="cleanupSelToggle(item.id)"
+                                           :aria-label="'Select ' + item.name"
+                                           style="margin:0">
+                                  </label>
+                                </template>
                                 <button type="button"
-                                        style="display:flex;align-items:center;gap:10px;width:100%;padding:7px 12px;background:transparent;border:0;cursor:pointer;font:inherit;text-align:left;color:inherit"
+                                        style="display:flex;align-items:center;gap:10px;flex:1;padding:7px 12px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;text-align:left;color:inherit"
                                         @click="open = !open">
                                   <span style="color:var(--text-primary);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="item.name"></span>
                                   <span style="color:var(--text-muted);font-family:'SF Mono',Monaco,monospace;font-size:11.5px;flex-shrink:0" x-text="'#' + item.id"></span>
                                   <!-- Total usage count + chevron. Unused-tab items are
-                                       all zero — show "No usage" (italic muted) with no
+                                       all zero - show "No usage" (italic muted) with no
                                        chevron since there's nothing to expand. -->
                                   <template x-if="(((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) === 0">
                                     <span style="color:var(--text-muted);font-size:11.5px;font-style:italic;flex-shrink:0">No usage</span>
@@ -197,7 +237,8 @@
                                     </span>
                                   </template>
                                 </button>
-                                <!-- Expanded breakdown — usage chips. Only shows axes with
+                                </div>
+                                <!-- Expanded breakdown - usage chips. Only shows axes with
                                      non-zero counts so 0-rows aren't padded with empty info. -->
                                 <div x-show="open && (((item.usage || {})[activeAppType === 'sonarr' ? 'series' : 'movies'] || 0) + ((item.usage || {}).importLists || 0) + ((item.usage || {}).collections || 0)) > 0"
                                      x-cloak
@@ -227,11 +268,18 @@
                         </div>
                       </template>
 
-                      <!-- Reset Non-Synced Scores — dedicated table with score chips per profile. -->
+                      <!-- Reset Non-Synced Scores - dedicated table with score chips per profile. -->
                       <template x-if="cleanupResult.action === 'reset-unsynced-scores'">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500;width:32px;text-align:center">
+                                <input type="checkbox"
+                                       :checked="cleanupSelAllVisible()"
+                                       x-effect="$el.indeterminate = cleanupSelSomeVisible()"
+                                       @change="cleanupSelToggleAllVisible()"
+                                       aria-label="Select all">
+                              </th>
                               <th style="padding:6px 8px;font-weight:500">Custom Format</th>
                               <th style="padding:6px 8px;font-weight:500">Current scores</th>
                             </tr>
@@ -239,6 +287,12 @@
                           <tbody>
                             <template x-for="item in cleanupResult.items" :key="item.id">
                               <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;text-align:center">
+                                  <input type="checkbox"
+                                         :checked="!!cleanupSelected[item.id]"
+                                         @change="cleanupSelToggle(item.id)"
+                                         :aria-label="'Select ' + item.name">
+                                </td>
                                 <td style="padding:6px 8px;color:var(--text-primary);font-weight:500" x-text="item.name"></td>
                                 <td style="padding:6px 8px">
                                   <div style="display:flex;flex-wrap:wrap;gap:4px">
@@ -256,11 +310,18 @@
                         </table>
                       </template>
 
-                      <!-- Orphaned Scores — dedicated table showing CF ID + affected profiles. -->
+                      <!-- Orphaned Scores - dedicated table showing CF ID + affected profiles. -->
                       <template x-if="cleanupResult.action === 'orphaned-scores'">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <th style="padding:6px 8px;font-weight:500;width:32px;text-align:center">
+                                <input type="checkbox"
+                                       :checked="cleanupSelAllVisible()"
+                                       x-effect="$el.indeterminate = cleanupSelSomeVisible()"
+                                       @change="cleanupSelToggleAllVisible()"
+                                       aria-label="Select all">
+                              </th>
                               <th style="padding:6px 8px;font-weight:500;width:80px">CF ID</th>
                               <th style="padding:6px 8px;font-weight:500">Found in</th>
                             </tr>
@@ -268,6 +329,12 @@
                           <tbody>
                             <template x-for="item in cleanupResult.items" :key="item.id">
                               <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <td style="padding:6px 8px;text-align:center">
+                                  <input type="checkbox"
+                                         :checked="!!cleanupSelected[item.id]"
+                                         @change="cleanupSelToggle(item.id)"
+                                         :aria-label="'Select CF #' + item.id">
+                                </td>
                                 <td style="padding:6px 8px;color:var(--text-muted);font-family:'SF Mono',Monaco,monospace;font-size:11.5px" x-text="'#' + item.id"></td>
                                 <td style="padding:6px 8px">
                                   <div style="display:flex;flex-wrap:wrap;gap:4px">
@@ -282,12 +349,21 @@
                         </table>
                       </template>
 
-                      <!-- Default items table — used by unused-by-clonarr (rename-flag
+                      <!-- Default items table - used by unused-by-clonarr (rename-flag
                            Tag column matters there). -->
                       <template x-if="cleanupResult.action !== 'duplicates' && cleanupResult.action !== 'reset-unsynced-scores' && cleanupResult.action !== 'orphaned-scores' && cleanupResult.action !== 'unused-profiles' && (cleanupResult.action !== 'unused-by-clonarr' || cleanupFilter !== 'managed')">
                         <table style="width:100%;border-collapse:collapse;font-size:12px">
                           <thead>
                             <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-subtle)">
+                              <template x-if="cleanupResult.action === 'unused-by-clonarr'">
+                                <th style="padding:6px 8px;font-weight:500;width:32px;text-align:center">
+                                  <input type="checkbox"
+                                         :checked="cleanupSelAllVisible()"
+                                         x-effect="$el.indeterminate = cleanupSelSomeVisible()"
+                                         @change="cleanupSelToggleAllVisible()"
+                                         aria-label="Select all visible">
+                                </th>
+                              </template>
                               <th style="padding:6px 8px;font-weight:500">Custom Format</th>
                               <template x-if="cleanupResult.action === 'unused-by-clonarr'">
                                 <th style="padding:6px 8px;font-weight:500;width:120px">Tag</th>
@@ -297,6 +373,14 @@
                           <tbody>
                             <template x-for="item in (cleanupResult.action === 'unused-by-clonarr' && cleanupFilter === 'rename-flagged' ? cleanupResult.items.filter(i => i.renamingFlag) : cleanupResult.items)" :key="item.id">
                               <tr style="border-bottom:1px solid var(--bg-muted)">
+                                <template x-if="cleanupResult.action === 'unused-by-clonarr'">
+                                  <td style="padding:6px 8px;text-align:center">
+                                    <input type="checkbox"
+                                           :checked="!!cleanupSelected[item.id]"
+                                           @change="cleanupSelToggle(item.id)"
+                                           :aria-label="'Select ' + item.name">
+                                  </td>
+                                </template>
                                 <td style="padding:6px 8px;color:var(--text-primary)">
                                   <span x-text="item.name"></span>
                                   <span x-show="item.detail" style="color:var(--text-muted);display:block;font-size:11px;margin-top:2px" x-text="item.detail"></span>
@@ -304,7 +388,7 @@
                                 <template x-if="cleanupResult.action === 'unused-by-clonarr'">
                                   <td style="padding:6px 8px">
                                     <template x-if="item.renamingFlag">
-                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on — this CF only contributes to file names, no scoring impact.'">rename-only</span>
+                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on - this CF only contributes to file names, no scoring impact.'">rename-only</span>
                                     </template>
                                   </td>
                                 </template>
@@ -314,7 +398,7 @@
                         </table>
                       </template>
 
-                      <!-- Managed-by-clonarr table — read-only, with profile usage column -->
+                      <!-- Managed-by-clonarr table - read-only, with profile usage column -->
                       <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupFilter === 'managed'">
                         <div>
                           <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
@@ -346,7 +430,7 @@
                                   </td>
                                   <td style="padding:6px 8px">
                                     <template x-if="item.renamingFlag">
-                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on — this CF only contributes to file names, no scoring impact.'">rename-only</span>
+                                      <span style="background:var(--accent-orange-bg);border:1px solid var(--accent-orange);color:var(--cat-hq-release-groups);padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500" x-tt="'Score 0 in every profile + includeCustomFormatWhenRenaming on - this CF only contributes to file names, no scoring impact.'">rename-only</span>
                                     </template>
                                   </td>
                                 </tr>
@@ -380,29 +464,23 @@
         </div>
         <div class="modal-footer" x-show="cleanupResult.applied === undefined && cleanupResult.affectCount > 0 && !(cleanupResult.action === 'unused-by-clonarr' && cleanupFilter === 'managed') && !(cleanupResult.action === 'unused-profiles' && cleanupFilter === 'managed')">
           <button class="btn" @click="cleanupResult = null">Cancel</button>
-          <template x-if="cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag)">
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-danger" style="padding:5px 10px;font-size:12px" @click="cleanupApply({ skipRenameFlagged: true })" :disabled="cleanupApplying" x-tt="'Keep CFs whose only purpose is contributing to filenames'">
-                <span x-show="cleanupApplying" class="spinner" style="width:10px;height:10px;border-width:1.5px"></span>
-                <span x-show="!cleanupApplying" x-text="'Delete safe (' + cleanupResult.items.filter(i => !i.renamingFlag).length + ')'"></span>
-              </button>
-              <button class="btn" style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--accent-red);color:var(--accent-red)" @click="cleanupApply({ skipRenameFlagged: false })" :disabled="cleanupApplying" x-tt="'Also delete CFs that only contribute to filenames'">
-                <span x-show="cleanupApplying" class="spinner" style="width:10px;height:10px;border-width:1.5px"></span>
-                <span x-show="!cleanupApplying" x-text="'Delete all (' + cleanupResult.affectCount + ')'"></span>
-              </button>
-            </div>
-          </template>
-          <template x-if="!(cleanupResult.action === 'unused-by-clonarr' && cleanupResult.items.some(i => i.renamingFlag))">
-            <button class="btn"
-              :class="['delete-cfs-and-scores','delete-cfs-keep-scores','unused-by-clonarr','duplicates','unused-profiles'].includes(cleanupResult.action) ? 'btn-danger' : 'btn-primary'"
-              @click="cleanupApply()" :disabled="cleanupApplying">
+          <!-- Selectable actions: the toolbar above the table drives the
+               selection (per-row checkboxes + Select all / Clear presets,
+               plus Select safe for unused-by-clonarr). Footer acts on
+               whatever is currently selected. Disabled when nothing is
+               picked. Verb tracks the action (Delete / Remove / Reset). -->
+          <template x-if="cleanupHasSelection()">
+            <button class="btn btn-danger" @click="cleanupApply()" :disabled="cleanupApplying || cleanupSelCount() === 0">
               <span x-show="cleanupApplying" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
-              <!-- Verb matches the action's semantics:
-                   - "Remove" for duplicates (originals stay; only the redundant copies go)
-                   - "Delete" for items that disappear entirely (unused-by-clonarr,
-                     unused-profiles, delete-all variants)
-                   - "Apply" for non-destructive value changes (score resets) -->
-              <span x-show="!cleanupApplying" x-text="(cleanupResult.action === 'duplicates' ? 'Remove' : (cleanupResult.action?.startsWith('delete') || cleanupResult.action === 'unused-by-clonarr' || cleanupResult.action === 'unused-profiles') ? 'Delete' : 'Apply') + ' (' + cleanupResult.affectCount + ' items)'"></span>
+              <span x-show="!cleanupApplying" x-text="cleanupActionVerb() + ' selected (' + cleanupSelCount() + ')'"></span>
+            </button>
+          </template>
+          <!-- Non-selectable (delete-cfs-* - no item list). One-click
+               whole-list action. -->
+          <template x-if="!cleanupHasSelection()">
+            <button class="btn btn-danger" @click="cleanupApply()" :disabled="cleanupApplying">
+              <span x-show="cleanupApplying" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
+              <span x-show="!cleanupApplying" x-text="'Delete (' + cleanupResult.affectCount + ' items)'"></span>
             </button>
           </template>
         </div>

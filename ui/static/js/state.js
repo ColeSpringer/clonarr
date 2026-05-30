@@ -446,6 +446,7 @@ export default function baseState() {
     cleanupScanning: false,
     cleanupApplying: false,
     cleanupFilter: 'all', // unused-by-clonarr only: 'all' | 'rename-flagged' | 'managed'
+    cleanupSelected: {},  // unused-by-clonarr only: { [cfId]: true } for per-row selection
 
     syncForm: { instanceId: '', instanceName: '', appType: '', profileTrashId: '', importedProfileId: '', profileName: '', arrProfileId: '0', newProfileName: '', behavior: { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' } },
     arrProfiles: [],

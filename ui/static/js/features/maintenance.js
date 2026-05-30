@@ -31,6 +31,22 @@ export default {
         }
         this.cleanupResult = await resp.json();
         this.cleanupFilter = 'all';
+        // Per-row selection. Pre-select every item by default so the
+        // primary footer button keeps the previous one-click behaviour;
+        // user can then uncheck what they want to keep. Exception:
+        // unused-by-clonarr pre-selects the "safe" set (non-rename-
+        // flagged when rename-flagged items are present) to preserve
+        // the previous Delete-safe default. delete-cfs-* don't render
+        // a per-item list, so they skip selection entirely.
+        this.cleanupSelected = {};
+        const selectable = ['unused-by-clonarr','duplicates','reset-unsynced-scores','orphaned-scores','unused-profiles'];
+        if (selectable.includes(action) && Array.isArray(this.cleanupResult.items)) {
+          const hasRenameFlagged = action === 'unused-by-clonarr' && this.cleanupResult.items.some(i => i.renamingFlag);
+          for (const item of this.cleanupResult.items) {
+            if (hasRenameFlagged && item.renamingFlag) continue;
+            this.cleanupSelected[item.id] = true;
+          }
+        }
       } catch (e) {
         this.showToast('Scan failed: ' + e.message, 'error', 8000);
       } finally {
@@ -38,32 +54,120 @@ export default {
       }
     },
 
-    async cleanupApply(opts = {}) {
+    // --- Per-row selection helpers (unused-by-clonarr only) ---
+    // Reads cleanupResult.items (or filtered subset) and the
+    // cleanupSelected map. Filter-tab aware: "Safe" means non-rename-
+    // flagged within the currently visible list, "All" means every
+    // visible item. The Managed-by-Clonarr tab is read-only and not
+    // exposed to selection.
+    cleanupVisibleItems() {
+      const r = this.cleanupResult;
+      if (!r || !Array.isArray(r.items)) return [];
+      // unused-by-clonarr's 'managed' tab is read-only; 'rename-flagged'
+      // is a subset of items. unused-profiles' 'managed' tab is the
+      // in-use list, also read-only. Other actions don't filter.
+      if (r.action === 'unused-by-clonarr') {
+        if (this.cleanupFilter === 'managed') return [];
+        if (this.cleanupFilter === 'rename-flagged') return r.items.filter(i => i.renamingFlag);
+        return r.items;
+      }
+      if (r.action === 'unused-profiles' && this.cleanupFilter === 'managed') return [];
+      return r.items;
+    },
+    cleanupHasSelection() {
+      // True iff this action type exposes per-row selection.
+      const a = this.cleanupResult?.action;
+      return a === 'unused-by-clonarr' || a === 'duplicates' || a === 'reset-unsynced-scores' || a === 'orphaned-scores' || a === 'unused-profiles';
+    },
+    cleanupActionVerb() {
+      const a = this.cleanupResult?.action;
+      if (a === 'duplicates') return 'Remove';
+      if (a === 'reset-unsynced-scores' || a === 'orphaned-scores') return 'Reset';
+      return 'Delete'; // unused-by-clonarr, unused-profiles, delete-*
+    },
+    cleanupSelCount() {
+      return this.cleanupVisibleItems().filter(i => this.cleanupSelected[i.id]).length;
+    },
+    cleanupSelAllVisible() {
+      const items = this.cleanupVisibleItems();
+      return items.length > 0 && items.every(i => this.cleanupSelected[i.id]);
+    },
+    cleanupSelSomeVisible() {
+      const items = this.cleanupVisibleItems();
+      const n = items.filter(i => this.cleanupSelected[i.id]).length;
+      return n > 0 && n < items.length;
+    },
+    cleanupSelToggle(id) {
+      const next = { ...this.cleanupSelected };
+      if (next[id]) delete next[id]; else next[id] = true;
+      this.cleanupSelected = next;
+    },
+    cleanupSelAll() {
+      const next = { ...this.cleanupSelected };
+      for (const item of this.cleanupVisibleItems()) next[item.id] = true;
+      this.cleanupSelected = next;
+    },
+    cleanupSelSafe() {
+      const next = { ...this.cleanupSelected };
+      for (const item of this.cleanupVisibleItems()) {
+        if (item.renamingFlag) delete next[item.id]; else next[item.id] = true;
+      }
+      this.cleanupSelected = next;
+    },
+    cleanupSelClear() {
+      const next = { ...this.cleanupSelected };
+      for (const item of this.cleanupVisibleItems()) delete next[item.id];
+      this.cleanupSelected = next;
+    },
+    cleanupSelToggleAllVisible() {
+      if (this.cleanupSelAllVisible()) this.cleanupSelClear(); else this.cleanupSelAll();
+    },
+
+    async cleanupApply() {
       if (!this.cleanupResult?.items?.length) return;
-      // For unused-by-clonarr, the user can opt to keep rename-only CFs
-      // (the safer default) or delete everything. Other cleanup actions
-      // ignore opts and delete the full item list.
-      const items = opts.skipRenameFlagged
-        ? this.cleanupResult.items.filter(i => !i.renamingFlag)
+      // Selectable actions read from cleanupSelected (toolbar presets +
+      // per-row checkboxes). delete-cfs-* don't render an item list and
+      // act on the whole scan result.
+      const items = this.cleanupHasSelection()
+        ? this.cleanupResult.items.filter(i => this.cleanupSelected[i.id])
         : this.cleanupResult.items;
       if (items.length === 0) return;
 
-      // Build a clear confirmation message — count + (if rename-tags
-      // included) what they are. Destructive actions need explicit ack.
-      const includesRenameTags = !opts.skipRenameFlagged && items.some(i => i.renamingFlag);
-      const renameCount = items.filter(i => i.renamingFlag).length;
-      let message = `Permanently delete ${items.length} custom format${items.length === 1 ? '' : 's'} from ${this.cleanupResult.instance}?`;
+      // Confirmation message: verb matches the action (Delete / Remove
+      // / Reset), and the noun matches the entity (CFs / profiles /
+      // scores). Rename-tag warning only applies when unused-by-clonarr
+      // selection still includes any rename-flagged items.
+      const a = this.cleanupResult.action;
+      const verb = this.cleanupActionVerb().toLowerCase();
+      const noun = (a === 'unused-profiles') ? `quality profile${items.length === 1 ? '' : 's'}`
+                  : (a === 'reset-unsynced-scores' || a === 'orphaned-scores') ? `score entr${items.length === 1 ? 'y' : 'ies'}`
+                  : `custom format${items.length === 1 ? '' : 's'}`;
+      const renameCount = a === 'unused-by-clonarr' ? items.filter(i => i.renamingFlag).length : 0;
+      const includesRenameTags = renameCount > 0;
+      const verbCap = verb.charAt(0).toUpperCase() + verb.slice(1);
+      let message = `${verbCap} ${items.length} ${noun} from ${this.cleanupResult.instance}?`;
       if (includesRenameTags && renameCount > 0) {
         message += `\n\nIncludes ${renameCount} rename-only CF${renameCount === 1 ? '' : 's'} (score 0 in every profile, only contributing to filenames). Future renames will no longer include their tags. Existing files on disk are unaffected.`;
       }
-      message += `\n\nThis cannot be undone, but you can re-sync any TRaSH or builder profile to recreate CFs.`;
+      // Recovery hint matches the action: deletes can be re-synced from
+      // a TRaSH or builder profile; resets just clear scores.
+      if (a === 'reset-unsynced-scores' || a === 'orphaned-scores') {
+        message += `\n\nThis sets the selected score${items.length === 1 ? '' : 's'} to 0 on the affected profile${items.length === 1 ? '' : 's'}.`;
+      } else if (a === 'unused-profiles') {
+        message += `\n\nThis cannot be undone. Profiles in use cannot be deleted by Arr; the cleanup will skip any that are still referenced.`;
+      } else {
+        message += `\n\nThis cannot be undone, but you can re-sync any TRaSH or builder profile to recreate CFs.`;
+      }
 
+      const titleNoun = (a === 'unused-profiles') ? 'Quality Profiles'
+                      : (a === 'reset-unsynced-scores' || a === 'orphaned-scores') ? 'Scores'
+                      : 'Custom Formats';
       const confirmed = await new Promise(resolve => {
         this.confirmModal = {
           show: true,
-          title: 'Delete Custom Formats',
+          title: `${verbCap} ${titleNoun}`,
           message,
-          confirmLabel: `Delete ${items.length}`,
+          confirmLabel: `${verbCap} ${items.length}`,
           onConfirm: () => resolve(true),
           onCancel: () => resolve(false),
         };
