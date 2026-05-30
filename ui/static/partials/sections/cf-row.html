@@ -45,6 +45,11 @@
               x-tt="'Clone as new Custom Format'" aria-label="Clone">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
       </button>
+      <button type="button" class="cf-action-btn cf-action-add-arr"
+              @click.stop="openAddCFToArr(cf, activeAppType)"
+              x-tt="'Add to a ' + (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr') + ' instance (custom format only, not added to any profile)'" aria-label="Add to Arr">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
       <template x-if="cf.isCustom">
         <span class="cf-action-edit-group">
           <button type="button" class="cf-action-btn cf-action-edit" @click="openCFEditor('edit', activeAppType, cf)" x-tt="'Edit'" aria-label="Edit custom format">&#9998;</button>

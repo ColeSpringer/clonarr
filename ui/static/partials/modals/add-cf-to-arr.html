@@ -1,0 +1,48 @@
+{{define "modals/add-cf-to-arr"}}
+  <!-- Add CF to Arr Modal — opened from the +Arr action on each CF row
+       in the Custom Formats library. User picks which Radarr / Sonarr
+       instance to push the CF entity to (profiles are NOT touched). -->
+  <template x-if="addCFToArrModal && addCFToArrModal.open">
+  <div class="modal-overlay" @keydown.escape.window="cancelAddCFToArr()">
+    <div class="modal" style="max-width:480px" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-cf-arr" x-trap.noscroll.inert="addCFToArrModal.open">
+      <h2 id="modal-title-add-cf-arr" class="modal-title">Add to Arr</h2>
+
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
+        Add
+        <strong x-text="addCFToArrModal.cfName"></strong>
+        to a <span x-text="addCFToArrModal.appType === 'sonarr' ? 'Sonarr' : 'Radarr'"></span> instance.
+        The custom format becomes available for matching but is not added to any quality profile.
+      </p>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="add-cf-arr-instance-select">Instance</label>
+        <select id="add-cf-arr-instance-select" class="input"
+                x-model="addCFToArrModal.instanceId"
+                :disabled="addCFToArrModal.saving">
+          <template x-for="inst in addCFToArrInstances()" :key="inst.id">
+            <option :value="inst.id" x-text="inst.name"></option>
+          </template>
+        </select>
+        <div x-show="addCFToArrInstances().length === 0"
+             style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+          No <span x-text="addCFToArrModal.appType === 'sonarr' ? 'Sonarr' : 'Radarr'"></span> instances configured. Add one under Settings &rarr; Instances first.
+        </div>
+      </div>
+
+      <div x-show="addCFToArrModal.error" x-cloak
+           style="margin-top:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent-red) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);border-radius:4px;color:var(--accent-red);font-size:12px"
+           x-text="addCFToArrModal.error"></div>
+
+      <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" @click="cancelAddCFToArr()" :disabled="addCFToArrModal.saving">Cancel</button>
+        <button type="button" class="btn btn-sm"
+                style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
+                @click="commitAddCFToArr()"
+                :disabled="addCFToArrModal.saving || !addCFToArrModal.instanceId"
+                x-text="addCFToArrModal.saving ? 'Adding…' : addCFToArrButtonLabel()"
+                x-tt="'Push the CF entity to the selected Arr instance. Profiles are not modified.'"></button>
+      </div>
+    </div>
+  </div>
+  </template>
+{{end}}

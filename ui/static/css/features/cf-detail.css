@@ -640,6 +640,15 @@
   }
   .cf-action-clone:hover { color: var(--accent-blue); }
 
+  /* Add-to-Arr button — same neutral baseline as Clone, distinct hover
+     color so the two icon buttons read as separate actions even at
+     small sizes. */
+  .cf-action-add-arr {
+    color: var(--text-muted);
+    font-size: 13px; cursor: pointer;
+  }
+  .cf-action-add-arr:hover { color: var(--accent-green); }
+
   /* Custom badge — small, muted-orange pill replaces the inline-style
      "Custom" tag. Same color signal as before, less visual weight. */
   .cf-custom-badge {

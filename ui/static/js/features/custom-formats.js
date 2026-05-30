@@ -34,6 +34,11 @@ export default {
     // the modal-no-backdrop-close rule). No API call happens until
     // the user clicks Save in the modal.
     cloneModal: { open: false, sourceCF: null, sourceAppType: '', name: '', saving: false, error: '' },
+    // Add-to-Arr modal state — set by openAddCFToArr when the +Arr
+    // button is clicked, cleared by cancelAddCFToArr / commitAddCFToArr.
+    // Pushes the CF entity to a chosen Arr instance without touching
+    // any quality profile. Same modal-no-backdrop-close convention.
+    addCFToArrModal: { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', saving: false, error: '' },
     // cfEditorActiveTab + cfEditorDescriptionPreview live in state.js
     // alongside the rest of the cf-editor state — this section only
     // holds CF browse / clone state.
@@ -898,6 +903,86 @@ export default {
 
     cancelCloneCF() {
       this.cloneModal = { open: false, sourceCF: null, sourceAppType: '', name: '', saving: false, error: '' };
+    },
+
+    // Open the Add-to-Arr modal for the given CF (either a TRaSH CF or
+    // a user custom CF — discriminated by cf.isCustom). Defaults the
+    // instance picker to the first instance of the active app type
+    // alphabetically; user can switch via the dropdown.
+    openAddCFToArr(cf, appType) {
+      const insts = (this.instances || []).filter(i => i.type === appType);
+      const defaultId = insts.length > 0 ? insts.slice().sort((a, b) => a.name.localeCompare(b.name))[0].id : '';
+      this.addCFToArrModal = {
+        open: true,
+        cfName: cf?.name || '',
+        trashId: cf?.isCustom ? '' : (cf?.trashId || ''),
+        customCFId: cf?.isCustom ? (cf?.id || '') : '',
+        appType,
+        instanceId: defaultId,
+        saving: false,
+        error: '',
+      };
+    },
+
+    cancelAddCFToArr() {
+      this.addCFToArrModal = { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', saving: false, error: '' };
+    },
+
+    // Instances of the modal's app type, sorted alphabetically for a
+    // stable picker. Recomputed on each call rather than cached because
+    // the modal is short-lived and the instances list is small.
+    addCFToArrInstances() {
+      const at = this.addCFToArrModal?.appType;
+      if (!at) return [];
+      return (this.instances || []).filter(i => i.type === at).sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    // "Add to Radarr (main)" / "Add to Sonarr 4K" — surfaces the
+    // selected instance name in the primary button so the user can see
+    // where the CF is going without scanning the dropdown.
+    addCFToArrButtonLabel() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.instanceId) return 'Add';
+      const inst = (this.instances || []).find(i => i.id === m.instanceId);
+      if (!inst) return 'Add';
+      return 'Add to ' + inst.name;
+    },
+
+    async commitAddCFToArr() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.instanceId || m.saving) return;
+      this.addCFToArrModal.saving = true;
+      this.addCFToArrModal.error = '';
+      try {
+        const body = m.trashId ? { trashIds: [m.trashId] } : { customCFIds: [m.customCFId] };
+        const r = await fetch(`/api/instances/${m.instanceId}/cfs/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          let msg = 'Failed to add CF to Arr';
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.addCFToArrModal.error = msg;
+          this.addCFToArrModal.saving = false;
+          return;
+        }
+        const result = await r.json();
+        const instName = ((this.instances || []).find(i => i.id === m.instanceId)?.name) || 'Arr';
+        if (result.added?.length > 0) {
+          this.showToast(`Added "${m.cfName}" to ${instName}.`, 'success', 4000);
+        } else if (result.skipped?.length > 0) {
+          this.showToast(`"${m.cfName}" already exists on ${instName} — skipped.`, 'info', 4000);
+        } else if (result.failed?.length > 0) {
+          this.addCFToArrModal.error = result.failed[0].error || 'Add failed';
+          this.addCFToArrModal.saving = false;
+          return;
+        }
+        this.cancelAddCFToArr();
+      } catch (e) {
+        this.addCFToArrModal.error = e?.message || 'Network error';
+        this.addCFToArrModal.saving = false;
+      }
     },
 
     // Edit-mode alternative to commitCloneCF: instead of POSTing the

@@ -921,21 +921,26 @@ export default {
       const selected = {};
       const scores = {};
       const inProfile = {};
-      // Mark CFs already in the profile (show as ON + disabled)
+      // Mark CFs already in the profile so they can be hidden from the
+      // modal (they belong to the main Edit Scores panel, not the "add"
+      // flow). Key by both trashId AND name so the lookup works for
+      // TRaSH profiles (CFs carry trashId) and Arr instance profiles
+      // (CFs only carry name because Arr's API doesn't store trash_id).
+      let inProfileCount = 0;
       for (const s of (sb.editOriginal?.scores || [])) {
-        const key = s.trashId || s.name;
-        selected[key] = true;
-        scores[key] = sb.editScores[key] ?? s.score;
-        inProfile[key] = true;
+        if (s.trashId) inProfile[s.trashId] = true;
+        if (s.name) inProfile[s.name] = true;
+        inProfileCount++;
       }
-      // Also mark CFs added via editToggles
+      // Pre-check CFs the user has already added via earlier modal
+      // sessions so they show as selected on re-open.
       for (const key of Object.keys(sb.editToggles)) {
         if (sb.editToggles[key] === 'added') {
           selected[key] = true;
           scores[key] = sb.editScores[key] ?? 0;
         }
       }
-      this.sandboxCFBrowser = { open: true, appType, categories: [], customCFs: [], selected, scores, inProfile, expanded: {}, filter: '' };
+      this.sandboxCFBrowser = { open: true, appType, categories: [], customCFs: [], selected, scores, inProfile, inProfileCount, expanded: {}, filter: '' };
       // Fetch categories + custom CFs
       try {
         const [cfRes, customRes] = await Promise.all([
@@ -952,13 +957,17 @@ export default {
       } catch (e) { console.error('openSandboxCFBrowser:', e); }
     },
 
-    closeSandboxCFBrowser() {
+    // Apply the modal's selection state to the sandbox edit state.
+    // Pure state mutation, no network. Used by both the no-unmatched
+    // direct path and the post-Add-to-Arr / Continue-without-adding
+    // resume paths so the apply logic stays single-source.
+    _applySandboxCFBrowserSelection() {
       const br = this.sandboxCFBrowser;
       const sb = this.sandbox[br.appType];
-      if (!sb) { br.open = false; return; }
-      // Apply selected CFs to edit state
+      if (!sb) return;
       if (!sb._addedCFNames) sb._addedCFNames = {};
-      // Remove previously added CFs that are now deselected
+      // Remove previously-added CFs that the user has now deselected
+      // in this modal session.
       for (const key of Object.keys(sb.editToggles)) {
         if (sb.editToggles[key] === 'added' && !br.selected[key]) {
           delete sb.editToggles[key];
@@ -966,7 +975,8 @@ export default {
           delete sb._addedCFNames[key];
         }
       }
-      // Add newly selected CFs
+      // Resolve display names so the sandbox UI can label the added
+      // rows. Both TRaSH catalog (by trashId) and Custom CFs (by id).
       const allCFs = {};
       for (const cat of br.categories) {
         for (const g of cat.groups) {
@@ -974,6 +984,9 @@ export default {
         }
       }
       for (const cf of br.customCFs || []) { allCFs[cf.id] = cf.name; }
+      // Add the user's newly-selected CFs. Skip any that are already
+      // part of the editOriginal profile (those live in the main Edit
+      // Scores panel, not the "added" set).
       for (const [key, on] of Object.entries(br.selected)) {
         if (on) {
           const existing = (sb.editOriginal?.scores || []).find(s => s.trashId === key);
@@ -984,19 +997,195 @@ export default {
           }
         }
       }
-      br.open = false;
-      this.applySandboxEdit(br.appType);
+    },
+
+    // Returns the names + key payloads for selected CFs that don't yet
+    // exist on the sandbox's chosen Arr instance. Used to decide whether
+    // to prompt the user to push them first (sandbox scoring needs the
+    // CF entity in Arr so the /parse endpoint can match against it).
+    async _findUnmatchedSelectedCFsInArr(appType) {
+      const sb = this.sandbox[appType];
+      const br = this.sandboxCFBrowser;
+      if (!sb?.instanceId || !br) return { unmatched: [], trashIds: [], customCFIds: [] };
+      let arrCFs = [];
+      try {
+        const r = await fetch(`/api/instances/${sb.instanceId}/cfs`);
+        if (!r.ok) return { unmatched: [], trashIds: [], customCFIds: [] };
+        arrCFs = await r.json() || [];
+      } catch (_) { return { unmatched: [], trashIds: [], customCFIds: [] }; }
+      const arrNames = new Set(arrCFs.map(c => (c.name || '').toLowerCase()));
+      // Build a TRaSH-CF lookup (key → {name, trashId}) and a Custom-CF
+      // lookup (key → {name, customCFId}) from the modal's catalog so we
+      // can return the right ID type for the /api/instances/{id}/cfs/add
+      // endpoint, which accepts the two arrays separately.
+      const trashByKey = {};
+      const customByKey = {};
+      for (const cat of br.categories || []) {
+        for (const g of cat.groups || []) {
+          for (const cf of g.cfs || []) trashByKey[cf.trashId] = cf;
+        }
+      }
+      for (const cf of br.customCFs || []) customByKey[cf.id] = cf;
+      const unmatched = [];
+      const trashIds = [];
+      const customCFIds = [];
+      for (const [key, on] of Object.entries(br.selected || {})) {
+        if (!on) continue;
+        const tcf = trashByKey[key];
+        const ccf = customByKey[key];
+        const name = tcf?.name || ccf?.name || key;
+        if (arrNames.has(name.toLowerCase())) continue;
+        unmatched.push(name);
+        if (tcf) trashIds.push(tcf.trashId);
+        else if (ccf) customCFIds.push(ccf.id);
+      }
+      return { unmatched, trashIds, customCFIds };
+    },
+
+    async closeSandboxCFBrowser() {
+      const br = this.sandboxCFBrowser;
+      const appType = br.appType;
+      const sb = this.sandbox[appType];
+      if (!sb) { br.open = false; return; }
+
+      // Sandbox scoring needs every "selected" CF to also exist in the
+      // chosen Arr instance, because Arr's /parse endpoint is what
+      // produces matchedCFs. A CF you selected but never pushed to Arr
+      // will show in profileData.scores but never match a release, so
+      // the total stays wrong silently. Detect this here, prompt the
+      // user with three actions before applying the selection.
+      const { unmatched, trashIds, customCFIds } = await this._findUnmatchedSelectedCFsInArr(appType);
+      if (unmatched.length === 0) {
+        // Happy path: every selected CF already lives in Arr.
+        this._applySandboxCFBrowserSelection();
+        br.open = false;
+        this.applySandboxEdit(appType);
+        return;
+      }
+
+      const inst = (this.instances || []).find(i => i.id === sb.instanceId);
+      const instName = inst?.name || 'Arr';
+      const list = unmatched.map(n => '• ' + n).join('\n');
+      const message =
+        'These custom formats are not in ' + instName + ' yet, so the sandbox cannot score them against your releases:\n\n' +
+        list + '\n\n' +
+        'Add them to ' + instName + ' now (custom format entities only, no profile changes), or continue and leave the sandbox count incomplete.';
+
+      this.confirmModal = {
+        show: true,
+        title: 'Add to Arr first?',
+        message,
+        confirmLabel: 'Add to ' + instName,
+        secondaryLabel: 'Continue without adding',
+        cancelLabel: 'Cancel',
+        onConfirm: async () => {
+          // Push the unmatched CFs to the chosen instance, then re-parse
+          // the existing sandbox results so the new Arr CFs surface in
+          // matchedCFs. We deliberately ignore "skipped" entries (race
+          // where another tab added the same CF) — the re-parse picks
+          // up whatever is there.
+          try {
+            const body = {};
+            if (trashIds.length > 0) body.trashIds = trashIds;
+            if (customCFIds.length > 0) body.customCFIds = customCFIds;
+            const r = await fetch(`/api/instances/${sb.instanceId}/cfs/add`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+              this.showToast('Failed to add CFs to ' + instName + '.', 'error', 5000);
+              return;
+            }
+            const result = await r.json();
+            const addedN = (result.added || []).length;
+            const skippedN = (result.skipped || []).length;
+            const failedN = (result.failed || []).length;
+            let toastMsg = '';
+            if (addedN > 0) toastMsg += addedN + ' added';
+            if (skippedN > 0) toastMsg += (toastMsg ? ', ' : '') + skippedN + ' already existed';
+            if (failedN > 0) toastMsg += (toastMsg ? ', ' : '') + failedN + ' failed';
+            this.showToast(toastMsg + ' on ' + instName + '.', failedN > 0 ? 'error' : 'success', 4500);
+            this._applySandboxCFBrowserSelection();
+            br.open = false;
+            await this._reparseSandboxResults(appType);
+            this.applySandboxEdit(appType);
+          } catch (e) {
+            this.showToast('Network error adding CFs.', 'error', 5000);
+          }
+        },
+        onSecondary: () => {
+          // Apply selections without pushing to Arr. The added CFs will
+          // show in breakdown but contribute 0 since Arr's /parse will
+          // not return them as matched against any release.
+          this._applySandboxCFBrowserSelection();
+          br.open = false;
+          this.applySandboxEdit(appType);
+        },
+        onCancel: () => {
+          // Keep the modal open so the user can review their picks. No
+          // state mutation, no close.
+        },
+      };
+    },
+
+    // Re-runs the batch parse against the sandbox instance for the
+    // existing pasted titles, then applies the current edit state on
+    // top. Used after pushing new CFs to Arr so the resulting matched
+    // sets include the newly-available CF entities. No-op when there
+    // are no titles to re-parse or no instance is selected.
+    async _reparseSandboxResults(appType) {
+      const sb = this.sandbox[appType];
+      if (!sb?.instanceId || !sb.results?.length) return;
+      const titles = sb.results.map(r => r.title).filter(Boolean);
+      if (titles.length === 0) return;
+      try {
+        const r = await fetch('/api/scoring/parse/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceId: sb.instanceId, titles })
+        });
+        if (!r.ok) return;
+        const fresh = await r.json();
+        if (!Array.isArray(fresh)) return;
+        // Preserve any per-row selection flags (e.g. _selected) that
+        // live on the existing rows but aren't part of the parse output.
+        const byTitle = {};
+        for (const old of sb.results) byTitle[old.title] = old;
+        sb.results = fresh.map(res => {
+          const old = byTitle[res.title];
+          if (old) return { ...old, ...res };
+          return res;
+        });
+      } catch (_) { /* leave existing results in place on error */ }
+    },
+
+    sandboxCFBrowserCatAddable(cat) {
+      // Number of CFs in this category that are NOT already in the
+      // selected profile. Used to hide categories where every CF is
+      // already covered by the main Edit Scores panel.
+      let n = 0;
+      for (const g of cat.groups) {
+        for (const cf of g.cfs) {
+          const inProf = this.sandboxCFBrowser.inProfile[cf.trashId] || this.sandboxCFBrowser.inProfile[cf.name];
+          if (!inProf) n++;
+        }
+      }
+      return n;
     },
 
     sandboxCFBrowserCatCount(cat) {
-      let count = 0;
+      let selected = 0;
+      let addable = 0;
       for (const g of cat.groups) {
         for (const cf of g.cfs) {
-          if (this.sandboxCFBrowser.selected[cf.trashId]) count++;
+          const inProf = this.sandboxCFBrowser.inProfile[cf.trashId] || this.sandboxCFBrowser.inProfile[cf.name];
+          if (inProf) continue;
+          addable++;
+          if (this.sandboxCFBrowser.selected[cf.trashId]) selected++;
         }
       }
-      const total = cat.groups.reduce((sum, g) => sum + g.cfs.length, 0);
-      return count + '/' + total;
+      return selected + '/' + addable;
     },
 
     async sandboxSearchCFs(appType, query) {

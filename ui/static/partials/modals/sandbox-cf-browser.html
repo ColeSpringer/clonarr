@@ -10,10 +10,19 @@
         <button class="btn btn-sm" @click="closeSandboxCFBrowser()">Done</button>
       </div>
 
+      <!-- Context line: how many CFs are already in the profile and
+           therefore hidden from this list. The "Add" flow is for CFs
+           the profile does NOT already have; existing CFs live in the
+           Edit Scores panel. -->
+      <div x-show="(sandboxCFBrowser.inProfileCount || 0) > 0"
+           style="padding:8px 20px;border-bottom:1px solid var(--border-subtle);font-size:12px;color:var(--text-muted)">
+        <span x-text="(sandboxCFBrowser.inProfileCount || 0) + ' custom format' + ((sandboxCFBrowser.inProfileCount || 0) === 1 ? '' : 's') + ' already in this profile (adjust in the Edit Scores panel).'"></span>
+      </div>
+
       <!-- Category list -->
       <div style="flex:1;overflow-y:auto;padding:8px 0">
         <template x-for="cat in sandboxCFBrowser.categories || []" :key="cat.category">
-          <div style="margin-bottom:4px">
+          <div x-show="sandboxCFBrowserCatAddable(cat) > 0" style="margin-bottom:4px">
             <!-- Category header -->
             <div :class="getCategoryClass(cat.category)" style="margin:0 8px">
               <button type="button" class="pb-cat-header"
@@ -25,23 +34,22 @@
               </button>
             </div>
 
-            <!-- CFs in category -->
+            <!-- CFs in category. Rows for CFs already in the profile
+                 are hidden so the user only sees what they can add. -->
             <div x-show="sandboxCFBrowser.expanded[cat.category]" style="padding:0 8px">
               <template x-for="group in cat.groups" :key="group.name">
                 <div>
                   <template x-for="cf in group.cfs" :key="cf.trashId">
-                    <div x-show="!sandboxCFBrowser.filter || cf.name.toLowerCase().includes(sandboxCFBrowser.filter.toLowerCase())"
+                    <div x-show="(!sandboxCFBrowser.filter || cf.name.toLowerCase().includes(sandboxCFBrowser.filter.toLowerCase())) && !sandboxCFBrowser.inProfile[cf.trashId] && !sandboxCFBrowser.inProfile[cf.name]"
                          style="display:flex;align-items:center;gap:8px;padding:2px 14px;font-size:13px"
                          @mouseenter="$el.style.background='var(--bg-elevated-hover)'" @mouseleave="$el.style.background=''">
                       <label class="toggle toggle-sm">
                         <input type="checkbox"
                                :checked="sandboxCFBrowser.selected[cf.trashId]"
-                               :disabled="sandboxCFBrowser.inProfile[cf.trashId]"
                                @change="sandboxCFBrowser.selected[cf.trashId] = $event.target.checked; if($event.target.checked) { sandboxCFBrowser.scores[cf.trashId] = sandboxCFBrowser.scores[cf.trashId] ?? 0; }">
                         <span class="slider"></span>
                       </label>
-                      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"
-                            :style="sandboxCFBrowser.inProfile[cf.trashId] ? 'color:var(--text-muted)' : 'color:var(--text-body)'" x-text="cf.name"></span>
+                      <span style="flex:1;color:var(--text-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0" x-text="cf.name"></span>
                       <input x-show="sandboxCFBrowser.selected[cf.trashId]" type="number" class="pb-input"
                              style="width:75px;flex-shrink:0;font-size:12px;text-align:right;font-family:monospace"
                              :value="sandboxCFBrowser.scores[cf.trashId] ?? 0"
@@ -66,7 +74,7 @@
             </button>
             <div x-show="sandboxCFBrowser.expanded['Custom']">
               <template x-for="cf in sandboxCFBrowser.customCFs || []" :key="cf.id">
-                <div x-show="!sandboxCFBrowser.filter || cf.name.toLowerCase().includes(sandboxCFBrowser.filter.toLowerCase())"
+                <div x-show="(!sandboxCFBrowser.filter || cf.name.toLowerCase().includes(sandboxCFBrowser.filter.toLowerCase())) && !sandboxCFBrowser.inProfile[cf.id] && !sandboxCFBrowser.inProfile[cf.name]"
                      style="display:flex;align-items:center;gap:8px;padding:2px 14px;font-size:13px"
                      @mouseenter="$el.style.background='var(--bg-elevated-hover)'" @mouseleave="$el.style.background=''">
                   <label class="toggle toggle-sm">

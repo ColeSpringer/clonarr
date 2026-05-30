@@ -421,7 +421,7 @@ func BuildSyncPlan(ad *AppData, instance Instance, req SyncRequest, imported *Im
 			specsMatch = func(existing *arr.ArrCF) bool { return cfSpecsMatch(trashCF, existing) }
 		} else if ccf, ok := customCFMap[cfTrashID]; ok {
 			cfName = ccf.Name
-			arrCF := customCFToArr(ccf)
+			arrCF := CustomCFToArr(ccf)
 			specsMatch = func(existing *arr.ArrCF) bool { return arrCFSpecsMatch(arrCF, existing) }
 		} else {
 			log.Printf("Warning: CF %s referenced by profile but not found", cfTrashID)
@@ -1017,7 +1017,7 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 		if trashCF, ok := ad.CustomFormats[action.TrashID]; ok {
 			arrCF = TrashCFToArr(trashCF)
 		} else if ccf, ok := customCFMap[action.TrashID]; ok {
-			arrCF = customCFToArr(ccf)
+			arrCF = CustomCFToArr(ccf)
 		} else {
 			continue
 		}
@@ -2424,8 +2424,8 @@ func findProfile(ad *AppData, trashID string) *TrashQualityProfile {
 
 // --- Custom CF helpers for sync ---
 
-// customCFToArr converts a CustomCF (specs already in Arr format) to an arr.ArrCF for create/update.
-func customCFToArr(cf *CustomCF) *arr.ArrCF {
+// CustomCFToArr converts a CustomCF (specs already in Arr format) to an arr.ArrCF for create/update.
+func CustomCFToArr(cf *CustomCF) *arr.ArrCF {
 	// Convert specification fields to Arr format (TRaSH {"value":X} → Arr [{"name":"value","value":X}])
 	specs := make([]arr.ArrSpecification, len(cf.Specifications))
 	for i, spec := range cf.Specifications {

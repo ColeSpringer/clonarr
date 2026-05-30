@@ -928,6 +928,112 @@ func (s *Server) handleInstanceCFs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, cfs)
 }
 
+// handleAddCFsToInstance pushes one or more TRaSH or user-custom CFs into
+// an Arr instance's CustomFormats list. Profiles are NOT touched — the
+// CFs become available for matching (so the Scoring Sandbox /parse path
+// can pick them up, and so the next sync has them ready) without
+// automatically appearing in any quality profile.
+//
+// Collisions (a CF with the same name already exists in Arr) are
+// reported back as "skipped"; existing CFs are NEVER overwritten so a
+// stray click can't clobber user edits. Failures (network, validation)
+// continue to the next CF instead of aborting the whole batch.
+func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) {
+	inst, ok := s.requireInstance(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		TrashIDs    []string `json:"trashIds"`
+		CustomCFIDs []string `json:"customCFIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "Invalid request body")
+		return
+	}
+	if len(body.TrashIDs) == 0 && len(body.CustomCFIDs) == 0 {
+		writeError(w, 400, "No CFs specified")
+		return
+	}
+
+	// Resolve each id to a TRaSH or custom CF, then to an Arr API payload.
+	type pushItem struct {
+		name  string
+		arrCF *arr.ArrCF
+	}
+	var items []pushItem
+
+	ad := s.Core.Trash.GetAppData(inst.Type)
+	for _, tid := range body.TrashIDs {
+		if ad == nil {
+			break
+		}
+		cf, ok := ad.CustomFormats[tid]
+		if !ok {
+			continue
+		}
+		items = append(items, pushItem{name: cf.Name, arrCF: core.TrashCFToArr(cf)})
+	}
+	for _, cid := range body.CustomCFIDs {
+		ccf, ok := s.Core.CustomCFs.Get(cid)
+		if !ok {
+			continue
+		}
+		if ccf.AppType != inst.Type {
+			continue // wrong app type, skip silently
+		}
+		items = append(items, pushItem{name: ccf.Name, arrCF: core.CustomCFToArr(&ccf)})
+	}
+
+	if len(items) == 0 {
+		writeError(w, 404, "None of the requested CFs were found")
+		return
+	}
+
+	// One ListCustomFormats call up front for collision detection — cheaper
+	// than checking per CF and gives the same answer for the batch.
+	client := arr.NewArrClient(inst.URL, inst.APIKey, s.Core.HTTPClient)
+	existing, err := client.ListCustomFormats()
+	if err != nil {
+		writeError(w, 502, "Failed to list existing CFs: "+err.Error())
+		return
+	}
+	existingByName := make(map[string]bool, len(existing))
+	for _, cf := range existing {
+		existingByName[strings.ToLower(cf.Name)] = true
+	}
+
+	added := []string{}
+	skipped := []string{}
+	type failedItem struct {
+		Name  string `json:"name"`
+		Error string `json:"error"`
+	}
+	failed := []failedItem{}
+
+	for _, it := range items {
+		if existingByName[strings.ToLower(it.name)] {
+			skipped = append(skipped, it.name)
+			continue
+		}
+		if _, err := client.CreateCustomFormat(it.arrCF); err != nil {
+			failed = append(failed, failedItem{Name: it.name, Error: err.Error()})
+			continue
+		}
+		added = append(added, it.name)
+		// Throttle between writes to be gentle on slow Arr instances;
+		// matches the per-create delay used by the main sync engine.
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	writeJSON(w, map[string]any{
+		"added":   added,
+		"skipped": skipped,
+		"failed":  failed,
+	})
+}
+
 func (s *Server) handleInstanceQualitySizes(w http.ResponseWriter, r *http.Request) {
 	inst, ok := s.requireInstance(w, r)
 	if !ok {
