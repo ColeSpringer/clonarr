@@ -265,8 +265,12 @@
         </template>
       </div>
 
-      <!-- Min upgrade -->
+      <!-- Min upgrade - only meaningful when Upgrades is on; hidden
+           when the effective upgradeAllowed (override else profile
+           default) is false. Min upgrade / Cutoff score / Cutoff
+           quality all share this gate. -->
       <div class="sp-basics-item"
+           x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
            x-data="{ get _def() { return profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1; },
                      get _val() { return pdOverrides?.minUpgradeFormatScore?.value ?? this._def; },
                      get _mod() { return Number(this._val) !== Number(this._def); } }">
@@ -288,8 +292,9 @@
         </template>
       </div>
 
-      <!-- Cutoff score -->
+      <!-- Cutoff score - hidden when Upgrades is off (see Min upgrade). -->
       <div class="sp-basics-item"
+           x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
            x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000; },
                      get _val() { return pdOverrides?.cutoffFormatScore?.value ?? this._def; },
                      get _mod() { return Number(this._val) !== Number(this._def); } }">
@@ -335,8 +340,10 @@
       </div>
       <div class="sp-basics-divider"></div>
 
-      <!-- Cutoff quality (dropdown of allowed qualities) -->
+      <!-- Cutoff quality (dropdown of allowed qualities) - hidden
+           when Upgrades is off (see Min upgrade). -->
       <div class="sp-basics-item"
+           x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
            x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoff || ''; },
                      get _val() { return pdOverrides?.cutoffQuality || this._def; },
                      get _mod() { return this._val !== this._def && this._val !== ''; },
@@ -1325,8 +1332,9 @@
                         :aria-label="'Reset Min score to ' + _def"
                         x-tt="'Reset to ' + _def">&#8634;</button>
               </div>
-              <!-- Min upgrade -->
+              <!-- Min upgrade - only meaningful when Upgrades is on. -->
               <div class="sp-ov-basics-row"
+                   x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
                    x-data="{ get _def() { return profileDetail?.detail?.profile?.minUpgradeFormatScore ?? 1; },
                              get _val() { return pdOverrides?.minUpgradeFormatScore?.value ?? this._def; },
                              get _mod() { return Number(this._val) !== Number(this._def); } }"
@@ -1341,8 +1349,9 @@
                         :aria-label="'Reset Min upgrade to ' + _def"
                         x-tt="'Reset to ' + _def">&#8634;</button>
               </div>
-              <!-- Cutoff score -->
+              <!-- Cutoff score - only meaningful when Upgrades is on. -->
               <div class="sp-ov-basics-row"
+                   x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
                    x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoffFormatScore ?? 10000; },
                              get _val() { return pdOverrides?.cutoffFormatScore?.value ?? this._def; },
                              get _mod() { return Number(this._val) !== Number(this._def); } }"
@@ -1373,8 +1382,9 @@
                         :aria-label="'Reset Upgrades to ' + (_def ? 'On' : 'Off')"
                         x-tt="'Reset to ' + (_def ? 'On' : 'Off')">&#8634;</button>
               </div>
-              <!-- Cutoff quality -->
+              <!-- Cutoff quality - only meaningful when Upgrades is on. -->
               <div class="sp-ov-basics-row"
+                   x-show="pdOverrides?.upgradeAllowed?.value ?? !!(profileDetail?.detail?.profile?.upgradeAllowed)"
                    x-data="{ get _def() { return profileDetail?.detail?.profile?.cutoff || ''; },
                              get _val() { return pdOverrides?.cutoffQuality || this._def; },
                              get _mod() { return this._val !== this._def && this._val !== ''; },
