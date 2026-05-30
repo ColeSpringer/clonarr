@@ -7,7 +7,7 @@
         <span>Release Details</span>
         <span style="font-size:11px;color:var(--text-secondary);font-weight:400">(selectable · copy for sharing)</span>
       </h2>
-      <pre style="background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px;padding:12px 14px;margin:0;max-height:60vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.55;color:var(--text-body);white-space:pre-wrap;user-select:text" x-text="sandboxCopyModal.text"></pre>
+      <pre id="sandbox-copy-pre" style="background:var(--bg-page);border:1px solid var(--border-subtle);border-radius:6px;padding:12px 14px;margin:0;max-height:60vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.55;color:var(--text-body);white-space:pre-wrap;user-select:text" x-text="sandboxCopyModal.text"></pre>
       <div class="modal-actions">
         <button class="btn" @click="sandboxCopyModal.show = false">Close</button>
         <button class="btn btn-primary" @click="copySandboxModalText()">

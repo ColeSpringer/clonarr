@@ -291,10 +291,46 @@ export default {
       };
     },
 
-    copySandboxModalText() {
-      copyToClipboard(this.sandboxCopyModal.text);
-      this.sandboxCopyModal.copied = true;
-      setTimeout(() => { this.sandboxCopyModal.copied = false; }, 1500);
+    async copySandboxModalText() {
+      const text = this.sandboxCopyModal.text || '';
+      let ok = false;
+      // Modern API works on HTTPS + localhost. We try it first because
+      // it doesn't depend on DOM selection state.
+      if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); ok = true; } catch (_) { /* fall through */ }
+      }
+      // Fallback: select the visible <pre>'s contents and run
+      // execCommand('copy'). The pre is already in the modal's DOM and
+      // visible, so it survives focus-trap inert ancestors and Chrome's
+      // "off-screen textarea looks fake" rejections that broke the
+      // generic copyToClipboard helper here.
+      if (!ok) {
+        const pre = document.getElementById('sandbox-copy-pre');
+        if (pre) {
+          const sel = document.getSelection();
+          const saved = [];
+          if (sel) {
+            for (let i = 0; i < sel.rangeCount; i++) saved.push(sel.getRangeAt(i).cloneRange());
+          }
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(pre);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            ok = document.execCommand('copy');
+          } catch (_) { /* leave ok=false */ }
+          if (sel) {
+            sel.removeAllRanges();
+            for (const r of saved) sel.addRange(r);
+          }
+        }
+      }
+      if (ok) {
+        this.sandboxCopyModal.copied = true;
+        setTimeout(() => { this.sandboxCopyModal.copied = false; }, 1500);
+      } else if (typeof this.showToast === 'function') {
+        this.showToast('Copy failed. Select the text and copy manually.', 'error', 4000);
+      }
     },
 
     // Drag-reorder rows. Works only when sortCol is 'manual' (or user just dropped —
