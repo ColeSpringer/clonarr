@@ -8,7 +8,7 @@ A fully visual TRaSH-Guides sync tool for Radarr and Sonarr. Browse, customize, 
 
 Build profiles from scratch or start from TRaSH-Guides templates. Compare your Arr profiles against TRaSH-Guides to spot what's missing or incorrect. Test how releases score in the Scoring Sandbox. Track every change with sync history and rollback. Sync to multiple Radarr and Sonarr instances.
 
-Auto-sync keeps your profiles up to date when TRaSH-Guides updates or when a profile is edited directly in Radarr/Sonarr. Supports notifications via Discord, Gotify, Pushover, ntfy, and Apprise.
+Auto-sync keeps your profiles up to date when TRaSH-Guides updates or when a profile is edited directly in Radarr/Sonarr. You choose what happens when a change is detected: apply automatically, just get notified so you can review and apply manually, or wait a set delay before applying. Notifications via Discord, Gotify, Pushover, ntfy, and Apprise.
 
 Free, open source, and self-hosted.
 
@@ -25,7 +25,7 @@ Navigation is grouped into **Library**, **Tools**, and **App** (shown as a left 
 **Profiles**
 - **Sync a profile** - push a TRaSH quality profile into Radarr or Sonarr. Create a new profile or update an existing one, with a dry-run preview that shows exactly what will change before anything is written.
 - **Customize a profile** - before syncing, add or remove custom formats, change scores, and adjust quality items, language, cutoff, and upgrade settings. Your changes live on the sync rule; the underlying guide profile is never modified.
-- **Auto-sync** - keep profiles up to date automatically. Clonarr can sync when the guide changes, and detect "drift" when someone edits a profile directly in Radarr/Sonarr. Rules with auto-sync turned off still get an "updates available" flag so you can review and apply yourself. Auto-sync can be paused per instance.
+- **Auto-sync** - keep profiles up to date automatically. You pick what happens when a change is detected: **Apply automatically** writes to Arr right away, **Just notify me** sends a notification and shows an "updates available" badge so you review and apply on your own, **Wait before applying** detects now and applies after a delay you set. Detection covers both guide updates and "drift" when someone edits a profile directly in Radarr/Sonarr. Auto-sync can be paused per instance, and individual rules with auto-sync off still get the updates flag.
 - **Clone a sync rule** - copy a configured profile, with all its customizations, under a new name, into the same instance or another one of the same type.
 - **Sync history and rollback** - a change log per profile (custom formats added/removed, scores before and after, quality and setting changes), with one-click rollback to a previous state.
 - **Compare** - view your Arr profile against the guide profile side by side, so you can see what is missing, wrong, or extra.

@@ -18,4 +18,4 @@ To use a custom format that is not part of the guide, first create or import it 
 
 ## Keeping profiles up to date
 
-**Auto-sync** (Settings > Auto-sync) keeps profiles current when the guide changes, or when someone edits the profile directly in Radarr/Sonarr (drift). Rules with auto-sync turned off still get an "updates available" flag, so you can review and apply on your own schedule. You can also pause auto-sync per instance.
+**Auto-sync** (Settings > Auto-sync) keeps profiles current when the guide changes, or when someone edits the profile directly in Radarr/Sonarr (drift). Pick what happens when a change is found: **Apply automatically** (default) syncs right away, **Just notify me** sends a notification so you can review and apply yourself, and **Wait before applying** delays the apply by a duration you choose. Rules with auto-sync turned off still get an "updates available" flag. You can also pause auto-sync per instance.
