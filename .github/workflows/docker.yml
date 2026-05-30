@@ -84,11 +84,24 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "value=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          else
-            echo "value=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          fi
+          # Tag pushes carry the semver (e.g. "3.0.0"). Branch pushes
+          # include the build date + short SHA so testers can see at
+          # a glance when an image was cut, and the channel prefix
+          # (dev vs preview) tells them which branch produced it.
+          # Example: preview-2026-05-30-8268786 instead of dev-8268786.
+          DATE=$(date -u +%Y-%m-%d)
+          SHA_SHORT=${GITHUB_SHA::7}
+          case "${{ github.ref }}" in
+            refs/tags/v*)
+              echo "value=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+              ;;
+            refs/heads/feature/v3-modern)
+              echo "value=preview-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "value=dev-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
+              ;;
+          esac
 
       - name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
