@@ -51,20 +51,10 @@ func NewDriftRunner(app *App) *DriftRunner {
 // aggregate Errors slice but do not abort the walk — one broken
 // instance shouldn't hide drift on the rest.
 func (d *DriftRunner) RunOnce(ctx context.Context) ([]DriftResult, error) {
-	return d.runOnceInternal(ctx, false)
+	return d.runOnceInternal(ctx)
 }
 
-// RunOnceManual runs the same drift detection pass but suppresses
-// notification dispatch. Use this for any user-initiated entry point
-// (Check button, /api/drift/check via UI) where the user is already
-// looking at the result — Discord/NTFY/etc would just create noise.
-// Scheduled runs (DriftWatch) still call RunOnce so users get notified
-// about drift discovered while they're away.
-func (d *DriftRunner) RunOnceManual(ctx context.Context) ([]DriftResult, error) {
-	return d.runOnceInternal(ctx, true)
-}
-
-func (d *DriftRunner) runOnceInternal(ctx context.Context, suppressNotifications bool) ([]DriftResult, error) {
+func (d *DriftRunner) runOnceInternal(ctx context.Context) ([]DriftResult, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -330,21 +320,14 @@ func (d *DriftRunner) runOnceInternal(ctx context.Context, suppressNotifications
 	// Fire notifications outside the Config.Update closures — provider
 	// HTTP calls can block (Discord/Gotify timeouts), so we deliberately
 	// don't hold any locks across them. Order matches the per-rule walk
-	// so log lines stay correlated.
-	//
-	// suppressNotifications: user-initiated entry points (Check button,
-	// /api/drift/check via UI) skip dispatch because the user is already
-	// looking at the result and doesn't need Discord/NTFY noise on top.
-	// Scheduled runs (DriftWatch) keep firing so users get notified about
-	// drift discovered while they're away from the UI.
-	if !suppressNotifications {
-		for _, n := range pendingNotifs {
-			switch n.Event {
-			case driftEventDetected:
-				d.app.NotifyDriftDetected(n.summary())
-			case driftEventReconciled:
-				d.app.NotifyDriftReconciled(n.summary())
-			}
+	// so log lines stay correlated. Manual and scheduled entry points
+	// both reach here; per-agent event flags decide what actually sends.
+	for _, n := range pendingNotifs {
+		switch n.Event {
+		case driftEventDetected:
+			d.app.NotifyDriftDetected(n.summary())
+		case driftEventReconciled:
+			d.app.NotifyDriftReconciled(n.summary())
 		}
 	}
 
