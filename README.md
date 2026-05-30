@@ -4,9 +4,11 @@
 
 **Support / questions:** [#clonarr](https://discordapp.com/channels/492590071455940612/1495685561552207913) on the [TRaSH Guides Discord](https://trash-guides.info/discord) (under Community Apps). **Report bugs:** [GitHub issues](https://github.com/prophetse7en/clonarr/issues).
 
-A fully visual TRaSH Guides sync tool for Radarr and Sonarr. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes. No YAML configs, no CLI, just a browser.
+A fully visual TRaSH-Guides sync tool for Radarr and Sonarr. Browse, customize, and sync Custom Formats, Quality Profiles, Scores, and Quality Sizes. No YAML configs, no CLI, just a browser.
 
-Build profiles from scratch or start from TRaSH templates, compare your Arr profiles against TRaSH to see what's missing or wrong, test how releases score in the Scoring Sandbox, track every change with sync history and rollback, and sync to multiple Radarr and Sonarr instances. Auto-sync keeps your profiles current when TRaSH Guides updates, or when a profile is edited directly in Radarr/Sonarr, with notifications to Discord, Gotify, Pushover, ntfy, and Apprise.
+Build profiles from scratch or start from TRaSH-Guides templates. Compare your Arr profiles against TRaSH-Guides to spot what's missing or incorrect. Test how releases score in the Scoring Sandbox. Track every change with sync history and rollback. Sync to multiple Radarr and Sonarr instances.
+
+Auto-sync keeps your profiles up to date when TRaSH-Guides updates or when a profile is edited directly in Radarr/Sonarr. Supports notifications via Discord, Gotify, Pushover, ntfy, and Apprise.
 
 Free, open source, and self-hosted.
 
