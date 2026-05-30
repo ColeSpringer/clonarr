@@ -2,7 +2,7 @@
   <!-- ==================== SETTINGS PAGE ==================== -->
   <div class="page" x-show="currentSection === 'settings'" x-cloak>
     <div style="font-size:18px;font-weight:600;margin-bottom:4px">Settings</div>
-    <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Configure Clonarr — instances, TRaSH repository, Prowlarr, notifications, and display.</div>
+    <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Configure Clonarr: instances, the TRaSH-Guides repository, Prowlarr, notifications, and display.</div>
 
     <!-- Settings sub-section navigation now lives in the main sidebar
          (mirrors Profiles / Media Management / Advanced pattern). The
@@ -106,7 +106,7 @@
           </div>
 
           <!-- Prowlarr section (devMode-gated; powers the Scoring Sandbox).
-               Single config — only one Prowlarr can be connected — but the
+               Single config (only one Prowlarr can be connected) but the
                row + inline-form pattern matches Radarr/Sonarr so users
                see consistent button placement and save/cancel semantics
                across all three sections. "+ Add Prowlarr" hides once
@@ -138,7 +138,7 @@
               <button class="btn btn-sm btn-danger" style="margin-left:4px" @click="deleteProwlarr()">Delete</button>
             </div>
             <!-- Unconfigured placeholder — shown when nothing's connected and no add form is open -->
-            <div style="color:var(--text-muted);font-size:13px;padding:14px 16px" x-show="!config.prowlarr?.url && inlineEditingId !== 'new-prowlarr'">Prowlarr not configured — click + Add Prowlarr to connect.</div>
+            <div style="color:var(--text-muted);font-size:13px;padding:14px 16px" x-show="!config.prowlarr?.url && inlineEditingId !== 'new-prowlarr'">Prowlarr not configured. Click + Add Prowlarr to connect.</div>
             <!-- Edit / add form. Binds to prowlarrForm (temp state) so Cancel
                  can discard cleanly; Save commits to config.prowlarr. -->
             <template x-if="inlineEditingId === 'prowlarr' || inlineEditingId === 'new-prowlarr'">
@@ -197,9 +197,9 @@
           </div>
         </div>
 
-        <!-- ===== TRaSH Guides ===== -->
+        <!-- ===== TRaSH-Guides ===== -->
         <div x-show="settingsSection === 'trash'">
-          <div class="settings-section-title">TRaSH Guides</div>
+          <div class="settings-section-title">TRaSH-Guides</div>
           <div class="settings-section-desc">Repository settings and sync status.</div>
           <div class="setting-row">
             <div class="setting-label">Repository URL</div>
@@ -219,8 +219,8 @@
               <template x-if="trashStatus.cloned">
                 <span>
                   Commit <code x-text="trashStatus.commitHash" style="background:var(--bg-muted);padding:2px 6px;border-radius:4px;font-size:12px"></code>
-                  — Radarr: <span x-text="trashStatus.radarrCFs"></span> CFs, <span x-text="trashStatus.radarrProfiles"></span> profiles
-                  — Sonarr: <span x-text="trashStatus.sonarrCFs"></span> CFs, <span x-text="trashStatus.sonarrProfiles"></span> profiles
+                  &middot; Radarr: <span x-text="trashStatus.radarrCFs"></span> CFs, <span x-text="trashStatus.radarrProfiles"></span> profiles
+                  &middot; Sonarr: <span x-text="trashStatus.sonarrCFs"></span> CFs, <span x-text="trashStatus.sonarrProfiles"></span> profiles
                 </span>
               </template>
               <template x-if="!trashStatus.cloned">
@@ -283,7 +283,7 @@
                 </template>
               </select>
               <span x-show="config.pullInterval === 'specific' && config.pullSchedule.mode === 'monthly'"
-                    x-tt="'Day 1-28 only — months with fewer days (Feb) make 29-31 unreliable, so they are not offered.'">
+                    x-tt="'Day 1-28 only. Months with fewer days like February make 29-31 unreliable, so those days are not offered.'">
                 <select class="input" style="width:100px"
                         x-model.number="config.pullSchedule.dayOfMonth"
                         @change="saveConfig(['pullInterval'])"
@@ -371,8 +371,8 @@
                        @change="config.profileSync.mode = 'notify'; saveProfileSync()"
                        style="margin-top:3px">
                 <span>
-                  <span style="font-weight:500">Just notify me — I'll apply manually</span>
-                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">No automatic Arr writes. When new TRaSH commits are detected upstream, you get a notification (Discord/NTFY/Apprise — opt in per agent under Notifications) and a "↑ TRaSH updates available" badge in the sidebar. Click <em>Pull</em> when you're ready to apply.</span>
+                  <span style="font-weight:500">Just notify me. I'll apply manually</span>
+                  <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">No automatic Arr writes. When new TRaSH commits are detected upstream, you get a notification (Discord/NTFY/Apprise, opt in per agent under Notifications) and a "↑ TRaSH updates available" badge in the sidebar. Click <em>Pull</em> when you're ready to apply.</span>
                 </span>
               </label>
               <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px">
@@ -381,7 +381,7 @@
                        @change="config.profileSync.mode = 'delayed'; saveProfileSync()"
                        style="margin-top:3px">
                 <span>
-                  <span style="font-weight:500">Wait before applying — apply on a separate schedule</span>
+                  <span style="font-weight:500">Wait before applying. Apply on a separate schedule</span>
                   <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">Detect changes now (you get the same notification + badge as <em>Just notify me</em>), then apply them automatically after a delay you set below. Useful for a controlled apply window no matter when TRaSH publishes.</span>
                 </span>
               </label>
@@ -502,7 +502,7 @@
                   <span x-text="opt.label" :style="contentAlign === opt.value ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"></span>
                 </label>
               </template>
-              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Centered keeps content balanced in the page. Left-aligned anchors it next to the sidebar — useful on widescreen monitors where the centered version has a long gap between sidebar and content.</div>
+              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Centered keeps content balanced in the page. Left-aligned anchors it next to the sidebar. Useful on widescreen monitors where the centered layout leaves a long gap between sidebar and content.</div>
             </div>
           </div>
           <div class="setting-row">
@@ -514,7 +514,7 @@
                   <span x-text="opt.label" :style="navStyle === opt.value ? 'color:var(--text-primary)' : 'color:var(--text-muted)'"></span>
                 </label>
               </template>
-              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Sidebar keeps navigation on the left edge with an app switcher (Radarr/Sonarr) and grouped sections. Top navigation uses a horizontal bar across the top — closer to classic *arr-style layouts. Both modes use the same app-color theming.</div>
+              <div class="setting-help" style="flex-basis:100%;margin-top:4px">Sidebar puts navigation on the left edge, with an app switcher (Radarr/Sonarr) and grouped sections. Top navigation uses a horizontal bar across the page top, closer to classic *arr-style layouts. Both modes share the same app-color theming.</div>
             </div>
           </div>
         </div>
@@ -532,7 +532,7 @@
                   <option :value="opt.value" x-text="opt.label"></option>
                 </template>
               </select>
-              <div class="setting-help">How users log in. <strong>Forms</strong> for most users. <strong>Basic</strong> behind a reverse proxy that handles login. <strong>None</strong> disables auth entirely — only safe behind another auth layer or on a machine not reachable from other devices.</div>
+              <div class="setting-help">How users log in. <strong>Forms</strong> (default) shows a standard login page. <strong>Basic</strong> uses HTTP Basic Auth, for when a reverse proxy handles login. <strong>None</strong> disables auth completely. Only choose None when another auth layer protects Clonarr, or when no other device on the network can reach the host.</div>
             </div>
           </div>
 
@@ -562,7 +562,7 @@
                 <br><br>
                 <strong>Set explicitly</strong> to narrow: <code>192.168.0.0/24</code> (home VLAN), <code>10.0.0.0/24</code> (WireGuard), <code>192.168.0.5/32</code> (one device). Loopback is always trusted so healthchecks work.
                 <br><br>
-                <strong>Lock via env var</strong> <code>TRUSTED_NETWORKS</code> (comma-separated CIDRs) in the Unraid template to prevent this field from being changed through the UI — useful if you want host-level control over the trust boundary.
+                <strong>Lock via env var</strong> <code>TRUSTED_NETWORKS</code> (comma-separated CIDRs) in the Unraid template to prevent this field from being changed through the UI. Useful for host-level control over the trust boundary.
               </div>
             </div>
           </div>
@@ -611,7 +611,7 @@
                 <button class="btn btn-secondary" @click="securityApiKeyVisible = !securityApiKeyVisible" x-text="securityApiKeyVisible ? 'Hide' : 'Show'"></button>
                 <button class="btn btn-secondary" @click="copyApiKey()" x-text="securityApiKeyCopied ? 'Copied!' : 'Copy'"></button>
               </div>
-              <div class="setting-help">For scripts and Homepage widgets. Send as <code>X-Api-Key: &lt;key&gt;</code> header. Query parameter (<code>?apikey=</code>) also works but leaks to logs and browser history — prefer the header.</div>
+              <div class="setting-help">Use the API key for scripts and Homepage widgets. Send it as an <code>X-Api-Key: &lt;key&gt;</code> header. The query parameter (<code>?apikey=</code>) also works, but it leaks to logs and browser history. Prefer the header.</div>
               <div style="margin-top:8px" x-show="!securityRegenConfirm">
                 <button class="btn btn-danger" style="font-size:12px" @click="securityRegenConfirm = true">Regenerate API Key</button>
               </div>
@@ -702,7 +702,7 @@
               <template x-if="config.debugLogging">
                 <span style="display:flex;align-items:center;gap:8px;margin-left:8px">
                   <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text-muted)"
-                         x-tt="'Bundle UI navigation events (activity.log) into the download. Off by default — most bug reports only need the operation trace.'">
+                         x-tt="'Bundle UI navigation events (activity.log) into the download. Off by default. Most bug reports only need the operation trace.'">
                     <input type="checkbox" x-model="includeActivityLog" style="accent-color:var(--accent-blue)">
                     <span>Include activity log</span>
                   </label>

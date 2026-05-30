@@ -34,7 +34,7 @@
                     <button class="v3-inst-action v3-inst-action-resume"
                             x-show="inst.autoSyncPaused"
                             @click.stop="setInstancePaused(inst.id, false)"
-                            x-tt="'Scheduled checks + auto-sync are paused for this instance — click to resume. Manual actions still work while paused.'">&#9208; Auto-sync paused</button>
+                            x-tt="'Scheduled checks and auto-sync are paused for this instance. Click to resume. Manual actions still work while paused.'">&#9208; Auto-sync paused</button>
                     <button class="v3-inst-action"
                             @click.stop="checkTrashUpdates()"
                             :disabled="checkingUpdates || pulling"
@@ -112,7 +112,7 @@
                       <template x-if="sh.orphanedAt">
                         <span>
                           <span class="v3-prof-arr-orph" x-text="sh.arrProfileName"></span>
-                          <span class="v3-prof-arr-orph-tag" x-tt="'Profile deleted in Arr — ' + (sh.orphanedAt || '')">orphaned</span>
+                          <span class="v3-prof-arr-orph-tag" x-tt="'Profile deleted in Arr at ' + (sh.orphanedAt || 'unknown time')">orphaned</span>
                         </span>
                       </template>
                       <template x-if="!sh.orphanedAt && !editing">
@@ -215,7 +215,7 @@
              x-show="getProfileTab(activeAppType) === 'trash-profiles'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">TRaSH Profiles</div>
           <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">
-            Browse TRaSH-Guides quality profiles. Each card describes what the profile gives you — pick one, then click "Use →" to set up a sync rule for your <span x-text="activeAppLabel"></span> instance.
+            Browse TRaSH-Guides quality profiles. Each card describes what you get from a profile. Click "Use &rarr;" on a profile to set up a sync rule for your <span x-text="activeAppLabel"></span> instance.
           </div>
 
           <template x-if="trashProfileDescriptions[activeAppType] && trashProfileDescriptions[activeAppType].length > 0">
@@ -404,7 +404,7 @@
                         <template x-if="sh.changes">
                           <span class="v3-hist-changes"
                                 x-text="(() => { const c = sh.changes; const total = (c.cfDetails?.length || 0) + (c.scoreDetails?.length || 0) + (c.qualityDetails?.length || 0) + (c.settingsDetails?.length || 0); return total + (total === 1 ? ' change' : ' changes'); })()"
-                                x-tt="(() => { const c = sh.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + ' — click row to expand timeline' : 'No changes'; })()"></span>
+                                x-tt="(() => { const c = sh.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + '. Click row to expand timeline.' : 'No changes'; })()"></span>
                         </template>
                         <span x-show="!sh.changes" class="v3-hist-empty">No changes</span>
                       </div>
@@ -422,7 +422,7 @@
                         <div style="padding:8px 14px 10px">
                           <template x-if="historyEntries.some(e => e.orphanedAt)">
                             <div class="v3-hist-orphan">
-                              <strong>This profile is orphaned</strong> — its target was deleted in Arr. These entries describe the pre-deletion state and Rollback is disabled. Click Restore on the sync row above to recreate the profile from this saved state. After a successful restore, these entries are cleared automatically.
+                              <strong>This profile is orphaned.</strong> Its target was deleted in Arr. These entries describe the pre-deletion state, and Rollback is disabled. Click Restore on the sync row above to recreate the profile from this saved state. After a successful restore, these entries are cleared automatically.
                             </div>
                           </template>
                           <template x-for="(entry, ei) in historyEntries.filter(e => e.changes)" :key="'he-'+ei">
@@ -439,16 +439,16 @@
                                 <span class="v3-hist-event-time"
                                       x-text="new Date(entry.appliedAt || entry.lastSync).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})"></span>
                                 <span class="v3-hist-event-summary"
-                                      x-tt="(() => { const c = entry.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + ' — click for details' : 'No changes'; })()">
+                                      x-tt="(() => { const c = entry.changes; const parts = []; if (c.cfDetails?.length) parts.push(c.cfDetails.length + ' CF' + (c.cfDetails.length !== 1 ? 's' : '')); if (c.scoreDetails?.length) parts.push(c.scoreDetails.length + ' score' + (c.scoreDetails.length !== 1 ? 's' : '')); if (c.qualityDetails?.length) parts.push(c.qualityDetails.length + ' quality'); if (c.settingsDetails?.length) parts.push(c.settingsDetails.length + ' setting' + (c.settingsDetails.length !== 1 ? 's' : '')); return parts.length ? parts.join(' · ') + '. Click for details.' : 'No changes'; })()">
                                   <span class="v3-hist-event-count"
                                         x-text="(() => { const c = entry.changes; const total = (c.cfDetails?.length || 0) + (c.scoreDetails?.length || 0) + (c.qualityDetails?.length || 0) + (c.settingsDetails?.length || 0); return total + ' change' + (total !== 1 ? 's' : ''); })()"></span>
                                   <span class="v3-hist-event-preview"
-                                        x-text="(() => { const c = entry.changes; const items = [...(c.cfDetails || []), ...(c.scoreDetails || []), ...(c.qualityDetails || []), ...(c.settingsDetails || [])]; if (!items.length) return ''; const preview = items.slice(0, 3).join(' · '); const remaining = items.length - 3; return '— ' + (remaining > 0 ? preview + ' · +' + remaining + ' more' : preview); })()"></span>
+                                        x-text="(() => { const c = entry.changes; const items = [...(c.cfDetails || []), ...(c.scoreDetails || []), ...(c.qualityDetails || []), ...(c.settingsDetails || [])]; if (!items.length) return ''; const preview = items.slice(0, 3).join(' · '); const remaining = items.length - 3; return '· ' + (remaining > 0 ? preview + ' · +' + remaining + ' more' : preview); })()"></span>
                                 </span>
                                 <button class="v3-hist-rollback"
                                         :disabled="!!entry.orphanedAt"
                                         @click.stop="if (!entry.orphanedAt) rollbackSync(inst, entry, ei)"
-                                        x-tt="entry.orphanedAt ? 'Cannot rollback — the target profile is orphaned (deleted in Arr). Use Restore on the sync row first.' : 'Re-sync this profile to the state from this point in time. Auto-sync will be disabled.'">Rollback</button>
+                                        x-tt="entry.orphanedAt ? 'Cannot rollback. The target profile is orphaned (deleted in Arr). Use Restore on the sync row first.' : 'Re-sync this profile to the state from this point in time. Auto-sync will be disabled.'">Rollback</button>
                               </div>
                               <!-- Expanded detail — neutral monochrome text -->
                               <div x-show="historyDetailIdx === ei" class="v3-hist-event-detail">
@@ -505,7 +505,7 @@
         <!-- ===== Compare tab ===== -->
         <div class="page" x-show="getProfileTab(activeAppType) === 'compare'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">Compare Profiles</div>
-          <div style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Compare your <span x-text="activeAppLabel"></span> profiles against TRaSH Guides profiles. See what's matching, what has wrong scores, and what's missing — then sync individual fixes or all at once.</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Compare your <span x-text="activeAppLabel"></span> profiles against TRaSH-Guides. Spot what's matching, what has the wrong score, and what's missing. Sync individual fixes, or sync everything at once.</div>
           <!-- Info strip themed via --app-color so the whole note (border,
                background, "Note:" label) follows Radarr yellow / Sonarr
                blue. Hardcoded orange used to read as a warning even
@@ -513,7 +513,7 @@
                a soft tinted background that doesn't compete with the
                body content. -->
           <div style="font-size:12px;color:var(--text-primary);margin-bottom:16px;line-height:1.6;padding:10px 14px;border-radius:6px;background:var(--app-glow);border:1px solid var(--app-color);border-left:3px solid var(--app-color)">
-            <strong style="color:var(--app-color)">Note:</strong> Compare works best with profiles synced via Clonarr. For profiles created with other tools, custom formats with a score of 0 cannot be reliably distinguished from unused formats — these may not appear as "in use" in the comparison.
+            <strong style="color:var(--app-color)">Note:</strong> Compare works best on profiles Clonarr synced itself. For profiles created by other tools, a custom format with score 0 looks identical to one that was never added. The "in use" markers for those profiles may be inaccurate.
           </div>
 
           <!-- Compact selector bar: instance + Arr profile + TRaSH profile on one row -->
@@ -674,7 +674,7 @@
                                                  rule, which is a legitimate action even when the
                                                  profile already matches the TRaSH guide perfectly. -->
                                             <button class="btn btn-sm btn-primary" style="font-size:12px;padding:3px 10px"
-                                                    x-tt="'Open the profile editor — review the differences and adjust which to keep as overrides before applying.'"
+                                                    x-tt="'Open the profile editor. Review the differences and adjust which to keep as overrides before applying.'"
                                                     @click="openCompareEditor(inst, cr.arrProfileId, cr.trashProfileId)">Edit &amp; Sync &rarr;</button>
                                           </div>
                                         </div>

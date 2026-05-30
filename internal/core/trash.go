@@ -24,7 +24,7 @@ var ErrTrashBusy = errors.New("TRaSH pull/reset already in progress")
 
 // --- TRaSH Data Types ---
 
-// TrashCF represents a Custom Format definition from TRaSH Guides.
+// TrashCF represents a Custom Format definition from TRaSH-Guides.
 type TrashCF struct {
 	TrashID         string            `json:"trash_id"`
 	TrashScores     map[string]int    `json:"trash_scores"`
@@ -280,7 +280,7 @@ func (ts *TrashStore) DataDir() string {
 	return ts.dataDir
 }
 
-// Reset clears the local TRaSH Guides clone and pull metadata, then replaces
+// Reset clears the local TRaSH-Guides clone and pull metadata, then replaces
 // the in-memory snapshot with an empty dataset. User configuration and locally
 // saved profiles/CFs live outside this store and are intentionally untouched.
 func (ts *TrashStore) Reset() error {

@@ -5,11 +5,11 @@
        kept on disk for emergency rollback, no longer included).
 
        Layout (top-to-bottom):
-         1. Sticky action bar — profile name + meta + Cancel/Save/Save&Sync/Create new
-         2. Basics strip — Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities
-         3. Customizations summary — current state + Customize/Reset CTA
-         4. Tabs — Profile default (always) + Additional CF (Customize-gated) + Profile overview
-         5. Sub-nav + main content — Required CFs + each default-on group in left rail,
+         1. Sticky action bar - profile name + meta + Cancel/Save/Save&Sync/Create new
+         2. Basics strip - Language/Min/Cutoff/Upgrades/Cutoff Q/Qualities
+         3. Customizations summary - current state + Customize/Reset CTA
+         4. Tabs - Profile default (always) + Additional CF (Customize-gated) + Profile overview
+         5. Sub-nav + main content - Required CFs + each default-on group in left rail,
             selected sub-nav item's CFs render compactly in the main area. -->
   <div class="page sp-page" x-show="profileDetail && !['settings','about'].includes(currentSection)" x-cloak>
 
@@ -22,7 +22,7 @@
         <div class="result-title" x-text="syncResult.errors?.length ? 'Sync completed with errors' : 'Sync completed successfully'"></div>
         <div class="result-detail">
           <template x-if="syncResult.profileCreated">
-            <span>Profile created: <strong x-text="syncResult.arrProfileName"></strong> — </span>
+            <span>Profile created: <strong x-text="syncResult.arrProfileName"></strong> - </span>
           </template>
           Created: <span x-text="syncResult.cfsCreated || 0"></span> CFs,
           Updated: <span x-text="syncResult.cfsUpdated || 0"></span> CFs,
@@ -30,7 +30,7 @@
           Settings: <span x-text="Math.max((syncResult?.settingsDetails || []).length, spOverviewDiffs().modifiedBasics.length)"></span> changed,
           Quality: <span x-text="(syncResult?.qualityDetails || []).length"></span> changes
           <template x-if="syncResult?.errors?.length">
-            <span> — <span x-text="syncResult.errors.length"></span> errors</span>
+            <span> - <span x-text="syncResult.errors.length"></span> errors</span>
           </template>
         </div>
         <template x-if="[...(syncResult?.cfDetails || []), ...(syncResult?.scoreDetails || []), ...(syncResult?.qualityDetails || []), ...(syncResult?.settingsDetails || [])].length > 0">
@@ -59,25 +59,25 @@
         <div class="text">
           <strong>Dry-run results:</strong>
           <template x-if="syncPlan.createProfile">
-            <span>New profile: <strong x-text="syncPlan.newProfileName"></strong> — </span>
+            <span>New profile: <strong x-text="syncPlan.newProfileName"></strong> - </span>
           </template>
           <span x-text="syncPlan.summary.cfsToCreate"></span> to create,
           <span x-text="syncPlan.summary.cfsToUpdate"></span> to update,
           <span x-text="syncPlan.summary.cfsUnchanged"></span> unchanged
           <template x-if="syncPlan.summary.scoresToSet > 0">
-            <span> — <span x-text="syncPlan.summary.scoresToSet"></span> scores to set</span>
+            <span> - <span x-text="syncPlan.summary.scoresToSet"></span> scores to set</span>
           </template>
           <template x-if="syncPlan.summary.scoresToZero > 0">
-            <span style="color:var(--accent-orange)"> — <span x-text="syncPlan.summary.scoresToZero"></span> extra scores zeroed</span>
+            <span style="color:var(--accent-orange)"> - <span x-text="syncPlan.summary.scoresToZero"></span> extra scores zeroed</span>
           </template>
           <!-- Basics customizations from pdOverrides. Always shown when
-               present — backend's settingsPreview only populates in
+               present - backend's settingsPreview only populates in
                UPDATE-mode against a divergent Arr profile, so in CREATE
                mode (fresh profile) or when Arr already matches the
                overrides, this is the only place the user sees what
                customized basics will be applied. -->
           <template x-if="spOverviewDiffs().modifiedBasics.length > 0">
-            <span> — <span x-text="spOverviewDiffs().modifiedBasics.length"></span> customized settings</span>
+            <span> - <span x-text="spOverviewDiffs().modifiedBasics.length"></span> customized settings</span>
           </template>
           <template x-if="(syncPlan?.settingsPreview || []).length > 0 || (syncPlan?.qualityPreview || []).length > 0 || (syncPlan?.cfActions || []).some(a => a.action !== 'unchanged') || (syncPlan?.scoreActions || []).some(a => a.action !== 'unchanged')">
             <div style="margin-top:6px">
@@ -131,7 +131,7 @@
 
     <!-- ===== Action bar (sticky) ===== -->
     <div class="sp-action-bar">
-      <!-- Title block — two layouts based on edit-vs-create context:
+      <!-- Title block - two layouts based on edit-vs-create context:
            Edit (rule exists, _arrProfileName populated): the Arr-side
              profile name is what the user manages day-to-day, so it
              gets the big-font slot. TRaSH source goes in parentheses
@@ -142,7 +142,7 @@
       <div class="sp-action-title">
         <template x-if="profileDetail?._arrProfileName">
           <span class="sp-action-name"
-                x-tt="'Profile name in ' + (profileDetail?.instance?.name || 'Arr') + ' — what this rule manages.'"
+                x-tt="'Profile name in ' + (profileDetail?.instance?.name || 'Arr') + ' - what this rule manages.'"
                 x-text="profileDetail._arrProfileName"></span>
         </template>
         <template x-if="!profileDetail?._arrProfileName">
@@ -180,7 +180,7 @@
            clears, so closing Sync Preview can't leak selectedOptionalCFs
            / groupExpanded / pdOverrides into the next overlay open. -->
       <div class="sp-action-buttons">
-        <button class="btn btn-sm" @click="closeProfileEditor()" x-tt="'Close the profile editor. Any unsaved changes will be lost — use Apply or Apply &amp; Sync to keep them.'">Close</button>
+        <button class="btn btn-sm" @click="closeProfileEditor()" x-tt="'Close the profile editor. Any unsaved changes will be lost - use Apply or Apply &amp; Sync to keep them.'">Close</button>
         <template x-if="profileDetail?.detail?.imported">
           <span class="sp-action-buttons-imported" style="display:flex;gap:8px">
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
@@ -204,17 +204,17 @@
          pdOverrides shape (per pdInitOverrides):
            { minFormatScore: { enabled: bool, value: number }, ... }
          where .enabled === FALSE means an override is active (legacy
-         naming — "enabled: true" means "follows TRaSH default"). The
+         naming - "enabled: true" means "follows TRaSH default"). The
          template reads .value and tags the field as overridden when
          .enabled === false. -->
-    <!-- Basics strip — values are static text when Customize is off,
+    <!-- Basics strip - values are static text when Customize is off,
          inline editors (select / number input / toggle) when on. Each
          field gets a small red reset-icon when the value differs from
          the profile's TRaSH default. Reset-icon is the sole "modified"
-         affordance — drop the orange .overridden color treatment in
+         affordance - drop the orange .overridden color treatment in
          favour of action-affording iconography. -->
     <div class="sp-basics">
-      <!-- Language — radarr only. Sonarr has no profile-level language
+      <!-- Language - radarr only. Sonarr has no profile-level language
            field, so the whole item + its trailing divider are hidden
            when the active instance is Sonarr (matches profile-detail.html
            pattern: `x-show="activeAppType === 'radarr'"`). -->
@@ -360,7 +360,7 @@
         </template>
       </div>
 
-      <!-- Qualities — matches Radarr's terminology. Read-only shows
+      <!-- Qualities - matches Radarr's terminology. Read-only shows
            "Profile default" so the user instantly knows nothing has
            been touched; customize mode shows "Profile default" + an
            edit icon when untouched, or "N changes" (clickable, opens
@@ -378,14 +378,14 @@
             <span>Profile default</span>
             <button class="sp-basics-edit-icon"
                     @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
-                    x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                    x-tt="'Open Quality Items editor - drag &amp; drop to reorder, group, or toggle allowed status.'"
                     aria-label="Edit qualities">&#9998;</button>
           </span>
         </template>
         <template x-if="pdOverridesEnabled && _changes > 0">
           <button class="sp-basics-val sp-basics-quality-launcher"
                   @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
-                  x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                  x-tt="'Open Quality Items editor - drag &amp; drop to reorder, group, or toggle allowed status.'"
                   x-text="_changes + ' change' + (_changes === 1 ? '' : 's')"></button>
         </template>
         <template x-if="pdOverridesEnabled && _changes > 0">
@@ -403,7 +403,7 @@
          so the layout stays stable when the user toggles Customize:
            OFF: "All values follow profile defaults" + Customize CTA
            ON:  "N customizations" + per-bucket badges + Reset CTA
-         The summary text itself is clickable when ON — jumps to
+         The summary text itself is clickable when ON - jumps to
          Profile overview → Diffs so the user can see exactly what
          deviates from the profile defaults. Wording is "Customizations"
          everywhere; we don't say "Override mode" elsewhere in the UI
@@ -443,12 +443,12 @@
     </div>
 
     <!-- ===== Tabs =====
-         Profile default — group/CF browsing & toggle
-         Additional CF — Customize-gated opt-in groups outside the profile
+         Profile default - group/CF browsing & toggle
+         Additional CF - Customize-gated opt-in groups outside the profile
                          (badge counts CFs the user has actually opted into,
                          not the total catalogue size). Loaded lazily when
                          the tab body x-effect kicks in.
-         Profile overview — read-only summary of what's currently on -->
+         Profile overview - read-only summary of what's currently on -->
     <div class="sp-tabs">
       <button class="sp-tab" :class="{ active: spActiveTab === 'default' }" @click="spActiveTab = 'default'">Profile default</button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'additional' }" x-show="pdOverridesEnabled" @click="spActiveTab = 'additional'">
@@ -458,10 +458,10 @@
         </template>
       </button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
-      <!-- Profile updates — TRaSH-source pending changes only. Shows when
+      <!-- Profile updates - TRaSH-source pending changes only. Shows when
            Profile Sync detection has found upstream TRaSH changes for
            this rule. Drift entries get their own sibling tab below.
-           $watch — auto-leave the tab when its contents empty out (e.g.
+           $watch - auto-leave the tab when its contents empty out (e.g.
            after Update now syncs the rule) so the user doesn't get stuck
            on a hidden tab. -->
       <button class="sp-tab"
@@ -471,7 +471,7 @@
               @click="spActiveTab = 'updates'">Profile updates
         <span class="sp-tab-count" x-text="pdPendingChangesTrash().length"></span>
       </button>
-      <!-- Arr drift — Arr-side drift detected by DriftRunner. Shows
+      <!-- Arr drift - Arr-side drift detected by DriftRunner. Shows
            only when this rule has drift-source entries. Same auto-leave
            behaviour as Updates. -->
       <button class="sp-tab"
@@ -490,7 +490,7 @@
            with many groups can scan by section ("STREAMING SERVICES"
            → General / Premium / ...) instead of by truncated full names. -->
       <nav class="sp-sub-nav">
-        <!-- Sidebar search — filters CF rows in the right pane to ones
+        <!-- Sidebar search - filters CF rows in the right pane to ones
              whose name matches. Shared state with the Overview /
              Additional CF tabs so the filter follows you across them. -->
         <div class="sp-sidebar-search-wrap">
@@ -516,12 +516,12 @@
              profile's quality_profiles.include map). Includes both
              default-on (synced automatically) and default-off (you can
              opt into). Same set Classic editor renders in its Groups
-             section — no filter. Additional CF tab handles groups OUTSIDE
+             section - no filter. Additional CF tab handles groups OUTSIDE
              the profile (via extraCFGroups).
              Category colour now lives on the section header alone; the
              individual items inherit visual grouping from their position
              under the colored header rather than carrying redundant dots. -->
-        <!-- Collapsible parent rows — mirrors Custom Formats sidebar
+        <!-- Collapsible parent rows - mirrors Custom Formats sidebar
              exactly. Split into two click targets so the chevron
              writes explicit expand state (persisted), while the label
              jumps to the section's first group (transient auto-expand
@@ -556,7 +556,7 @@
       <!-- Main content: selected sub-nav item's CFs -->
       <main class="sp-content">
         <!-- Required CFs view. Profile-info panel intentionally NOT shown
-             here — users already see the full description on the TRaSH
+             here - users already see the full description on the TRaSH
              Profile card before clicking through, so re-rendering it inside
              the editor wastes screen space and pushes the actual CF list
              below the fold. The editor stays focused on configuration. -->
@@ -568,7 +568,7 @@
         <template x-if="spActiveGroup === '__required' || (!!spSearchFilter && (profileDetail?.detail?.formatItemNames || []).some(fi => fi.name.toLowerCase().includes(spSearchFilter.toLowerCase())))">
           <div>
             <h2 class="sp-content-title">Required CFs</h2>
-            <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup — always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
+            <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup - always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
             <div class="sp-cf-list">
               <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
                 <div class="sp-cf-row sp-cf-locked"
@@ -585,15 +585,15 @@
                        of a required CF. State swap: red ✕-style on hover
                        when excluded reads as "click to re-include". -->
                   <template x-if="!pdOverridesEnabled">
-                    <span class="sp-cf-icon" x-tt="'Required by the profile — always synced.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                    <span class="sp-cf-icon" x-tt="'Required by the profile - always synced.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                   </template>
                   <template x-if="pdOverridesEnabled">
                     <!-- Customize ON: render the unlock glyph (Lucide
                          "unlock") so the affordance reads as "this
-                         required CF is now editable — click to opt
+                         required CF is now editable - click to opt
                          out". The lock pose returns when the CF is
                          excluded (sp-cf-icon-excluded class also tints
-                         it red) — closed-lock there reinforces "this
+                         it red) - closed-lock there reinforces "this
                          is locked out". -->
                     <button type="button" class="sp-cf-icon sp-cf-icon-clickable"
                             :class="{ 'sp-cf-icon-excluded': _excluded }"
@@ -610,7 +610,7 @@
                     </button>
                   </template>
                   <!-- Hover-tooltip with description + TRaSH guide / JSON
-                       links — matches the Custom Formats tab pattern.
+                       links - matches the Custom Formats tab pattern.
                        Tooltip handlers + cursor:help live on an inner
                        span so the tooltip anchors right after the name
                        (anchoring on the wrapping div places the tooltip
@@ -660,7 +660,7 @@
              - Required CFs (cf.required) show lock icon, can't toggle.
              - Greying (opacity 0.35): required CF when group off, or
                optional CF when group off OR cf explicitly off.
-             Category prefix stripped from h2 — sub-nav section header
+             Category prefix stripped from h2 - sub-nav section header
              already conveys it. -->
         <!-- Lazy-mount the active group only. Previously this was
              x-show, which mounted every group's entire CF list (~30
@@ -674,7 +674,7 @@
              whose CFs match (ignoring spActiveGroup so the currently
              selected group doesn't render with zero rows when its
              matches live elsewhere). When search is empty, mount only
-             the active group — preserves lazy-mount perf. -->
+             the active group - preserves lazy-mount perf. -->
         <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name)">
           <div x-data="{
                  get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
@@ -684,7 +684,7 @@
                     pdToggleGroup auto-enables CFs that are cf.required or
                     (non-exclusive) cf.default=true. If neither exists, the
                     toggle just flips __grp_<name> with no functional impact
-                    — getSelectedCFIds only uses __grp_ to include REQUIRED
+                    - getSelectedCFIds only uses __grp_ to include REQUIRED
                     CFs from active groups. So for opt-in-only groups (e.g.
                     Movie Versions exclusive, HDR Formats SDR), hiding the
                     toggle removes a meaningless click. */
@@ -728,7 +728,7 @@
                   <span class="slider"></span>
                 </span>
                 <template x-if="g.cfs[0].required">
-                  <span class="sp-cf-icon" x-tt="'Required CF — synced as a unit when on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                  <span class="sp-cf-icon" x-tt="'Required CF - synced as a unit when on.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                 </template>
                 <span class="sp-action-label">
                   <span x-text="g.cfs[0].name"></span>
@@ -738,7 +738,7 @@
                      for profile.trashGroups); fall back to
                      resolveCFDefaultScore so the row keeps working if
                      the combined-row template is ever reused for
-                     extraCFGroups (cf.score is undefined there — see
+                     extraCFGroups (cf.score is undefined there - see
                      spOverviewEnabledCFs scoreInfo). -->
                 <template x-if="!pdOverridesEnabled">
                   <span class="sp-cf-score"
@@ -769,7 +769,7 @@
                 </template>
               </label>
             </template>
-            <!-- Multi-CF group: standard layout — action rows above,
+            <!-- Multi-CF group: standard layout - action rows above,
                  CF list below. -->
             <!-- Hide group-level controls when the user is searching for a
                  specific CF. The group context (header + colored border) still
@@ -796,7 +796,7 @@
                           const total = g.cfs.length;
                           const on = g.cfs.filter(cf => {
                             // Phase 2c: required CF excluded via lock icon
-                            // doesn't sync — don't count it as included.
+                            // doesn't sync - don't count it as included.
                             if (cf.required) return _groupOn && selectedOptionalCFs[cf.trashId] !== false;
                             return _groupOn && (selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId]);
                           }).length;
@@ -807,7 +807,7 @@
               <!-- "All optional CFs" only touches the non-default opt-ins
                    (cf.default === false). cf.default === true members are
                    "default-on within the group" and are governed by the
-                   group toggle above — flipping them here would either be
+                   group toggle above - flipping them here would either be
                    a no-op (already on) or sneakily turn off recommended
                    CFs the group toggle said should be on. cf.required is
                    always skipped. The action only renders when the group
@@ -855,7 +855,7 @@
                      }"
                      :style="{
                        /* Object-form :style so any future inline static
-                          style attribute survives — string-form would wipe
+                          style attribute survives - string-form would wipe
                           the row's other inline styles. The dimming logic:
                           - hidden group toggle (opt-in only): dim purely on
                             per-CF off (no group state to express).
@@ -870,7 +870,7 @@
                        })()
                      }">
                   <template x-if="cf.required && !pdOverridesEnabled">
-                    <span class="sp-cf-icon" x-tt="'Required by the guide — included automatically in this profile.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                    <span class="sp-cf-icon" x-tt="'Required by the guide - included automatically in this profile.'"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                   </template>
                   <template x-if="cf.required && pdOverridesEnabled">
                     <!-- Customize ON: unlock glyph signals "editable"; the
@@ -965,18 +965,18 @@
          they apply to: score override = strikethrough original +
          new score + small "customized" tag. Modified basics show
          the same way on the General section. Excluded default-on
-         CFs aren't surfaced here (they're not enabled — the
+         CFs aren't surfaced here (they're not enabled - the
          Profile default tab visualizes them via dimmed rows). -->
     <div class="sp-body" x-show="spActiveTab === 'overview'">
       <!-- Flat sub-nav with a subtle divider between summary-views
            (Overview / Diffs) and filter-views (General / Quality /
            All CF / Optional CF / Additional CF). No category coloring
-           because none of these items are "categories" — they're
+           because none of these items are "categories" - they're
            orthogonal views of the same data. The scoped .sp-overview-nav
            class neutralizes the border-left + cat-color rules the
            .sp-sub-nav-* selectors apply by default. -->
       <nav class="sp-sub-nav sp-overview-nav">
-        <!-- Sidebar search — filters CF rows in whatever overview pane
+        <!-- Sidebar search - filters CF rows in whatever overview pane
              is active. Matches CF name (case-insensitive). Same state
              also used by the Profile default + Additional CF sub-nav
              search inputs so the filter follows the user across tabs. -->
@@ -999,14 +999,14 @@
         <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'notes', inactive: !(pdDescription || '').trim() }"
                 @click="spOverviewSection = 'notes'; pdNotesExpanded = true"
-                x-tt="'Your free-form notes about this sync rule — what it\'s used for, why specific customizations were made. Persisted with the rule.'">
+                x-tt="'Your free-form notes about this sync rule - what it\'s used for, why specific customizations were made. Persisted with the rule.'">
           <span class="sp-sub-nav-label">Notes</span>
           <span class="sp-sub-nav-count" x-show="(pdDescription || '').trim()">●</span>
         </button>
         <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'diffs', inactive: spOverviewDiffCount() === 0 }"
                 @click="spOverviewSection = 'diffs'"
-                x-tt="'Items that deviate from the TRaSH default for this profile — modified basics, score overrides, added Additional CFs, and excluded default-on CFs.'">
+                x-tt="'Items that deviate from the TRaSH default for this profile - modified basics, score overrides, added Additional CFs, and excluded default-on CFs.'">
           <span class="sp-sub-nav-label">Diffs</span>
           <span class="sp-sub-nav-count" x-text="spOverviewDiffCount() || ''"></span>
         </button>
@@ -1048,7 +1048,7 @@
       </nav>
 
       <main class="sp-content sp-overview-content">
-        <!-- ===== Notes — collapsible compact card =====
+        <!-- ===== Notes - collapsible compact card =====
              Defaults to collapsed so the overview stays scannable.
              Header always shows: chevron + label + char-count when set,
              or "+ Add notes" CTA when empty. Body (editor + preview)
@@ -1074,11 +1074,11 @@
           <div x-show="pdNotesExpanded" x-cloak class="sp-ov-notes-body">
             <div class="sp-ov-notes-toolbar-row">
               <p class="sp-ov-notes-help">
-                Free-form notes about this sync rule — what it's for, why you customised anything. Visible as a hover tooltip on the Sync Rules table. Markdown supported.
+                Free-form notes about this sync rule - what it's for, why you customised anything. Visible as a hover tooltip on the Sync Rules table. Markdown supported.
               </p>
               <button class="cf-md-preview-toggle"
                       @click="pdDescriptionPreview = !pdDescriptionPreview"
-                      x-tt="'Toggle between the editor and a rendered markdown preview. Doesn\'t save — use the Save / Save &amp; Sync button at the bottom of the overlay to persist your notes.'"
+                      x-tt="'Toggle between the editor and a rendered markdown preview. Doesn\'t save - use the Save / Save &amp; Sync button at the bottom of the overlay to persist your notes.'"
                       x-text="pdDescriptionPreview ? 'Show editor' : 'Show preview'"></button>
             </div>
 
@@ -1110,12 +1110,12 @@
           </div>
         </section>
 
-        <!-- ===== Diffs view — only deviations from TRaSH default =====
+        <!-- ===== Diffs view - only deviations from TRaSH default =====
              Surfaces things the user changed: modified basics, score
              overrides, Additional CFs they added (groups outside the
              profile), and default-on CFs they explicitly turned off.
              Optional CFs activated within in-profile groups are NOT
-             listed here — they're inside the profile's own structure
+             listed here - they're inside the profile's own structure
              and visible via the "Optional CF" sub-nav view instead. -->
         <section class="sp-ov-card sp-ov-card-diffs" x-show="spOverviewSection === 'diffs'"
                  x-data="{ get _d() { return spOverviewDiffs(); } }">
@@ -1124,7 +1124,7 @@
             <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) + ')'"></span>
           </h3>
 
-          <!-- Modified general — same naming as the "General" sub-nav
+          <!-- Modified general - same naming as the "General" sub-nav
                item + the General card title. "Basics" was a holdover
                from an earlier label that nothing else in the UI uses. -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.modifiedBasics.length > 0">
@@ -1168,7 +1168,7 @@
             </div>
           </div>
 
-          <!-- Additional CFs added — CFs outside profile's default scope -->
+          <!-- Additional CFs added - CFs outside profile's default scope -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.additionalCFs.length > 0">
             <div class="sp-ov-cf-section-title">Added Additional CFs</div>
             <div class="sp-ov-cf-list">
@@ -1182,7 +1182,7 @@
                     <span class="sp-ov-cf-name-text" x-text="a.name"></span>
                     <span class="sp-ov-cf-source" x-text="'· ' + a.fromGroup"></span>
                   </span>
-                  <!-- "—" everywhere not in the profile by default — both
+                  <!-- "—" everywhere not in the profile by default - both
                        custom CFs and opted-in Additional CFs land here.
                        Single uniform marker; section title carries the
                        "not in profile default" semantics. -->
@@ -1195,7 +1195,7 @@
             </div>
           </div>
 
-          <!-- Excluded default-on CFs — would normally be on but user turned off -->
+          <!-- Excluded default-on CFs - would normally be on but user turned off -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedCFs.length > 0">
             <div class="sp-ov-cf-section-title">Excluded default-on CFs</div>
             <div class="sp-ov-cf-list">
@@ -1217,7 +1217,7 @@
             </div>
           </div>
 
-          <!-- Excluded required CFs — Phase 2c. Required CFs the user
+          <!-- Excluded required CFs - Phase 2c. Required CFs the user
                explicitly opted out of via the lock-icon click. -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedRequiredCFs.length > 0">
             <div class="sp-ov-cf-section-title">Excluded required CFs</div>
@@ -1240,10 +1240,10 @@
             </div>
           </div>
 
-          <!-- Quality items diffs — leaf-level toggles changed via the
+          <!-- Quality items diffs - leaf-level toggles changed via the
                Quality Items editor (or legacy flat overrides). Reset
                clears the entire quality structure back to profile
-               defaults (single confirm — matches Edit Qualities reset
+               defaults (single confirm - matches Edit Qualities reset
                button). Per-leaf reset would require structural
                splicing that's not worth the modal complexity. -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.qualityItems && _d.qualityItems.length > 0">
@@ -1267,11 +1267,11 @@
           </div>
 
           <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) === 0">
-            Nothing customized — this profile matches the TRaSH default exactly.
+            Nothing customized - this profile matches the TRaSH default exactly.
           </div>
         </section>
 
-        <!-- ===== General (basics) — modifications shown inline ===== -->
+        <!-- ===== General (basics) - modifications shown inline ===== -->
         <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'general'">
           <h3 class="sp-ov-card-title">General</h3>
           <!-- Read-only mode: simple label/value grid. -->
@@ -1410,7 +1410,7 @@
             <template x-if="pdOverridesEnabled">
               <button class="sp-basics-edit-icon" style="margin-left:8px"
                       @click="qualityEditorTarget = 'edit'; if (!qualityStructure.length) qsInitFromProfile(); pbEnsureQualityIds(); pb.qualityEditorOpen = true;"
-                      x-tt="'Open Quality Items editor — drag &amp; drop to reorder, group, or toggle allowed status.'"
+                      x-tt="'Open Quality Items editor - drag &amp; drop to reorder, group, or toggle allowed status.'"
                       aria-label="Edit quality items">&#9998; Edit</button>
             </template>
             <template x-if="pdOverridesEnabled && _qChanges > 0">
@@ -1424,7 +1424,7 @@
                     x-text="_qChanges + ' change' + (_qChanges === 1 ? '' : 's')"></span>
             </template>
           </h3>
-          <!-- Chip list — click anywhere on the area opens the editor
+          <!-- Chip list - click anywhere on the area opens the editor
                when Customize is on, so users can change qualities
                without finding the small pencil button. -->
           <div class="sp-ov-quality-list"
@@ -1444,8 +1444,8 @@
           </div>
         </section>
 
-        <!-- ===== All active CF — every CF that will sync =====
-             Flat list by default — single sortable table with clickable
+        <!-- ===== All active CF - every CF that will sync =====
+             Flat list by default - single sortable table with clickable
              column headers. "Show CF Groups" toggle (persisted via
              localStorage) restores the section-grouped rendering. -->
         <section class="sp-ov-card" x-show="spOverviewSection === 'all' || spOverviewSection === 'all-cf'">
@@ -1531,7 +1531,7 @@
           <div class="sp-ov-empty" x-show="spOverviewEnabledCFs().length === 0">No CFs enabled.</div>
         </section>
 
-        <!-- ===== Optional CF — only non-required CFs from in-profile groups ===== -->
+        <!-- ===== Optional CF - only non-required CFs from in-profile groups ===== -->
         <section class="sp-ov-card" x-show="spOverviewSection === 'optional-cf'">
           <h3 class="sp-ov-card-title">
             Optional Custom Formats
@@ -1541,7 +1541,7 @@
               Show CF Groups
             </label>
           </h3>
-          <p class="sp-ov-section-hint">Non-required CFs you've activated within in-profile groups. Required CFs sync as a unit with their group — see "All active CF" for the full picture.</p>
+          <p class="sp-ov-section-hint">Non-required CFs you've activated within in-profile groups. Required CFs sync as a unit with their group - see "All active CF" for the full picture.</p>
           {{template "_sp-overview-cf-header" .}}
           <template x-if="!spOverviewGroupCFs">
             <div class="sp-ov-cf-list">
@@ -1605,7 +1605,7 @@
           <div class="sp-ov-empty" x-show="spOverviewFlatCFs('optional-in-profile').length === 0">No optional CFs activated.</div>
         </section>
 
-        <!-- ===== Additional CF — opt-in groups outside the profile ===== -->
+        <!-- ===== Additional CF - opt-in groups outside the profile ===== -->
         <section class="sp-ov-card" x-show="spOverviewSection === 'additional-cf'">
           <h3 class="sp-ov-card-title">
             Additional Custom Formats
@@ -1752,7 +1752,7 @@
          (someone edited the Arr profile directly without going through
          Clonarr). Same section vocabulary as Updates so the user can
          scan it without learning new structure. The Re-sync now action
-         is the same pull-then-sync-this-rule flow as Updates — it
+         is the same pull-then-sync-this-rule flow as Updates - it
          pushes Clonarr's target state back, which overwrites the
          drifted values. -->
     <div class="sp-body" x-show="spActiveTab === 'drift'"
@@ -1814,7 +1814,7 @@
     </div>
 
     <!-- ===== Additional CF tab (gated behind Customize) =====
-         Driven by extraCFGroups — TRaSH cf-groups that are NOT part of
+         Driven by extraCFGroups - TRaSH cf-groups that are NOT part of
          this profile's quality_profiles.include map, i.e. add-on groups
          users can opt into beyond what the profile pulls in by default.
          Section grouping ("STREAMING SERVICES", "HDR FORMATS") makes the
@@ -1839,7 +1839,7 @@
              group). Hides Golden Rule HD when UHD is active (identical
              CFs). Filter logic in spAdditionalGroupCFs walks
              profileDetail.detail.trashGroups + formatItemNames once
-             per render — structural overlap is the only criterion,
+             per render - structural overlap is the only criterion,
              active/inactive state of the profile-default group is
              irrelevant to whether an Additional group's CFs are
              "already in the profile". -->
@@ -1900,7 +1900,7 @@
             <div class="sp-group-desc" x-show="g.trashDescription" x-html="sanitizeHTML(g.trashDescription || '')"></div>
             <p class="sp-content-sub" x-show="!g.trashDescription">Optional CFs you can add to this profile. Toggle individual entries below.</p>
 
-            <!-- Mass-toggle for the whole group — mirrors the Profile
+            <!-- Mass-toggle for the whole group - mirrors the Profile
                  default tab's "All optional CFs" action row. Renders
                  only when the group has 2+ CFs so it doesn't add noise
                  for single-CF groups (those have their own row toggle).
@@ -1950,7 +1950,7 @@
                      x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
                      x-data="{
                        get _def() { const r = resolveCFDefaultScore(cf.trashId); return (typeof r === 'number') ? r : 0; },
-                       /* Read extras FIRST then cfScoreOverrides — matches
+                       /* Read extras FIRST then cfScoreOverrides - matches
                           spOverviewDiffs score-priority order. Additional
                           CF scores typically live in extras for out-of-
                           profile CFs; cfScoreOverrides is the fallback
@@ -2002,7 +2002,7 @@
 
 {{/*
   Shared sortable column-header for the Overview CF lists.
-  Used by All active CF / Optional CF / Additional CF — all three
+  Used by All active CF / Optional CF / Additional CF - all three
   show the same two columns (Custom Format + Score) and bind to the
   same spOverviewSort state, so the markup is identical. Reading
   the active-class / arrow expressions from spOverviewSort keeps

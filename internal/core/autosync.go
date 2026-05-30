@@ -1861,7 +1861,7 @@ func (app *App) NotifyAutoSync(rule AutoSyncRule, inst Instance, profileName str
 	}
 }
 
-// NotifyRepoUpdate sends notifications when the TRaSH Guides repository has
+// NotifyRepoUpdate sends notifications when the TRaSH-Guides repository has
 // new commits. Includes the commit range and, when available, a human-readable
 // diff summary of changed CFs/profiles/groups from the stored pull diff.
 // Dispatches to agents with OnRepoUpdate enabled. Uses RouteUpdates so providers
@@ -1875,7 +1875,7 @@ func (app *App) NotifyRepoUpdate(prevCommit, newCommit string) {
 		description += "\n" + status.LastDiff.Summary
 	}
 
-	title := "Clonarr: TRaSH Guides Updated"
+	title := "Clonarr: TRaSH-Guides Updated"
 	payload := NotificationPayload{
 		Title:    title,
 		Message:  description,
@@ -1893,7 +1893,7 @@ func (app *App) NotifyRepoUpdate(prevCommit, newCommit string) {
 }
 
 // NotifyChangelog sends notifications when updates.txt has a new weekly date
-// section from TRaSH Guides. Builds platform-specific message bodies:
+// section from TRaSH-Guides. Builds platform-specific message bodies:
 //   - Discord/Pushover: inline bold entries with emoji icons and PR links.
 //   - Gotify: markdown bullet list for proper line-break rendering.
 //

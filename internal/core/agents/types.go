@@ -26,10 +26,10 @@ type Events struct {
 	OnSyncSuccess     bool `json:"onSyncSuccess"`     // auto-sync applied changes successfully
 	OnSyncFailure     bool `json:"onSyncFailure"`     // auto-sync encountered an error
 	OnCleanup         bool `json:"onCleanup"`         // stale rules/history removed during startup cleanup
-	OnRepoUpdate      bool `json:"onRepoUpdate"`      // TRaSH Guides repository pulled new commits
+	OnRepoUpdate      bool `json:"onRepoUpdate"`      // TRaSH-Guides repository pulled new commits
 	OnChangelog       bool `json:"onChangelog"`       // new weekly changelog section detected in TRaSH updates.txt
 	OnUpstreamAhead   bool `json:"onUpstreamAhead"`   // Profile Sync detected upstream TRaSH commits without pulling (Mode=notify / Mode=delayed)
-	OnDriftDetected   bool `json:"onDriftDetected"`   // Arr-side drift detected — someone edited the profile directly in Radarr/Sonarr
+	OnDriftDetected   bool `json:"onDriftDetected"`   // Arr-side drift detected (someone edited the profile directly in Radarr/Sonarr)
 	OnDriftReconciled bool `json:"onDriftReconciled"` // previously-detected drift went away (user fixed it, or clonarr re-synced)
 }
 
@@ -42,11 +42,11 @@ type Events struct {
 // a grouping comment. Then implement MaskConfig and PreserveConfig in the
 // provider to handle credential round-trips with the UI.
 type Config struct {
-	// Discord — webhook URLs for embed-based notifications.
+	// Discord: webhook URLs for embed-based notifications.
 	DiscordWebhook        string `json:"discordWebhook,omitempty"`        // primary webhook (sync, cleanup, errors)
 	DiscordWebhookUpdates string `json:"discordWebhookUpdates,omitempty"` // optional separate channel for repo/changelog events
 
-	// Gotify — self-hosted push notification server.
+	// Gotify: self-hosted push notification server.
 	GotifyURL              string `json:"gotifyUrl,omitempty"`              // base server URL (e.g. https://gotify.example.com)
 	GotifyToken            string `json:"gotifyToken,omitempty"`            // application token for message submission
 	GotifyPriorityCritical bool   `json:"gotifyPriorityCritical,omitempty"` // enable delivery for SeverityCritical
@@ -56,11 +56,11 @@ type Config struct {
 	GotifyWarningValue     *int   `json:"gotifyWarningValue,omitempty"`     // Gotify priority int for warning (nil = 0)
 	GotifyInfoValue        *int   `json:"gotifyInfoValue,omitempty"`        // Gotify priority int for info (nil = 0)
 
-	// Pushover — third-party push notification service.
+	// Pushover: third-party push notification service.
 	PushoverUserKey  string `json:"pushoverUserKey,omitempty"`  // user/group key from Pushover dashboard
 	PushoverAppToken string `json:"pushoverAppToken,omitempty"` // application API token from Pushover dashboard
 
-	// ntfy — simple HTTP push notification service (ntfy.sh or self-hosted).
+	// ntfy: simple HTTP push notification service (ntfy.sh or self-hosted).
 	NtfyURL              string `json:"ntfyUrl,omitempty"`              // base URL (e.g. https://ntfy.sh, https://ntfy.example.com)
 	NtfyTopic            string `json:"ntfyTopic,omitempty"`            // topic name to publish to
 	NtfyToken            string `json:"ntfyToken,omitempty"`            // optional bearer token (required only for protected topics)
@@ -71,7 +71,7 @@ type Config struct {
 	NtfyWarningValue     *int   `json:"ntfyWarningValue,omitempty"`     // ntfy priority 1-5 for warning (nil = 4)
 	NtfyInfoValue        *int   `json:"ntfyInfoValue,omitempty"`        // ntfy priority 1-5 for info (nil = 3)
 
-	// Apprise — meta-notifier API server that fans out to many backends.
+	// Apprise: meta-notifier API server that fans out to many backends.
 	// AppriseURL points at an Apprise API server (https://github.com/caronc/apprise-api).
 	// AppriseURLs is a list of Apprise notification URLs to fan out to per
 	// notification (e.g. ["discord://...", "mailto://..."]).
@@ -125,8 +125,8 @@ type Payload struct {
 	Message      string            // default provider message body (markdown)
 	TypeMessages map[string]string // optional per-provider body override keyed by provider type (e.g. {"gotify": "..."})
 	Color        int               // embed accent color (hex int) for providers that support it (Discord)
-	Severity     Severity          // semantic importance — providers may map to priority levels or colors
-	Route        Route             // logical delivery channel — multi-channel providers use this to pick an endpoint
+	Severity     Severity          // semantic importance (providers may map to priority levels or colors)
+	Route        Route             // logical delivery channel (multi-channel providers use this to pick an endpoint)
 }
 
 // messageFor returns the provider-specific message override when present.

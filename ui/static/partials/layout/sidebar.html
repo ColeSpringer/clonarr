@@ -186,7 +186,7 @@
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'instances' }"
            :href="navHref('settings', { settingsSection: 'instances' })">Instances</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'trash' }"
-           :href="navHref('settings', { settingsSection: 'trash' })">TRaSH Guides</a>
+           :href="navHref('settings', { settingsSection: 'trash' })">TRaSH-Guides</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'profile-sync' }"
            :href="navHref('settings', { settingsSection: 'profile-sync' })">Auto-sync</a>
         <a class="sidebar-subnav-item" :class="{ active: settingsSection === 'notifications' }"
@@ -309,7 +309,7 @@
           <span x-show="!checkingUpdates && sidebarCollapsed" aria-hidden="true">?</span>
         </button>
         <button class="sidebar-trash-pull btn btn-sm" @click="pullTrash()" :disabled="pulling || checkingUpdates"
-                x-tt="sidebarCollapsed ? 'Pull TRaSH-Guides (no sync)' : 'Refresh local TRaSH-Guides data. Does not push to Arr — use Update all / Update profile to sync.'">
+                x-tt="sidebarCollapsed ? 'Pull TRaSH-Guides (no sync)' : 'Refresh local TRaSH-Guides data. Does not push to Arr. Use Update all or Update profile to sync.'">
           <span x-show="pulling" class="spinner"></span>
           <span x-show="!pulling && !sidebarCollapsed">Pull</span>
           <span x-show="!pulling && sidebarCollapsed" aria-hidden="true">↓</span>
@@ -470,7 +470,7 @@
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'instances' }"
            :href="navHref('settings', { settingsSection: 'instances' })" @click="sidebarSubnavPopup = ''">Instances</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'trash' }"
-           :href="navHref('settings', { settingsSection: 'trash' })" @click="sidebarSubnavPopup = ''">TRaSH Guides</a>
+           :href="navHref('settings', { settingsSection: 'trash' })" @click="sidebarSubnavPopup = ''">TRaSH-Guides</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'profile-sync' }"
            :href="navHref('settings', { settingsSection: 'profile-sync' })" @click="sidebarSubnavPopup = ''">Auto-sync</a>
         <a class="sidebar-subnav-popup-item" :class="{ active: settingsSection === 'notifications' }"
@@ -491,7 +491,7 @@
   <div x-show="authStatus.authentication === 'none' && !noAuthBannerDismissed" x-cloak
        class="noauth-banner">
     <span class="noauth-banner-msg">
-      ⚠️ Authentication is disabled — anyone who reaches this URL is admin. Set Authentication to Forms or Basic in <strong>Settings → Security</strong>, or make sure another auth layer (reverse proxy, firewall) is in front.
+      ⚠️ Authentication is disabled. Anyone who reaches this URL is admin. Set Authentication to Forms or Basic in <strong>Settings → Security</strong>, or make sure another auth layer (reverse proxy, firewall) is in front.
     </span>
     <button @click="dismissNoAuthBanner()" x-tt="'Hide on this device'" class="noauth-banner-dismiss">
       Dismiss

@@ -394,7 +394,7 @@ type Instance struct {
 	AutoSyncPaused bool `json:"autoSyncPaused,omitempty"`
 }
 
-// TrashRepo holds TRaSH Guides repository settings.
+// TrashRepo holds TRaSH-Guides repository settings.
 type TrashRepo struct {
 	URL    string `json:"url"`
 	Branch string `json:"branch"`

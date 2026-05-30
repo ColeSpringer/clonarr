@@ -14,19 +14,19 @@ import (
 // for its notification backend. The interface methods form the complete
 // lifecycle of a notification agent:
 //
-//   - [Provider.Type] — returns the unique registration key (e.g. "discord").
-//   - [Provider.Validate] — checks required fields before saving an agent.
-//   - [Provider.MaskConfig] — replaces secrets with placeholders for API responses.
-//   - [Provider.PreserveConfig] — restores real secrets when UI submits placeholders.
-//   - [Provider.Test] — sends a probe message and returns per-channel results.
-//   - [Provider.Notify] — delivers one production notification.
-//   - [Provider.Async] — signals whether Notify should run in a background goroutine.
+//   - [Provider.Type] returns the unique registration key (e.g. "discord").
+//   - [Provider.Validate] checks required fields before saving an agent.
+//   - [Provider.MaskConfig] replaces secrets with placeholders for API responses.
+//   - [Provider.PreserveConfig] restores real secrets when UI submits placeholders.
+//   - [Provider.Test] sends a probe message and returns per-channel results.
+//   - [Provider.Notify] delivers one production notification.
+//   - [Provider.Async] signals whether Notify should run in a background goroutine.
 //
 // New providers are added by implementing this interface and calling
 // registerProvider in an init() function.
 type Provider interface {
 	// Type returns the lowercase registration key (e.g. "discord", "gotify").
-	// Must be stable — it is persisted in Agent.Type and used for registry lookup.
+	// Must be stable. It is persisted in Agent.Type and used for registry lookup.
 	Type() string
 
 	// Validate checks that all required provider-specific fields are present

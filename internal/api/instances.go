@@ -2226,7 +2226,7 @@ func (s *Server) handleTrashProfileDetail(w http.ResponseWriter, r *http.Request
 	snap := s.Core.Trash.Snapshot()
 	ad := core.SnapshotAppData(snap, appType)
 	if ad == nil {
-		writeError(w, 404, "TRaSH data is empty — run Pull in Settings → TRaSH Guides to refresh, then reopen this profile.")
+		writeError(w, 404, "TRaSH data is empty — run Pull in Settings → TRaSH-Guides to refresh, then reopen this profile.")
 		return
 	}
 
@@ -2238,7 +2238,7 @@ func (s *Server) handleTrashProfileDetail(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if profile == nil {
-		writeError(w, 404, "Profile not currently in TRaSH data — try Pull in Settings → TRaSH Guides; if that doesn't bring it back, the profile may have been renamed or removed upstream.")
+		writeError(w, 404, "Profile not currently in TRaSH data — try Pull in Settings → TRaSH-Guides; if that doesn't bring it back, the profile may have been renamed or removed upstream.")
 		return
 	}
 
