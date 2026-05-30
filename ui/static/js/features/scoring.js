@@ -1,5 +1,11 @@
 import { copyToClipboard } from '../utils/clipboard.js';
 
+// Module-level debounce timer map for sandbox state persistence.
+// Lives outside Alpine's reactive data root so the setTimeout / clearTimeout
+// IDs aren't routed through any reactive proxy on each access. Per-app-type
+// timer ids so radarr and sonarr debounces are independent.
+const _sandboxPersistTimers = {};
+
 export default {
   state: {},
   methods: {
@@ -382,8 +388,43 @@ export default {
 
     async sandboxParseBulk(appType) {
       const sb = this.sandbox[appType];
-      const lines = (sb.bulkInput || '').split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length === 0 || !sb.instanceId) return;
+      const raw = (sb.bulkInput || '').trim();
+      if (!raw || !sb.instanceId) return;
+
+      // JSON-detect path: when someone pastes a sandbox file dump (the
+      // shape produced by GET /api/sandbox/state/{appType}), import
+      // both titles AND score sets in one shot so a "here are my test
+      // releases plus my SQP-3 set" share round-trips cleanly.
+      let lines;
+      let importedSets = [];
+      if (raw[0] === '{' || raw[0] === '[') {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            // Bare JSON array of titles.
+            lines = parsed.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim());
+          } else if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.titles)) {
+              lines = parsed.titles.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim());
+            }
+            if (Array.isArray(parsed.scoreSets)) {
+              importedSets = parsed.scoreSets;
+            }
+          }
+          if (!lines) {
+            this.showToast('JSON paste did not contain a titles array. Falling back to line-by-line parsing.', 'warning', 5000);
+            lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+          }
+        } catch (_) {
+          this.showToast('JSON paste failed to parse. Treating each line as a title.', 'warning', 5000);
+          lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+        }
+      } else {
+        lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      }
+
+      if (lines.length === 0 && importedSets.length === 0) return;
+
       sb.parsing = true;
       // Each parse is one sequential call against the Arr Parse API. At ~100ms
       // per call, a 200-title batch takes ~20s — surface that to the user
@@ -392,21 +433,40 @@ export default {
         this.showToast(`Parsing ${lines.length} titles, this may take a moment...`, 'info', 6000);
       }
       try {
-        const r = await fetch('/api/scoring/parse/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceId: sb.instanceId, titles: lines })
-        });
-        if (!r.ok) { const e = await r.json().catch(() => ({})); this.showToast(e.error || 'Batch parse failed', 'error', 8000); return; }
-        const results = await r.json();
-        const scored = await Promise.all(results.map(result => this.calculateScoring(result, appType)));
+        let scored = [];
+        if (lines.length > 0) {
+          const r = await fetch('/api/scoring/parse/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instanceId: sb.instanceId, titles: lines })
+          });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); this.showToast(e.error || 'Batch parse failed', 'error', 8000); return; }
+          const results = await r.json();
+          scored = await Promise.all(results.map(result => this.calculateScoring(result, appType)));
+        }
         const before = sb.results.length;
-        sb.results = this._sandboxMergeNew(scored, sb.results);
+        if (scored.length > 0) {
+          sb.results = this._sandboxMergeNew(scored, sb.results);
+        }
         const replaced = scored.length - (sb.results.length - before);
+        // Import score sets after results so set.titles references new
+        // result rows immediately. Merge dedupes by id and renames on
+        // name-collision so an imported "test" doesn't silently
+        // overwrite the local "test".
+        let setsAdded = 0;
+        if (importedSets.length > 0) {
+          const beforeCount = (sb.scoreSets || []).length;
+          sb.scoreSets = this._sandboxMergeSets(sb.scoreSets || [], importedSets);
+          setsAdded = sb.scoreSets.length - beforeCount;
+        }
         this.saveSandboxResults(appType);
         sb.bulkInput = '';
-        if (replaced > 0) {
-          this.showToast(`Re-scored ${replaced} duplicate title${replaced > 1 ? 's' : ''} already in the list.`, 'info', 4000);
+        const parts = [];
+        if (scored.length > 0) parts.push(`${scored.length} title${scored.length === 1 ? '' : 's'} parsed`);
+        if (setsAdded > 0) parts.push(`${setsAdded} score set${setsAdded === 1 ? '' : 's'} imported`);
+        if (replaced > 0) parts.push(`${replaced} duplicate${replaced === 1 ? '' : 's'} re-scored`);
+        if (parts.length > 0) {
+          this.showToast(parts.join(', ') + '.', 'success', 4500);
         }
       } catch (e) { this.showToast('Batch parse error: ' + e.message, 'error', 8000); }
       finally { sb.parsing = false; }
@@ -540,10 +600,105 @@ export default {
       return results;
     },
 
+    // Persist the parsed-results portion of the sandbox state. Routed
+    // through the unified persister so both the localStorage cache and
+    // the server file stay in sync; existing callers keep their old name
+    // and don't need to know about server persistence.
     saveSandboxResults(appType) {
+      this._sandboxPersistAll(appType);
+    },
+
+    // Unified persister for results + score sets + active set. Writes
+    // localStorage immediately (synchronous, survives if the server is
+    // unreachable mid-edit) and schedules a debounced PUT to the server
+    // file. localStorage is intentionally kept in sync as a read-cache
+    // and emergency backup — never deleted on successful server write.
+    _sandboxPersistAll(appType) {
       const sb = this.sandbox[appType];
-      const data = (sb.results || []).map(r => ({ title: r.title, parsed: r.parsed, matchedCFs: r.matchedCFs, instanceScore: r.instanceScore }));
-      try { localStorage.setItem('clonarr-sandbox-' + appType, JSON.stringify(data)); } catch (e) {}
+      if (!sb) return;
+      // Clean ghost titles out of score sets before any persistence
+      // (server file AND localStorage cache). Pre-2026-05-31 row
+      // deletes left orphaned title-strings in set.titles that the UI
+      // already hid via the visible-count helper but persisted across
+      // reloads. Converging in-memory state now keeps every downstream
+      // store self-consistent and the user's file shareable as-is.
+      this._sandboxCleanGhostsInPlace(appType);
+      const resultsCache = (sb.results || []).map(r => ({ title: r.title, parsed: r.parsed, matchedCFs: r.matchedCFs, instanceScore: r.instanceScore }));
+      try { localStorage.setItem('clonarr-sandbox-' + appType, JSON.stringify(resultsCache)); } catch (_) {}
+      try {
+        localStorage.setItem('clonarr-sandbox-sets-' + appType, JSON.stringify(sb.scoreSets || []));
+        localStorage.setItem('clonarr-sandbox-active-' + appType, sb.activeScoreSet || '');
+      } catch (_) {}
+      clearTimeout(_sandboxPersistTimers[appType]);
+      _sandboxPersistTimers[appType] = setTimeout(() => {
+        this._sandboxPutToServer(appType);
+      }, 500);
+    },
+
+    // Prune set.titles entries that no longer exist as result rows. Run
+    // before every persist so the on-disk file, localStorage cache, and
+    // in-memory state all converge to the same self-consistent view.
+    // Triggers Alpine reactivity only when something actually changed
+    // (avoids a spurious render loop on no-op persists).
+    _sandboxCleanGhostsInPlace(appType) {
+      const sb = this.sandbox[appType];
+      if (!sb || !Array.isArray(sb.scoreSets) || sb.scoreSets.length === 0) return;
+      const haveTitles = new Set((sb.results || []).map(r => r?.title).filter(Boolean));
+      let mutated = false;
+      for (const s of sb.scoreSets) {
+        if (!s || !Array.isArray(s.titles)) continue;
+        const cleaned = s.titles.filter(t => haveTitles.has(t));
+        if (cleaned.length !== s.titles.length) {
+          s.titles = cleaned;
+          mutated = true;
+        }
+      }
+      if (mutated) sb.scoreSets = [...sb.scoreSets];
+    },
+
+    // Push current in-memory state to the server file. Server stores
+    // ONLY the stable user-curated data — release-title strings and
+    // named score sets. Parsed quality, matched CFs and per-profile
+    // scoring all change as soon as the user picks a different profile,
+    // so persisting them would be wasteful AND misleading. The file
+    // stays small enough to share by paste / email and round-trip back
+    // through bulk-import.
+    //
+    // Network failures swallow silently because localStorage already
+    // holds the truth; the next reload retries via the migration path.
+    // Non-2xx server responses (500 from disk-full, 502 from container
+    // restart, etc.) log a console warning so a debugger can spot
+    // server-side persistence drift. 401 is handled by the global fetch
+    // interceptor's redirect to /login so we don't double-log it.
+    async _sandboxPutToServer(appType) {
+      const sb = this.sandbox[appType];
+      if (!sb) return;
+      const seen = new Set();
+      const titles = [];
+      for (const r of (sb.results || [])) {
+        if (!r || typeof r.title !== 'string' || !r.title) continue;
+        if (seen.has(r.title)) continue;
+        seen.add(r.title);
+        titles.push(r.title);
+      }
+      // sb.scoreSets has already been ghost-pruned by _sandboxPersistAll
+      // (called synchronously before the debounce that fires this PUT),
+      // so the payload is consistent with what the UI shows.
+      const payload = {
+        titles,
+        scoreSets: sb.scoreSets || [],
+      };
+      try {
+        const r = await fetch(`/api/sandbox/state/${appType}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok && r.status !== 401) {
+          // eslint-disable-next-line no-console
+          console.warn(`[sandbox:${appType}] server save failed: HTTP ${r.status}. localStorage cache retains the data; next reload will retry.`);
+        }
+      } catch (_) { /* network down: localStorage stays the source of truth until reachable */ }
     },
 
     // Merge freshly scored items into the existing results list, with
@@ -578,31 +733,19 @@ export default {
     // Persisted to localStorage per app-type so sets survive reloads
     // alongside the existing results storage.
 
+    // Routed through the unified persister; existing callers keep their
+    // old function name to avoid touching every save-site.
     sandboxSaveScoreSets(appType) {
-      const sb = this.sandbox[appType];
-      try {
-        localStorage.setItem('clonarr-sandbox-sets-' + appType, JSON.stringify(sb.scoreSets || []));
-        localStorage.setItem('clonarr-sandbox-active-' + appType, sb.activeScoreSet || '');
-      } catch (e) { /* quota — best-effort */ }
+      this._sandboxPersistAll(appType);
     },
 
+    // Legacy entry point — boot called sandboxLoadScoreSets after
+    // loadSandboxResults; the unified loader handles both, so this is now
+    // a thin guarded delegate. Idempotent: only the first call per
+    // app-type does the network work, subsequent calls no-op against the
+    // _sandboxLoadedFor flag.
     sandboxLoadScoreSets(appType) {
-      const sb = this.sandbox[appType];
-      try {
-        const raw = localStorage.getItem('clonarr-sandbox-sets-' + appType);
-        if (raw) {
-          const sets = JSON.parse(raw);
-          if (Array.isArray(sets)) sb.scoreSets = sets;
-        }
-        const active = localStorage.getItem('clonarr-sandbox-active-' + appType) || '';
-        // Only restore active if the set still exists — avoids ghost
-        // filter that hides everything because the set was deleted.
-        if (active && (sb.scoreSets || []).some(s => s.id === active)) {
-          sb.activeScoreSet = active;
-        } else {
-          sb.activeScoreSet = '';
-        }
-      } catch (e) { /* corrupt JSON — ignore, start fresh */ }
+      return this._sandboxLoadAll(appType);
     },
 
     _sandboxNewSetId() {
@@ -784,27 +927,357 @@ export default {
       return set ? set.name : '';
     },
 
-    async loadSandboxResults(appType) {
-      try {
-        const raw = localStorage.getItem('clonarr-sandbox-' + appType);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (!Array.isArray(data) || data.length === 0) return;
-        const sb = this.sandbox[appType];
-        // One-time dedupe of historical duplicates: users who hit Score
-        // Selected on the same title across multiple sessions before the
-        // dedupe landed have stacks of identical rows. Re-merging the
-        // restored array against an empty existing list collapses them.
-        sb.results = this._sandboxMergeNew(data, []);
-        if (sb.results.length !== data.length) {
-          this.saveSandboxResults(appType); // persist the cleanup
+    // Number of titles in a score set that ALSO have a row in the
+    // current results table. Titles whose results row was deleted (the
+    // "Remove from results" button) stay in set.titles by design so a
+    // re-paste re-attaches them, but the dropdown counter would otherwise
+    // show stale totals like "test (8)" when the user can only see 4
+    // entries. Counting intersection keeps the count truthful to what
+    // the user actually sees while preserving set history.
+    // Delete a result row AND remove its title from every saved score
+    // set that contains it. The previous "delete from results only"
+    // behaviour left ghost titles in sets, polluting the dropdown count
+    // (test (8) when only 4 rows remained) and forcing users to
+    // re-create sets to clean up. Removing from sets at the same time
+    // matches what users intuitively expect from a top-level X button
+    // on the row.
+    sandboxRemoveResultRow(appType, res) {
+      const sb = this.sandbox[appType];
+      if (!sb || !res) return;
+      const idx = (sb.results || []).indexOf(res);
+      if (idx === -1) return;
+      sb.results.splice(idx, 1);
+      // Prune the deleted title from every score set that referenced it.
+      // No-op for sets that didn't contain the title.
+      const title = res.title;
+      let changed = false;
+      if (Array.isArray(sb.scoreSets)) {
+        for (const s of sb.scoreSets) {
+          if (!Array.isArray(s.titles)) continue;
+          const next = s.titles.filter(t => t !== title);
+          if (next.length !== s.titles.length) {
+            s.titles = next;
+            changed = true;
+          }
         }
-        // Re-apply scoring if profile is selected
-        if (sb.profileKey) {
+        if (changed) sb.scoreSets = [...sb.scoreSets]; // reactivity ping
+      }
+      this.saveSandboxResults(appType);
+    },
+
+    sandboxSetVisibleCount(appType, set) {
+      if (!set || !Array.isArray(set.titles) || set.titles.length === 0) return 0;
+      const sb = this.sandbox[appType];
+      if (!sb || !Array.isArray(sb.results) || sb.results.length === 0) return 0;
+      const haveTitles = new Set(sb.results.map(r => r.title));
+      let n = 0;
+      for (const t of set.titles) {
+        if (haveTitles.has(t)) n++;
+      }
+      return n;
+    },
+
+    // Legacy entry point — main.js calls this on boot. Routes through
+    // the unified loader which handles both results AND score sets.
+    async loadSandboxResults(appType) {
+      return this._sandboxLoadAll(appType);
+    },
+
+    // Per-app-type idempotency guard. Once the loader has resolved its
+    // server-first / localStorage-fallback / migration decision, the
+    // app-type is marked complete and subsequent calls no-op so the
+    // multi-call boot sequence (loadSandboxResults + sandboxLoadScoreSets
+    // for each app type) doesn't trigger duplicate fetches or duplicate
+    // migrations.
+    _sandboxLoadedFor: {},
+
+    // Unified loader: server first, localStorage second, migration when
+    // server is empty + localStorage has data. Designed to NEVER drop
+    // data:
+    //   - Successful server load + localStorage data → merge by
+    //     title-dedupe (server wins on conflict, localStorage-only
+    //     entries get appended). One PUT after merge if any new items
+    //     came in from localStorage.
+    //   - Server empty + localStorage has data → push to server, use as
+    //     in-memory state.
+    //   - Server unreachable → fall back to localStorage cache. Nothing
+    //     is written until the server is reachable again.
+    //   - Both empty → genuine first-run; in-memory state stays empty.
+    async _sandboxLoadAll(appType) {
+      if (this._sandboxLoadedFor[appType]) return;
+      this._sandboxLoadedFor[appType] = true;
+
+      const sb = this.sandbox[appType];
+      if (!sb) return;
+
+      // Read localStorage up front (cheap, synchronous, never throws).
+      const lsResults = this._sandboxReadLocalResults(appType);
+      const lsSetsBundle = this._sandboxReadLocalSets(appType);
+
+      // Try the server. A network failure / 5xx leaves serverState null,
+      // which we treat as "fall back to localStorage entirely". A 200
+      // with empty arrays is the "server is fresh, migrate" signal.
+      let serverState = null;
+      try {
+        const r = await fetch(`/api/sandbox/state/${appType}`);
+        if (r.ok) serverState = await r.json();
+      } catch (_) { /* serverState stays null → localStorage-only path */ }
+
+      // Snapshot the pre-load in-memory state. main.js dispatches the
+      // load WITHOUT await, so a user racing to the Sandbox tab could
+      // call sandboxParse / sandboxScoreSelected before the fetch
+      // returns. Those handlers mutate sb.results + sb.scoreSets and
+      // call saveSandboxResults. Without preserving them, the merge /
+      // migration branches below would silently overwrite that fresh
+      // work. _sandboxMergeNew puts the first arg first, so any
+      // freshly-added title wins on title-collision.
+      const inMemoryResultsBefore = Array.isArray(sb.results) ? sb.results.slice() : [];
+      const inMemorySetsBefore = Array.isArray(sb.scoreSets) ? sb.scoreSets.slice() : [];
+
+      // The merge branches walk arrays of objects whose shape we only
+      // partially trust (server file may have been hand-edited, an old
+      // bug may have left malformed entries in localStorage). A single
+      // null / string / missing-id entry would otherwise crash the
+      // whole load and leave _sandboxLoadedFor true so retries are
+      // dead. Wrap the entire decision tree in a try/catch and fall
+      // back to "keep the in-memory snapshot" on any throw — the user
+      // sees their current session intact and a console warning points
+      // a debugger at the cause.
+      try {
+        if (serverState === null) {
+          // Server unreachable. Restore from localStorage only. Do NOT
+          // attempt to write anywhere — the user might be offline or
+          // the backend is restarting; we shouldn't risk overwriting
+          // the server next time it's reachable.
+          sb.results = this._sandboxMergeNew(inMemoryResultsBefore, lsResults);
+          sb.scoreSets = this._sandboxMergeSets(inMemorySetsBefore, lsSetsBundle.sets);
+          sb.activeScoreSet = this._sandboxResolveActiveSet(sb.scoreSets, sb.activeScoreSet || lsSetsBundle.active);
+        } else {
+          // Server returns the slim shape: { titles: string[], scoreSets: [...] }.
+          // We reconstruct full result-records by looking up each title
+          // in the in-memory snapshot or the localStorage cache; titles
+          // not cached anywhere get a placeholder and are queued for a
+          // background batch /parse so the UI surfaces them immediately
+          // and refreshes once Arr responds.
+          const serverTitles = Array.isArray(serverState.titles) ? serverState.titles.filter(t => typeof t === 'string' && t) : [];
+          const serverSets = Array.isArray(serverState.scoreSets) ? serverState.scoreSets : [];
+
+          const serverEmpty = serverTitles.length === 0 && serverSets.length === 0;
+          const lsHasData = lsResults.length > 0 || lsSetsBundle.sets.length > 0;
+
+          if (serverEmpty && lsHasData) {
+            // Migration path: localStorage holds the user's history in
+            // the legacy fat shape. Keep those fat records in memory
+            // for instant UI; the next persist downgrades the server
+            // file to the new slim shape transparently. In-memory work
+            // from the load window stays first so fresh edits survive.
+            sb.results = this._sandboxMergeNew(inMemoryResultsBefore, lsResults);
+            sb.scoreSets = this._sandboxMergeSets(inMemorySetsBefore, lsSetsBundle.sets);
+            sb.activeScoreSet = this._sandboxResolveActiveSet(sb.scoreSets, sb.activeScoreSet || lsSetsBundle.active);
+            this._sandboxPersistAll(appType);
+            // eslint-disable-next-line no-console
+            console.log(`[sandbox:${appType}] migrated ${sb.results.length} title(s) + ${sb.scoreSets.length} score set(s) from localStorage to server file.`);
+          } else if (!serverEmpty) {
+            // Reconstruct sb.results to match the server's title list.
+            // Look up each title in the in-memory snapshot first, then
+            // localStorage. Anything not cached anywhere becomes a
+            // bare placeholder and joins needParse.
+            const byTitle = new Map();
+            for (const r of inMemoryResultsBefore) {
+              if (r && typeof r.title === 'string') byTitle.set(r.title, r);
+            }
+            for (const r of lsResults) {
+              if (r && typeof r.title === 'string' && !byTitle.has(r.title)) byTitle.set(r.title, r);
+            }
+            const reconstructed = [];
+            const needParse = [];
+            for (const title of serverTitles) {
+              const cached = byTitle.get(title);
+              if (cached) {
+                reconstructed.push(cached);
+              } else {
+                reconstructed.push({ title });
+                needParse.push(title);
+              }
+            }
+            // Append any in-memory titles the server hasn't seen yet —
+            // race protection for a user who scored a fresh title during
+            // the load window. Those get persisted via the dirty path.
+            const serverTitleSet = new Set(serverTitles);
+            let extraInMemory = 0;
+            for (const r of inMemoryResultsBefore) {
+              if (r && typeof r.title === 'string' && !serverTitleSet.has(r.title)) {
+                reconstructed.push(r);
+                extraInMemory++;
+              }
+            }
+
+            const lsSets = lsSetsBundle.sets || [];
+            const mergedSets = this._sandboxMergeSets(serverSets, this._sandboxMergeSets(inMemorySetsBefore, lsSets));
+            const dirtySets = mergedSets.length !== serverSets.length;
+
+            sb.results = reconstructed;
+            sb.scoreSets = mergedSets;
+            // Defer the activeScoreSet write to the next render tick so
+            // the score-set <select> has time to render the <option>
+            // children produced by the freshly-assigned scoreSets. x-model
+            // captures the select's value before the options exist on the
+            // initial render; setting active in the same synchronous tick
+            // makes the table filter correctly but leaves the dropdown
+            // showing "Show all releases" until the next user interaction.
+            const _resolvedActive = this._sandboxResolveActiveSet(mergedSets, sb.activeScoreSet || lsSetsBundle.active);
+            if (typeof this.$nextTick === 'function') {
+              this.$nextTick(() => { sb.activeScoreSet = _resolvedActive; });
+            } else {
+              sb.activeScoreSet = _resolvedActive;
+            }
+
+            // Background re-parse for any title without a cached record
+            // so the UI refreshes with parsed quality + matched CFs as
+            // Arr responds.
+            if (needParse.length > 0 && sb.instanceId) {
+              this._sandboxBatchParseAndMerge(appType, needParse).catch(() => {});
+            }
+
+            if (extraInMemory > 0 || dirtySets) this._sandboxPersistAll(appType);
+          } else {
+            // Server empty and localStorage empty. Keep whatever the
+            // user produced in-memory (could be empty too); persist it
+            // only if non-empty so we don't write an empty file that
+            // would later mask a real localStorage migration on a
+            // different browser.
+            sb.results = inMemoryResultsBefore;
+            sb.scoreSets = inMemorySetsBefore;
+            sb.activeScoreSet = this._sandboxResolveActiveSet(inMemorySetsBefore, sb.activeScoreSet);
+            if (sb.results.length > 0 || sb.scoreSets.length > 0) {
+              this._sandboxPersistAll(appType);
+            }
+          }
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn(`[sandbox:${appType}] load merge failed; preserving in-memory state. Cause:`, e);
+        sb.results = inMemoryResultsBefore;
+        sb.scoreSets = inMemorySetsBefore;
+        sb.activeScoreSet = this._sandboxResolveActiveSet(inMemorySetsBefore, sb.activeScoreSet);
+      }
+
+      // Re-apply scoring if a profile was already selected before load
+      // completed (e.g. user landed on the sandbox tab directly).
+      if (sb.profileKey && sb.results.length > 0) {
+        try {
           const profileData = await this.fetchProfileScores(sb.profileKey, appType);
           sb.results = sb.results.map(res => this.applyScoring(res, profileData));
+        } catch (_) { /* leave results unchanged on scoring fetch failure */ }
+      }
+    },
+
+    _sandboxReadLocalResults(appType) {
+      try {
+        const raw = localStorage.getItem('clonarr-sandbox-' + appType);
+        if (!raw) return [];
+        const data = JSON.parse(raw);
+        return Array.isArray(data) ? data : [];
+      } catch (_) { return []; }
+    },
+
+    _sandboxReadLocalSets(appType) {
+      let sets = [];
+      let active = '';
+      try {
+        const raw = localStorage.getItem('clonarr-sandbox-sets-' + appType);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Defensive shape filter: a single null/string entry in the
+          // array (from any historical bug, browser-sync glitch, or
+          // hand-edit) would otherwise crash the merge path that reads
+          // s.id / s.name on every entry. Keep only object entries with
+          // a string id so downstream code can trust the shape.
+          if (Array.isArray(parsed)) sets = parsed.filter(s => s && typeof s === 'object' && typeof s.id === 'string');
         }
-      } catch (e) {}
+        active = localStorage.getItem('clonarr-sandbox-active-' + appType) || '';
+      } catch (_) {}
+      return { sets, active };
+    },
+
+    // Only return an active-set id when the set still exists in the
+    // resolved list — prevents a "filter to nothing" UI state when the
+    // active set was deleted on another device or never existed in the
+    // merged result.
+    // Reconstruct parsed quality + matched CFs for the given titles in
+    // a single batch /parse call. Runs in the background after the
+    // initial UI render so the user sees their title list immediately
+    // and the per-row Quality / CFs / Score cells fill in as Arr
+    // responds (~100ms per title). Results merge into sb.results by
+    // title — placeholders inserted by the loader get replaced; rows
+    // already populated stay put.
+    async _sandboxBatchParseAndMerge(appType, titles) {
+      const sb = this.sandbox[appType];
+      if (!sb || !sb.instanceId || !Array.isArray(titles) || titles.length === 0) return;
+      let fresh;
+      try {
+        const r = await fetch('/api/scoring/parse/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceId: sb.instanceId, titles }),
+        });
+        if (!r.ok) return;
+        fresh = await r.json();
+      } catch (_) { return; }
+      if (!Array.isArray(fresh)) return;
+      let profileData = null;
+      if (sb.profileKey) {
+        try { profileData = await this.fetchProfileScores(sb.profileKey, appType); }
+        catch (_) { /* leave un-scored if profile fetch fails */ }
+      }
+      const byTitle = new Map();
+      for (const r of fresh) {
+        if (r && typeof r.title === 'string') byTitle.set(r.title, r);
+      }
+      sb.results = (sb.results || []).map(res => {
+        const refreshed = byTitle.get(res.title);
+        if (!refreshed) return res;
+        return profileData ? this.applyScoring(refreshed, profileData) : refreshed;
+      });
+      // Persist so the localStorage cache holds the fresh records for
+      // the next instant-render. Server file already has the title
+      // strings — this also makes the cache useful on next reload.
+      this._sandboxPersistAll(appType);
+    },
+
+    _sandboxResolveActiveSet(sets, candidate) {
+      if (!candidate) return '';
+      return (sets || []).some(s => s.id === candidate) ? candidate : '';
+    },
+
+    // Merge two score-set arrays. Primary wins on id-collision; entries
+    // from secondary that have a NEW id are appended. Name collisions
+    // on appended entries get a "(local)" suffix so a user with two
+    // browsers that each created a "Test" set sees both retained
+    // instead of one silently absorbing the other. Defensive against
+    // malformed entries: anything without a usable id is skipped.
+    _sandboxMergeSets(primary, secondary) {
+      const out = [];
+      const seenIds = new Set();
+      const usedNames = new Set();
+      for (const s of (primary || [])) {
+        if (!s || typeof s !== 'object' || typeof s.id !== 'string') continue;
+        if (seenIds.has(s.id)) continue;
+        seenIds.add(s.id);
+        const name = typeof s.name === 'string' ? s.name : 'Untitled';
+        usedNames.add(name.toLowerCase());
+        out.push(s);
+      }
+      for (const s of (secondary || [])) {
+        if (!s || typeof s !== 'object' || typeof s.id !== 'string') continue;
+        if (seenIds.has(s.id)) continue;
+        seenIds.add(s.id);
+        let name = typeof s.name === 'string' ? s.name : 'Untitled';
+        if (usedNames.has(name.toLowerCase())) name = name + ' (local)';
+        usedNames.add(name.toLowerCase());
+        out.push({ ...s, name });
+      }
+      return out;
     },
 
     async sandboxScoreSelected(appType) {

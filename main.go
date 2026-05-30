@@ -99,12 +99,15 @@ func main() {
 		log.Printf("CLONARR_DEV_FEATURES=true — contributor features enabled")
 	}
 
+	sandboxStore := core.NewSandboxStore(configDir)
+
 	app := &core.App{
 		Config:       cfgStore,
 		Trash:        trashStore,
 		Profiles:     profilesStore,
 		CustomCFs:    customCFsStore,
 		CFGroups:     cfGroupsStore,
+		Sandbox:      sandboxStore,
 		DebugLog:     debugLogStore,
 		ActivityLog:  activityLogStore,
 		Version:      Version,

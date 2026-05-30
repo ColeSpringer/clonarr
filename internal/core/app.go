@@ -40,6 +40,7 @@ type App struct {
 	Profiles       *ProfileStore
 	CustomCFs      *CustomCFStore
 	CFGroups       *CFGroupStore
+	Sandbox        *SandboxStore
 	DebugLog       *DebugLogger
 	ActivityLog    *ActivityLogger
 	Version        string

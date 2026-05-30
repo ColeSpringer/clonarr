@@ -280,7 +280,7 @@
                           x-tt="'Filter the table to a saved score set, or show all releases'">
                     <option value="">— Show all releases —</option>
                     <template x-for="s in sandbox[activeAppType].scoreSets || []" :key="s.id">
-                      <option :value="s.id" x-text="s.name + ' (' + (s.titles?.length || 0) + ')'"></option>
+                      <option :value="s.id" x-text="s.name + ' (' + sandboxSetVisibleCount(activeAppType, s) + ')'"></option>
                     </template>
                   </select>
                   <template x-if="sandbox[activeAppType].activeScoreSet">
@@ -325,7 +325,7 @@
                    via Remove from set, the table-row filter is still active
                    so the table goes blank. Surface a helper banner so the
                    state is obvious and the user has clear next steps. -->
-              <div x-show="sandbox[activeAppType].activeScoreSet && ((sandbox[activeAppType].scoreSets || []).find(s => s.id === sandbox[activeAppType].activeScoreSet)?.titles?.length || 0) === 0"
+              <div x-show="sandbox[activeAppType].activeScoreSet && sandboxSetVisibleCount(activeAppType, (sandbox[activeAppType].scoreSets || []).find(s => s.id === sandbox[activeAppType].activeScoreSet)) === 0"
                    style="padding:8px 12px;background:var(--accent-orange-bg);color:var(--accent-orange);border:1px solid var(--accent-orange-bg);border-radius:6px;font-size:13px;margin-bottom:12px;line-height:1.5">
                 This score set is empty. Switch to <strong>— Show all releases —</strong> above to find rows to add, or click <strong>Delete</strong> to remove the empty set.
               </div>
@@ -429,7 +429,7 @@
                           x-text="sandboxResultStatus(res, res.scoring, activeAppType).pass ? 'PASS' : 'FAIL'">
                       </td>
                       <td style="padding:5px 2px;border-bottom:1px solid var(--bg-muted);text-align:center;white-space:nowrap">
-                        <button @click.stop="sandbox[activeAppType].results.splice(sandbox[activeAppType].results.indexOf(res), 1); saveSandboxResults(activeAppType)" x-tt="'Remove from results (deletes the row entirely — does not affect score sets)'"
+                        <button @click.stop="sandboxRemoveResultRow(activeAppType, res)" x-tt="'Remove from results, and from any saved score set that contains it.'"
                           style="background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:0 4px;line-height:1"
                           @mouseenter="$el.style.color='var(--accent-red)'" @mouseleave="$el.style.color='var(--text-secondary)'">&times;</button>
                       </td>
