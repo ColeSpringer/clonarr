@@ -9,13 +9,14 @@ changes since 2026-05-14.
 
 ### The new look
 
-The whole UI was rebuilt. The previous top tabs are replaced by a
-persistent left sidebar grouped into Library (Profiles, Custom Formats,
-Media Management), Tools (Maintenance, Advanced), and App (Notifications,
-Display, Security, Instances). A banner above the main pane always tells
-you which app (Radarr or Sonarr) and which page you're on, and themes the
-page to match. Dark and light modes are both supported, with content
-alignment plus sidebar vs top-bar layout preferences under Display.
+The whole UI was rebuilt. Navigation is grouped into Library (Profiles,
+Custom Formats, Media Management), Tools (Maintenance, Advanced), and
+App (Notifications, Display, Security, Instances), shown as a persistent
+left sidebar by default or as a top bar if you prefer (toggle under
+Display). A banner above the main pane always tells you which app
+(Radarr or Sonarr) and which page you're on, and themes the page to
+match. Dark and light modes are both supported, with content alignment
+preferences also under Display.
 
 Profiles splits into four sub-tabs: TRaSH Profiles, Sync Rules, History,
 and Compare. Media Management consolidates Quality Definitions, Naming,
