@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - main
-      # v3 UI work branch — builds preview image with :preview tag so brave
-      # testers can opt in by pointing their Unraid template at
-      # ghcr.io/prophetse7en/clonarr:preview instead of :latest or :dev.
-      # All v3 UI changes (sidebar layout, modern profile editor, etc.) land
-      # here. Merged into main as v3.0.0 when feature-complete.
-      # See dev/docs/layout-v2-plan.md for the full strategy.
-      - feature/v3-modern
+      # Any in-progress feature branch builds a nightly image so testers
+      # can opt in to the bleeding edge of a specific work-in-progress
+      # feature by pointing their Unraid template at
+      # ghcr.io/prophetse7en/clonarr:nightly-<feature-name>. The
+      # branch name after `feature/` becomes the tag suffix (with any
+      # internal slashes collapsed to dashes), so
+      # `feature/cf-drift-detection` produces `:nightly-cf-drift-detection`
+      # and two parallel feature branches never overwrite each other's
+      # image.
+      - 'feature/**'
     # Semver-only — vX.Y.Z and pre-releases like vX.Y.Z-rc1. Restore
     # tags or other named markers (e.g. v3-pre-classic-removal) must
     # not trigger a build: the metadata-action's tag rules don't
@@ -66,6 +69,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Compute the nightly tag suffix from the feature branch name so a
+      # branch like `feature/cf-drift-detection` becomes
+      # `nightly-cf-drift-detection`. The metadata-action below uses this
+      # output in its tags block. Slashes inside the feature name
+      # (`feature/foo/bar`) collapse to dashes so the docker tag stays
+      # valid.
+      - name: Compute nightly suffix
+        id: nightly
+        if: startsWith(github.ref, 'refs/heads/feature/')
+        run: |
+          NAME="${GITHUB_REF#refs/heads/feature/}"
+          NAME="${NAME//\//-}"
+          echo "tag=nightly-${NAME}" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
@@ -77,7 +94,7 @@ jobs:
             type=raw,value=dev,enable={{is_default_branch}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             type=raw,value=rc,enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
-            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/feature/v3-modern' }}
+            type=raw,value=${{ steps.nightly.outputs.tag }},enable=${{ startsWith(github.ref, 'refs/heads/feature/') }}
             type=semver,pattern=v{{version}}
             type=sha,prefix=sha-,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
 
@@ -87,16 +104,19 @@ jobs:
           # Tag pushes carry the semver (e.g. "3.0.0"). Branch pushes
           # include the build date + short SHA so testers can see at
           # a glance when an image was cut, and the channel prefix
-          # (dev vs preview) tells them which branch produced it.
-          # Example: preview-2026-05-30-8268786 instead of dev-8268786.
+          # tells them which branch produced it. Examples:
+          #   main                          → dev-2026-05-30-8268786
+          #   feature/cf-drift-detection    → nightly-cf-drift-detection-2026-05-30-8268786
           DATE=$(date -u +%Y-%m-%d)
           SHA_SHORT=${GITHUB_SHA::7}
           case "${{ github.ref }}" in
             refs/tags/v*)
               echo "value=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
               ;;
-            refs/heads/feature/v3-modern)
-              echo "value=preview-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
+            refs/heads/feature/*)
+              FEATURE_NAME="${GITHUB_REF#refs/heads/feature/}"
+              FEATURE_NAME="${FEATURE_NAME//\//-}"
+              echo "value=nightly-${FEATURE_NAME}-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "value=dev-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
