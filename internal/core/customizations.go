@@ -100,21 +100,20 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 		scoreSet = "default"
 	}
 
-	// 1a. Pure Additional CF opt-ins from SelectedCFs — CFs the user
-	//     opted into via the Additional CF picker WITHOUT also setting
-	//     a custom score. These live in rule.SelectedCFs only; the
-	//     score-overrides loop below wouldn't see them. Without this
-	//     pre-pass, a rule with N opt-ins and no score changes shows
-	//     "0 customizations" in the Sync Rules table — actively
-	//     misleading. Pair with frontend pdAllCustomizations which
-	//     mirrors this logic for the editor-header count.
-	counted := make(map[string]bool, len(rule.SelectedCFs))
+	// Collect added + overridden as SETS so each tid can belong to
+	// BOTH categories (a CF the user picked from Additional CF AND
+	// gave a custom score to) without inflating the total. Backend
+	// total uses the union count, matching the editor's
+	// pdOverrideSummary which counts customizations = unique tids.
+	// ExtraCFs / CustomScores remain as cardinalities of the
+	// individual sets so the tooltip can render the breakdown.
+	added := make(map[string]bool)
+	overridden := make(map[string]bool)
+
+	// 1a. SelectedCFs — pure Additional CF opt-ins. Skips CFs in any
+	//     profile-eligible group (those are profile opt-ins, not
+	//     Additional) and dangling custom: orphans.
 	for _, tid := range rule.SelectedCFs {
-		// Skip if CF lives in any profile-eligible group (including
-		// default-off opt-in groups like Streaming Services UK for
-		// WEB-1080p). Those are "profile opt-ins", not "Additional".
-		// Only count when the CF is truly outside the profile's scope
-		// (e.g. HDR Formats for WEB-1080p).
 		if profileEligibleCFs[tid] {
 			continue
 		}
@@ -123,58 +122,64 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 				continue
 			}
 		}
-		out.ExtraCFs++
-		counted[tid] = true
+		added[tid] = true
 	}
 
-	// 1b. Split ScoreOverrides into ExtraCFs (added beyond defaults) and
-	//     CustomScores (override on default CF where score differs).
-	for tid, userScore := range rule.ScoreOverrides {
-		// Skip dangling `custom:<id>` orphans — the referenced custom CF
-		// has been deleted from the registry but the rule's override
-		// hasn't been cleaned yet. Detail view's pdAllCustomizations
-		// hides these via its lookup() returning null for custom:-prefix
-		// failures; we mirror that hiding here.
-		if strings.HasPrefix(tid, "custom:") {
-			if customCFIDs == nil || !customCFIDs[tid] {
-				continue
-			}
-		}
-		if !profileEligibleCFs[tid] {
-			// Truly outside profile scope → Additional. Already counted
-			// as a SelectedCFs opt-in above? Don't double-count.
-			if !counted[tid] {
-				out.ExtraCFs++
-			}
-			continue
-		}
-		if !defaultCFs[tid] {
-			// CF is profile-eligible but not in TRaSH defaults (default-
-			// off opt-in group). Override on it counts as a CustomScore
-			// — user changed the recommended score for an opt-in. Falls
-			// through to the score-vs-default comparison below.
-		}
-		// CF is in defaults — compare to its TRaSH default score. If we
-		// can't resolve the default (unknown CF or no score for set), be
-		// conservative and count the entry as a custom score: presence
-		// of an override entry already signals intent.
+	// 1b. ScoreOverrides — populates BOTH sets where appropriate:
+	//     - non-profile-eligible CFs with a score override also count
+	//       as Additional (the override is itself an opt-in signal even
+	//       without a SelectedCFs entry), and as a CustomScore when
+	//       the saved score differs from the CF's TRaSH default.
+	//     - profile-eligible CFs only count as CustomScore (when the
+	//       score differs from default).
+	isCustomScore := func(tid string, userScore int) bool {
 		if ad == nil {
-			out.CustomScores++
-			continue
+			return true
 		}
 		cf, ok := ad.CustomFormats[tid]
 		if !ok {
-			out.CustomScores++
-			continue
+			return true
 		}
 		defScore, hasDef := cf.TrashScores[scoreSet]
 		if !hasDef {
 			defScore, hasDef = cf.TrashScores["default"]
 		}
-		if !hasDef || userScore != defScore {
-			out.CustomScores++
+		return !hasDef || userScore != defScore
+	}
+
+	for tid, userScore := range rule.ScoreOverrides {
+		// Hide dangling custom: orphans — referenced CF was deleted
+		// from the registry but the rule's override hasn't been cleaned
+		// yet. Editor mirrors this hide via pdAllCustomizations lookup.
+		if strings.HasPrefix(tid, "custom:") {
+			if customCFIDs == nil || !customCFIDs[tid] {
+				continue
+			}
+		}
+
+		if !profileEligibleCFs[tid] {
+			// Truly Additional. The score override itself is an opt-in
+			// signal, so add to "added" even if SelectedCFs didn't list
+			// it. Then layer the CustomScore on top when applicable —
+			// previously the loop continued here and silently dropped
+			// the score-change tracking for Additional+score combos.
+			added[tid] = true
+			if isCustomScore(tid, userScore) {
+				overridden[tid] = true
+			}
+			continue
+		}
+
+		// Profile-eligible CF: a non-default score is a CustomScore.
+		// (default-off opt-in groups land here too — overriding the
+		// recommended score for an opt-in is still a CustomScore.)
+		if isCustomScore(tid, userScore) {
+			overridden[tid] = true
 		}
 	}
+
+	out.ExtraCFs = len(added)
+	out.CustomScores = len(overridden)
 
 	// 2. Quality changes.
 	//
@@ -242,7 +247,21 @@ func ComputeRuleCustomizations(rule *AutoSyncRule, profile *TrashQualityProfile,
 		}
 	}
 
-	out.Total = out.Quality + out.ExtraCFs + out.CustomScores + out.General + out.ExcludedCFs
+	// Total uses the UNION of added + overridden CFs (matching the
+	// editor's pdOverrideSummary `customizations` field), plus the
+	// independent quality / general / excluded counts. Summing
+	// ExtraCFs + CustomScores directly would double-count a CF that is
+	// both Additional AND has a custom score — the very case that made
+	// the Sync Rules column read "4 changes" for a rule the editor
+	// summarised as "2 customizations + 2 custom scores".
+	cfUnion := make(map[string]bool, len(added)+len(overridden))
+	for tid := range added {
+		cfUnion[tid] = true
+	}
+	for tid := range overridden {
+		cfUnion[tid] = true
+	}
+	out.Total = out.Quality + len(cfUnion) + out.General + out.ExcludedCFs
 	return out
 }
 
