@@ -1,363 +1,193 @@
 # Changelog
 
-## Unreleased — v3 UI preview (`:dev` + `:preview` channels)
+## v3.0.0
 
-A ground-up redesign that's been on `:preview` since 2026-05-14 lands
-on `:dev` for broader testing. `:latest` (v2.5.9) is unchanged — you
-only get this build if you've opted into one of the test channels.
+A ground-up UI redesign plus several new features. Your data and
+configuration carry over from v2.5.9, but the interface is substantially
+different. Testers running `:preview` or `:dev` have been using these
+changes since 2026-05-14.
 
-### Update wave - 2026-05-29 (Clone across instances + Profile overview editing)
+### The new look
 
-**Clone a profile to a different instance**
+The whole UI was rebuilt. The previous top tabs are replaced by a
+persistent left sidebar grouped into Library (Profiles, Custom Formats,
+Media Management), Tools (Maintenance, Advanced), and App (Notifications,
+Display, Security, Instances). A banner above the main pane always tells
+you which app (Radarr or Sonarr) and which page you're on, and themes the
+page to match. Dark and light modes are both supported, with content
+alignment plus sidebar vs top-bar layout preferences under Display.
 
-- The Clone button on the Sync Rules page now lets you pick which
-  instance to clone into. You can copy a synced profile from one
-  Radarr (or Sonarr) to another of the same type. Before, Clone only
-  made a copy on the same instance.
+Profiles splits into four sub-tabs: TRaSH Profiles, Sync Rules, History,
+and Compare. Media Management consolidates Quality Definitions, Naming,
+and Maintenance under one shared header. Settings moves to a sidebar
+layout, with Instances grouping Radarr, Sonarr, and optional Prowlarr in
+three sections.
 
-**Manage Custom Formats from the Profile overview**
+### Custom Formats
 
-- On a profile's Overview tab, optional Custom Formats now have a
-  switch you can turn off to drop them from the profile, right where
-  you see them.
-- With "Customize this profile" turned on, you can also exclude a
-  required Custom Format and change its score from the same tab.
-- Groups that are fully optional are labeled "optional" so you can
-  tell at a glance which Custom Formats are safe to switch off.
+The Custom Formats tab is completely rebuilt. Browse by category in a
+hierarchical sidebar; every row shows its conditions inline as green
+(must match) or red (must not match) pills so you can scan a category
+without expanding anything. Hover a CF name for the description plus
+TRaSH-Guides and JSON links. A Clone button next to each row creates a
+copy ready to tweak.
 
-### Update wave — 2026-05-28 (Auto-sync settings)
+The CF editor is rewritten as a wide modal with a sidebar (General,
+Conditions, plus TRaSH dev fields behind a toggle). Each condition is
+its own card with labelled IDENTITY / VALUE / FLAGS / ACTIONS sections.
+A new default score field on the General tab means new custom CFs no
+longer ship with a zero score. The description supports basic markdown
+with a toolbar and live preview.
 
-The Profile Sync settings section is now called "Auto-sync", and the
-third mode, "Wait before applying", is fully working.
+Your custom CFs can be organised under user-defined categories. Pick
+Custom (default), one of the preset buckets, or type a new one. Custom
+categories all nest under a single Custom parent in the sidebar so they
+never mix with TRaSH groups.
 
-**Wait before applying**
+**Push a CF to Arr without syncing a profile.** Every row in the Custom
+Formats library and the Scoring Sandbox Add Custom Formats picker has a
+new "+" button that creates the CF entity in a chosen Radarr or Sonarr
+instance. Profiles are not touched, so you can stage TRaSH or custom CFs
+in Arr before the next profile sync, or make a CF available for ad-hoc
+testing without touching any sync rule.
 
-- Pick this mode under Settings, Auto-sync to detect changes now but
-  apply them on a delay you choose (for example 3 hours, or 1 day).
-- The delay is per profile, counted from when that profile's change
-  was first detected. Changes found at different times apply at
-  different times, not all at once.
-- Set the delay as a number plus a unit (minutes, hours, or days).
-- The countdown survives restarts. If you set a 7-day delay and
-  restart after 5 days, there are still 2 days left. Nothing fires
-  early on boot.
-- Notifications and the in-app badge tell you what was detected and
-  roughly when it will be applied.
+### Sync Rules and History
 
-**Auto Sync Schedule replaced**
+Sync Rules is redesigned with per-instance cards. Status pills (in sync,
+pending, drift, failed) and a customisations count surface per rule.
+Click an actionable status pill to open a Quick action modal that lists
+the affected items plus a one-click resolution (Re-sync, Apply updates,
+Sync now).
 
-- The old "Auto Sync Schedule" (a separate periodic force-resync) is
-  gone. Arr drift detection plus Apply automatically now do the same
-  job more precisely: they sync only when something has actually
-  changed instead of re-pushing everything on a clock.
-- If you had Auto Sync Schedule turned on, the upgrade automatically
-  switches on "Direct edits in Radarr/Sonarr" detection so your Arr
-  profiles keep being kept in sync. No action needed.
+**Notes per sync rule.** A collapsible Notes section in the profile
+editor lets you write down what a profile is for and why you made any
+customisations. Visible as a hover-tooltip beside the Arr profile name
+in the Sync Rules table. Markdown supported.
 
-### Update wave — 2026-05-27 (Arr drift detection)
+**Clone across instances.** The Clone button on a sync rule now lets you
+pick which instance to clone into, so you can copy a synced profile from
+Radarr (main) to Radarr 4K or to any other instance of the same type.
 
-Clonarr can now detect when someone edits a synced Arr profile
-directly (changes scores or settings in the Radarr/Sonarr UI
-without going through Clonarr) and tell you about it.
+**Per-instance auto-sync pause.** Pause auto-sync for one instance
+without affecting others.
 
-**How to use it**
+**Sync history shows more detail per event.** Each history row shows a
+trigger chip (Manual, TRaSH update, Arr drift, Restore, Rollback,
+Delayed apply), commit pills linking to the upstream commits that made
+each CF change, and per-condition diffs for CF spec changes.
 
-- Turn on "Direct edits in Radarr/Sonarr" under Settings →
-  Profile Sync to enable scheduled drift checks.
-- Affected rules get an "Arr drift" badge in the Sync Rules table.
-  Hover the badge to see which fields differ.
-- Opt in to notifications per agent under Notifications: two new
-  events, "Arr drift detected" and "Arr drift resolved", deliver
-  Discord/NTFY/Apprise messages when drift appears or goes away.
-- The Check button now runs drift detection on every press in
-  addition to TRaSH updates, so one click covers both sides.
+The profile editor (now Sync Preview) has a Customize mode with inline
+editors directly in the Profile overview, a Diffs view that shows
+everything you have changed versus the TRaSH default, and a
+customisations summary strip at the top.
 
-**Quick action modal**
+### Compare
 
-Click any actionable status pill on a Sync Rules row to open a
-focused modal that lists the changes plus a one-click action:
-- Arr drift: "Re-sync now" pushes Clonarr's saved state back.
-- Updates: "Apply updates" pulls TRaSH and syncs.
-- Pending (your saved local edits): "Sync now" pushes them.
+Compare is rebuilt with a new sub-nav: Overview, Optional, General,
+Qualities, All Diffs, Wrong score, Additional CFs, Missing, and All
+Active. Each pane has a one-line plain-language description. Exclusive
+groups (Golden Rule, Miscellaneous Standard or SQP) only surface the
+variant you actually picked instead of listing both.
 
-Each modal also has an "Open editor" button for full context.
-Pill tooltips list the affected items instead of just counts.
+### Auto-sync
 
-**Layout + naming**
+The Profile Sync settings section is renamed Auto-sync with a new
+three-mode model:
 
-- "Out of sync" is now called "Arr drift" everywhere, so it is
-  clearer which side has the change.
-- "Arr drift" is its own tab in the profile editor alongside
-  "Profile updates".
+- **Apply automatically** (default) syncs the change to Arr right away
+  for rules with auto-sync turned on.
+- **Just notify me. I'll apply manually** sends a notification and shows
+  an "updates available" badge so you can review and apply on your own
+  schedule.
+- **Wait before applying. Apply on a separate schedule** detects changes
+  now and applies them automatically after a delay you choose (minutes,
+  hours, or days). The delay is per profile, counted from when that
+  profile's change was first detected, and survives container restarts.
 
-**Quiet manual operations**
+Detection covers two sources you can toggle independently: TRaSH-Guides
+upstream updates and Arr drift (someone editing a synced profile
+directly in Radarr or Sonarr). Drift detection adds an "Arr drift"
+badge on affected Sync Rules rows and fires the new "Arr drift detected"
+and "Arr drift resolved" notification events. The Check button runs both
+drift detection and TRaSH-Guides update detection in one click, and
+sends the same notifications whether the Check was a manual click or
+the scheduled run.
 
-Manual operations (the Check button, manual sync) do not fire
-Discord/NTFY notifications for drift findings. Only scheduled
-checks notify, so you do not get pinged about something you are
-already looking at in the UI.
+The old "Auto Sync Schedule" (a separate periodic force-resync) is gone.
+Drift detection plus Apply automatically do the same job more precisely:
+they sync only when something has actually changed. If you had Auto
+Sync Schedule turned on, the upgrade automatically turns on Arr drift
+detection so your profiles stay in sync. No action needed.
 
-### Update wave — 2026-05-24 (Profile Sync groundwork)
+### Scoring Sandbox
 
-Behind-the-scenes setup for a coming feature. **Your pull behaviour
-is unchanged** — same schedule, same auto-sync, same UI.
+**Sandbox state now persists to a file.** Release titles and named score
+sets move from browser localStorage to `/config/sandbox/{radarr,sonarr}.json`.
+They survive any browser clear or device swap, sync across browsers via
+the shared volume, and back up alongside the rest of your config. The
+file is intentionally slim and shareable: open it in any editor or
+paste it into a teammate's bulk-paste box and they get the same set of
+test releases. The Bulk paste textarea detects JSON automatically, so
+sharing round-trips in one click. Plain text one-title-per-line still
+works for casual sharing.
 
-- On first start your `clonarr.json` gets a new `profileSync` block,
-  populated automatically from your existing Pull settings. You don't
-  need to do anything — this is groundwork for the upcoming "notify
-  me when TRaSH publishes new updates" feature.
-- A new read-only endpoint `/api/profile-sync` exposes the same
-  state. The clonarr UI does not call this yet (the Settings page
-  for it lands in a later wave). Curious testers can poke it with
-  curl + their API key.
-- A background process checks the TRaSH-Guides repo for new commits
-  on your configured cadence. It only reads — no pulls, no syncs, no
-  notifications fire. Lays the wiring for the next wave.
+Migration is automatic. Your existing localStorage data is pushed to the
+server on first load, and the localStorage cache stays as an emergency
+backup so a server-side accident never costs the user their history.
 
-### Update wave — 2026-05-24 (homepage widget)
-
-- **Homepage dashboard integration.** New read-only endpoint
-  `GET /api/widget/summary` returns instance counts, sync-rule counts,
-  per-app profile lists, next pull, and next sync — everything a
-  dashboard needs in one call. Auth via the existing `X-Api-Key`
-  header (Settings → API). Paste-ready
-  [gethomepage](https://gethomepage.dev) config in
-  [`docs/homepage-widget.md`](docs/homepage-widget.md).
-
-### Update wave — 2026-05-24
-
-Polish + cleanup on top of the May 14 drop:
-
-- **Compare tab rebuilt.** New sub-nav reads top-to-bottom: Overview /
-  Optional / General / Qualities / All Diffs / Wrong score /
-  Additional CFs / Missing / All Active. Each pane has a one-line
-  plain-language description so you always know what you're looking
-  at. Per-row context labels (Required / Default on / Optional) now
-  appear only when they add information the section header doesn't
-  already convey.
-- **Compare: cleaner exclusive groups (Golden Rule etc).** Only the
-  variant you actually picked surfaces — the unchosen alternative
-  stays hidden. If a default-on exclusive group has no variant
-  picked, only the TRaSH-recommended one shows up as missing.
-- **Custom Formats — Description / Conditions toggle.** Toolbar
-  switch swaps the per-row info cell between the CF's description
-  (with small TRaSH guide / JSON footer links) and the condition
-  pills. Description by default; replaces the old hover-tooltip.
-- **Hover-tooltips on every CF name.** Same TRaSH info (description +
-  links) is now available everywhere — Custom Formats tab, Profile
-  editor, and Compare — by hovering the CF name. Tooltip stays off
-  when there's nothing to show.
-- **Profile editor — cross-group CF search.** Search box at the top
-  of the sidebar filters CFs across every group in the active tab at
-  once (not just the currently selected group). Works the same way
-  in Profile default, Additional CF, and Profile overview.
-- **App-themed customization indicators.** "N customizations",
-  "N changes", modified values, and the Note strip on Compare now
-  use yellow for Radarr and cyan-blue for Sonarr. Orange stays
-  reserved for actual warnings.
-- **Group toggle now properly respected.** Disabling a CF group in
-  the profile editor (e.g. Streaming Services UK, Unwanted Formats)
-  now removes its CFs from sync as expected — including CFs that
-  carry a custom score override. Toggling the group back on restores
-  defaults cleanly. The lock-icon on required CFs still works for
-  per-CF exclusions within an enabled group.
-- **"All optional CFs" toggle is now scoped.** Only flips the
-  non-default opt-in CFs within a group. Required CFs and recommended
-  (default-on) members stay as the group toggle dictates — no more
-  accidentally turning off recommendations with a single click.
-- **Score input disabled when the CF is off.** Editing a score on a
-  CF that isn't being synced no longer silently leaks the override
-  into the sync payload — the input is greyed out with a tooltip
-  pointing you to enable the CF first.
-- **Apply / Apply & Sync close the editor on success.** Renamed
-  Cancel → Close, Save → Apply, Save & Sync → Apply & Sync. After a
-  successful Apply or Apply & Sync, the editor closes automatically
-  and a toast summarises the result — no more clicking through to
-  manually dismiss. Errors leave the editor open for re-attempt.
-
-### Update wave — 2026-05-24 (late)
-
-Iterating on the wave 2b feedback. Mostly editor flow + accuracy:
-
-- **Profile editor sidebar matches Custom Formats sidebar.** Each
-  category section now has a chevron (click to lock open/closed,
-  persists across sessions) and a label (click to expand the section
-  temporarily — other transient-expanded sections collapse). Single-
-  group sections (Unwanted → Unwanted Formats etc.) jump straight to
-  that group on label click instead of forcing a second click on the
-  only child. Sidebar colours simplified — active section gets the
-  app-color highlight, no per-category tinting.
-- **Additional CF tab — opt-ins now persist properly.** Opting into
-  Flux / HDR / DV / etc. via the Additional CF picker now survives
-  Apply & Sync → Edit cycles. Opening the rule again shows the same
-  picks checked and the custom-scores intact. Disabling a whole CF
-  group correctly removes its CFs from Arr; toggling the group back
-  on restores the TRaSH-recommended members exactly as expected.
-- **Score field unified.** Changing or resetting an Additional CF's
-  score in either the Profile overview or the Additional CF tab now
-  takes effect everywhere — previously the two views could disagree
-  because they read from different score stores.
-- **Customizations counts include opt-ins.** The Sync Rules table's
-  Customizations column and the editor's header count now both
-  include Additional CF opt-ins. Numbers match across the table, the
-  header, and the Profile overview sub-nav badges. Backend-side, the
-  count distinguishes "Additional CF" (truly outside the profile's
-  scope, e.g. HDR for WEB-1080p) from "opt-in to a profile-eligible
-  default-off group" (e.g. Streaming Services UK for WEB-1080p).
-- **Profile overview Diffs surfaces quality items.** Quality toggle
-  changes (Allowed / Disallowed flips, group reordering) now appear
-  in the Diffs view alongside basics, score overrides, additional
-  CFs, and excluded CFs. Reset button on each row reverts the
-  override stack to the profile default.
-- **Apply & Sync toast shows the result.** Auto-closing the editor
-  used to hide the per-change list. The toast now carries the full
-  list of changes (CFs created / updated, scores set, quality
-  toggles, settings) so you can verify the result before the toast
-  dismisses. 12-second hold when there are changes.
-- **Edit Qualities reset closes the editor.** Resetting from inside
-  the Quality Items editor now closes the modal as well — previously
-  it cleared the structure but left an empty editor up with only the
-  Reset button visible.
-
-#### Fixed
-
-- CF descriptions weren't rendering anywhere (a helper was calling
-  an undefined sanitiser — the old hover-tooltip silently showed
-  only the TRaSH links, no description).
-- Required CFs in the profile editor missed description text from
-  the backend (only Group CFs had it).
-- Compare's header diff count could disagree with the sidebar
-  count (the header was using the backend total, the sidebar uses
-  frontend re-classification). Header count removed; sidebar is the
-  source of truth.
-
-### What's new at a glance
-
-- **Brand new look.** A persistent sidebar replaces the top tabs. The
-  banner above the main pane always tells you which app (Radarr or
-  Sonarr) and which page you're on, and themes the rest of the page to
-  match. Light + dark modes both supported.
-- **Custom Formats — completely rebuilt.** Browse by category in a
-  hierarchical sidebar. Every CF row shows its conditions inline as
-  green (must match) / red (must not match) pills so you can scan a
-  category without expanding anything. Hover the CF name to see the
-  description + TRaSH guide / JSON links. A new Clone button next to
-  each row creates a copy ready to tweak.
-- **CF editor — wide modal with a sidebar.** General, Conditions, and
-  (for power users) TRaSH dev fields are separate tabs. Each condition
-  renders as a card with labelled IDENTITY / VALUE / FLAGS / ACTIONS
-  sections, and the Required / Negate toggles use the same coloured
-  pill language as the table. Description supports basic markdown with
-  a toolbar + live preview.
-- **Set a default score on custom CFs.** New field on the General tab —
-  no more zero-score new CFs that need profile-by-profile fixing.
-- **Group your custom CFs.** The Category field now actually does what
-  it says — pick "Custom" (default), one of the preset buckets, or
-  type a new one. Custom categories all nest under a single "Custom"
-  parent in the sidebar so they never get mixed up with TRaSH groups.
-- **Notes per sync rule.** A new collapsible Notes section in Sync
-  Preview's Profile overview lets you write down what a profile is for
-  and why you made any customisations. Visible as a hover-tooltip
-  beside the Arr profile name in the Sync Rules table. Markdown
-  supported.
-- **Sync rule editor — modernized.** Customize mode now exposes
-  inline editors directly in the Profile overview (no more "scroll to
-  the top to edit"), a Diffs view shows everything you've changed vs
-  the TRaSH default, and a customisations summary strip at the top
-  tells you how many of each kind of change you have. Qualities row
-  switched from misleading counts ("5 of 12") to a clear "Profile
-  default" / "N changes" with a reset button.
-
-### Tabs reorganised
-
-- **Profiles** now has four sub-tabs: TRaSH Profiles (the browse), Sync
-  Rules (your saved rules), History (per-sync log), and Compare.
-  Previously these were stacked in one long page.
-- **Media Management** consolidates Quality Definitions, Naming, and
-  Maintenance under one app-themed header with a shared instance
-  picker.
-- **Settings** moved to a sidebar instead of in-page sub-nav. The
-  Instances section now groups Radarr + Sonarr + (optional) Prowlarr
-  in a 3-section layout.
+**Add to Arr now warning.** When you pick a custom format in the Sandbox
+Add Custom Formats picker that does not yet exist in your selected Arr
+instance, closing the picker prompts to push the CF (so the sandbox can
+actually score against it) before applying the selection. The same
+backend endpoint that powers the Custom Formats Library Add to Arr
+button covers this flow.
 
 ### TRaSH Profile Discovery
 
-- The TRaSH Profiles tab generates short auto-descriptions for every
-  profile — resolution + source + size hints + which audio fallback
-  applies — pulled live from TRaSH JSON. SQP profiles get TRaSH's
-  verbatim disclaimer + a link to the Discord guide.
-- Compact filter chips for category (Standard / SQP / Anime / etc.)
-  and features (HDR / DV / multi-audio).
-- "In use" badge with a hover-tooltip listing which Arr instances have
-  the profile.
-- Expand-all toggle for the category sections.
+The TRaSH Profiles tab generates a short auto-description for every
+profile (resolution plus source plus size hints plus audio fallback),
+pulled live from TRaSH-Guides JSON. SQP profiles get TRaSH-Guides'
+verbatim disclaimer plus a link to the Discord guide. Compact filter
+chips let you filter by category (Standard, SQP, Anime, etc.) and by
+features (HDR, DV, multi-audio). An "In use" badge with a hover-tooltip
+shows which instances already have the profile.
 
-### Improvements
+### Maintenance
 
-- **Per-instance auto-sync pause.** Pause auto-sync for one Radarr
-  instance (e.g. your 4K library) without affecting another.
-- **Cleanup gets a "Find unused Quality Profiles" scan.** Detects
-  profiles that aren't referenced anywhere (no movies / series / import
-  lists / collections) so you can clean them out safely.
-- **Customize CF picker — single Custom bucket.** All your user-managed
-  CFs surface in one "Custom" section in the Additional CF picker
-  regardless of which category you chose — never mixed with
-  TRaSH-managed groups. Each user-category becomes a sub-group.
-- **Import CFs from an Arr instance — cleaner picker.** Single-column
-  scrollable list, search by name, "Hide guide CFs" toggle so you can
-  focus on user-managed Arr CFs that don't already have a TRaSH copy.
-- **No-instance banner.** First-run users see a discrete themed banner
-  under the page header pointing them straight to Settings → Instances
-  when no Radarr / Sonarr instance is configured. Auto-disappears the
-  moment you add one.
-- **Unsaved-changes guard (Issue #52).** Switching pages, apps, or
-  reloading the browser with unsaved profile-editor edits now prompts
-  before discarding your work.
-- **CIDR ranges in `TRUSTED_PROXIES`.** You can now set
+- **Find unused Quality Profiles.** Detects profiles that are not
+  referenced anywhere (no movies, series, import lists, or collections)
+  so you can clean them out safely.
+- **Restore TRaSH Data.** A Reset button under Settings then TRaSH
+  Guides wipes the cached repo and forces a fresh clone on the next
+  Pull without touching your config, profiles, or custom CFs.
+
+### Other improvements
+
+- **No-instance banner.** First-run users see a themed banner pointing
+  them straight to Settings then Instances. Auto-disappears when you
+  add one.
+- **Unsaved-changes guard.** Switching pages, apps, or reloading the
+  browser with unsaved profile-editor edits prompts before discarding
+  (resolves issue #52).
+- **CIDR ranges in `TRUSTED_PROXIES`.** Set
   `TRUSTED_PROXIES=172.18.0.0/24` instead of listing each container IP
-  individually. Hostnames + literal IPs still work as before.
+  individually. Hostnames and literal IPs still work as before.
+- **Homepage dashboard integration.** New read-only
+  `GET /api/widget/summary` endpoint returns instance counts, sync-rule
+  counts, per-app profile lists, next pull, and next sync in one call.
+  Paste-ready [gethomepage](https://gethomepage.dev) config in
+  [`docs/homepage-widget.md`](docs/homepage-widget.md).
+- **Browser back and forward** works throughout. Each section and
+  sub-tab has its own URL.
 
 ### Contributor credits
 
-- **PR #53 by @xopez** — added structured GitHub issue templates for
-  bug reports / feature requests, plus a contact link to Discord for
+- **PR #53 by @xopez** added structured GitHub issue templates for bug
+  reports and feature requests, plus a contact link to Discord for
   community help.
-- **Issue #52 by @xopez** — surfaced the missing unsaved-changes
-  warning that drove the new prompt.
+- **Issue #52 by @xopez** surfaced the missing unsaved-changes warning
+  that drove the new prompt.
 
-### Fixed
-
-- **Stale-cache no longer hides newly imported CFs.** The Additional
-  CF picker now invalidates its catalog cache when you create / edit
-  / delete a custom format, so the picker always reflects your latest
-  state without a container restart.
-- **Required-CF exclusions survive rule reload.** Lock-icon click to
-  exclude a required CF now persists through Save & reload without
-  the exclusion silently flipping back on.
-- **Profile-editor dirty-tracking ignores no-op quality opens.** Just
-  opening the Quality Items editor (which seeds quality structure
-  from profile defaults) no longer marks the rule as dirty, so the
-  "Discard changes?" prompt only fires on actual edits.
-- **Markdown editor preview renders lists + code spans.** Internal
-  sanitiser allowlist extended for the markdown subset; bullet / numbered
-  lists + inline code now show in the preview pane as expected.
-- **Custom CF clone carries over "Include in Rename".** Cloning a
-  TRaSH CF that's marked include-in-rename now inherits the flag
-  instead of silently defaulting to off.
-
-### Behind the scenes
-
-- Backend hardening: TOCTOU fixes around scan/apply, defensive
-  fail-safes when Arr API calls fail, deterministic sort on
-  orphaned-score scans.
-- New integration test runs profile descriptions against real TRaSH
-  data on disk to catch regressions early.
-- CI tightened: `:latest` tag-trigger restricted to clean semver
-  (`vX.Y.Z`); release-candidate tags (`vX.Y.Z-rc1`) won't accidentally
-  ship as stable.
-- Classic profile editor (legacy markup) removed from the binary —
-  saves ~1200 lines + ends the dual-editor cognitive tax. Sync Preview
-  is now the single editor for sync rules.
 
 ## v2.5.9
 
