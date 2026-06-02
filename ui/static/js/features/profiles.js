@@ -3403,6 +3403,758 @@ export default {
       }
     },
 
+    // Fetch the per-CF view that drives the Sync Rules → Custom Formats
+    // sub-tab. Lazy-loaded: only fires on first click of the Custom
+    // Formats sub-tab (not on tab mount), so users who never visit the
+    // sub-tab don't pay the per-instance ArrCF list cost. Re-runs after
+    // an Apply succeeds so the row's status pill refreshes without
+    // requiring the user to navigate away and back.
+    async loadCFSyncRules(appType) {
+      if (!appType) return;
+      try {
+        const r = await fetch(`/api/cf-sync-rules/${appType}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        this.cfSyncRules[appType] = data.items || [];
+        this.cfSyncRulesLoaded[appType] = true;
+      } catch (e) {
+        console.error('loadCFSyncRules:', e);
+      }
+    },
+
+    // Number of instances on which the row is currently drifted. Drives
+    // both the per-row pill ("Arr drift (2)") and the per-instance Apply
+    // button cluster (one button per drifted instance).
+    cfRowDriftCount(row) {
+      if (!row || !Array.isArray(row.instances)) return 0;
+      let n = 0;
+      for (const inst of row.instances) {
+        if (inst.drift) n++;
+      }
+      return n;
+    },
+
+    // Number of CFs currently drifted on at least one instance, for the
+    // card-header summary line ("3 drifted" / "All in sync").
+    // Number of instances on this row that have a TRaSH upstream
+    // update pending. Symmetric with cfRowDriftCount — feeds the
+    // per-row status pill + "X updates" badges.
+    cfRowUpdateCount(row) {
+      if (!row || !Array.isArray(row.instances)) return 0;
+      let n = 0;
+      for (const inst of row.instances) {
+        if (inst && inst.updateAvailable) n++;
+      }
+      return n;
+    },
+
+    cfDriftedCount(appType) {
+      // Reflect what's actually in the current view — when the user
+      // scopes to one instance via the picker, "drifted" should mean
+      // "drifted on THIS instance", not the global cross-instance
+      // total. cfSyncRulesFiltered already trims row.instances to
+      // just the picked instance so cfRowDriftCount counts correctly.
+      const rows = this.cfSyncRulesFiltered(appType) || [];
+      let n = 0;
+      for (const row of rows) {
+        if (this.cfRowDriftCount(row) > 0) n++;
+      }
+      return n;
+    },
+
+    // Update-available row count for the currently-visible scope.
+    // Symmetric with cfDriftedCount.
+    cfUpdatesCount(appType) {
+      const rows = this.cfSyncRulesFiltered(appType) || [];
+      let n = 0;
+      for (const row of rows) {
+        if (this.cfRowUpdateCount(row) > 0) n++;
+      }
+      return n;
+    },
+
+    // Hierarchical category tree for the CF sub-tab sidebar. Groups
+    // managed CFs by their parent bracket-prefix ("Audio Formats",
+    // "HDR Formats", "Unwanted") with children = unique subcategories
+    // ("Default", "Streaming", "Anime"). Mirrors the Browse tab's
+    // sidebar shape so users carry the same mental model across both
+    // surfaces. Counts respect the active instance scope; search is
+    // NOT applied (sidebar is "jump to", not "narrow further").
+    cfSyncRulesCategories(appType) {
+      let rows = this.cfSyncRules[appType] || [];
+      const instId = this.cfSyncRulesActiveInstance || '';
+      if (instId) {
+        rows = rows
+          .map(r => {
+            const filtered = (r.instances || []).filter(i => i.id === instId);
+            if (filtered.length === 0) return null;
+            return { ...r, instances: filtered };
+          })
+          .filter(Boolean);
+      }
+      const byParent = new Map();
+      for (const row of rows) {
+        const parent = row.category || 'Other';
+        const child = row.subcategory || '';
+        if (!byParent.has(parent)) {
+          byParent.set(parent, { name: parent, total: 0, drifted: 0, children: new Map() });
+        }
+        const parentEntry = byParent.get(parent);
+        parentEntry.total++;
+        if (this.cfRowDriftCount(row) > 0) parentEntry.drifted++;
+        if (child) {
+          if (!parentEntry.children.has(child)) {
+            parentEntry.children.set(child, { name: child, total: 0, drifted: 0 });
+          }
+          const childEntry = parentEntry.children.get(child);
+          childEntry.total++;
+          if (this.cfRowDriftCount(row) > 0) childEntry.drifted++;
+        }
+      }
+      const out = Array.from(byParent.values()).map(p => ({
+        ...p,
+        children: Array.from(p.children.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+      // Fixed-order tail:
+      //   1. Custom at the very bottom (user-managed CFs aren't in
+      //      the TRaSH catalog so they read as "other" relative to
+      //      it).
+      //   2. ANY group whose name starts with "SQP" just above Custom
+      //      (TRaSH's SQP-N + SQP MA Hybrid + SQP Disable If One...
+      //      are profile-targeted quality presets, not content
+      //      categories — they belong as a group at the bottom).
+      //   3. Everything else alphabetical.
+      out.sort((a, b) => {
+        if (a.name === 'Custom') return 1;
+        if (b.name === 'Custom') return -1;
+        const aSQP = a.name.startsWith('SQP');
+        const bSQP = b.name.startsWith('SQP');
+        if (aSQP && !bSQP) return 1;
+        if (bSQP && !aSQP) return -1;
+        return a.name.localeCompare(b.name);
+      });
+      return out;
+    },
+
+    // Toggle the chevron expansion state of a sidebar parent. Mirrors
+    // the Browse tab's pattern: explicit state per-parent kept in
+    // localStorage so re-opening the sub-tab restores what the user
+    // had. Auto-expanded when the active filter targets a child of
+    // this parent (handled in cfSRSidebarParentOpen).
+    cfSRToggleSidebarParent(parentName) {
+      const visible = this.cfSRSidebarParentOpen(parentName);
+      this.cfSyncRulesSidebarExpanded = {
+        ...(this.cfSyncRulesSidebarExpanded || {}),
+        [parentName]: !visible,
+      };
+      try { localStorage.setItem('clonarr_cfSRSidebarExpanded', JSON.stringify(this.cfSyncRulesSidebarExpanded)); } catch (_) {}
+    },
+
+    // True when a parent's children should render visible. Three
+    // states, in priority order:
+    //   1. Explicit chevron state (locked open / locked closed)
+    //   2. Auto-open because the active filter targets this parent
+    //      OR one of its children
+    //   3. Default closed
+    // Matches Browse's isCFBrowseParentExpanded exactly so users
+    // carry the same interaction model across both sidebars: clicking
+    // a parent label expands it and auto-collapses the previously
+    // active one; clicking the chevron locks open.
+    cfSRSidebarParentOpen(parentName) {
+      const explicit = (this.cfSyncRulesSidebarExpanded || {})[parentName];
+      if (explicit !== undefined) return explicit;
+      const active = this.cfSyncRulesActiveCat || 'all';
+      if (active === 'cat:' + parentName) return true;
+      if (active.startsWith('sub:' + parentName + '|')) return true;
+      return false;
+    },
+
+    // Click on a sidebar parent label — sets it as the active
+    // category AND clears any explicit chevron state so auto-expand
+    // (via the active-match check above) takes over. Without the
+    // clear, a previously-collapsed parent would stay closed even
+    // when re-selected, surprising the user.
+    cfSRPickParent(parentName) {
+      this.cfSyncRulesActiveCat = 'cat:' + parentName;
+      const stored = this.cfSyncRulesSidebarExpanded || {};
+      if (Object.prototype.hasOwnProperty.call(stored, parentName)) {
+        const updated = { ...stored };
+        delete updated[parentName];
+        this.cfSyncRulesSidebarExpanded = updated;
+        try { localStorage.setItem('clonarr_cfSRSidebarExpanded', JSON.stringify(updated)); } catch (_) {}
+      }
+    },
+
+    // Click on a child sub-category — narrows to that sub AND
+    // clears the parent's explicit state for the same reason
+    // (auto-match opens the parent so the picked child is visible).
+    cfSRPickSubcategory(parentName, childName) {
+      this.cfSyncRulesActiveCat = 'sub:' + parentName + '|' + childName;
+      const stored = this.cfSyncRulesSidebarExpanded || {};
+      if (Object.prototype.hasOwnProperty.call(stored, parentName)) {
+        const updated = { ...stored };
+        delete updated[parentName];
+        this.cfSyncRulesSidebarExpanded = updated;
+        try { localStorage.setItem('clonarr_cfSRSidebarExpanded', JSON.stringify(updated)); } catch (_) {}
+      }
+    },
+
+    // True when AT LEAST ONE sidebar parent is currently shown
+    // (either via auto-match, explicit lock-open, or the active
+    // filter). Drives the Expand all / Collapse all toggle label —
+    // if any are open, the button reads "Collapse all"; if all are
+    // closed, "Expand all".
+    cfSRAnyParentExpanded(appType) {
+      const cats = this.cfSyncRulesCategories(appType);
+      for (const p of cats) {
+        if (this.cfSRSidebarParentOpen(p.name)) return true;
+      }
+      return false;
+    },
+
+    // Bulk-toggle every sidebar parent. Writes explicit state for
+    // each one so the choice survives auto-match transitions (the
+    // user wants "ALL open" or "ALL closed" regardless of what the
+    // active filter would auto-expand).
+    cfSRToggleAllParents(appType) {
+      const cats = this.cfSyncRulesCategories(appType);
+      const next = !this.cfSRAnyParentExpanded(appType);
+      const updated = { ...(this.cfSyncRulesSidebarExpanded || {}) };
+      for (const p of cats) {
+        updated[p.name] = next;
+      }
+      this.cfSyncRulesSidebarExpanded = updated;
+      try { localStorage.setItem('clonarr_cfSRSidebarExpanded', JSON.stringify(updated)); } catch (_) {}
+    },
+
+    // Apply every active filter (category / subcategory / view /
+    // instance / search) to the row list. Filters AND together.
+    // Filter shapes:
+    //   'all'                                — no filter
+    //   'cat:<parent>'                       — narrow to parent bracket prefix
+    //   'sub:<parent>|<child>'               — narrow to a specific child
+    //   'view:drifted'                       — only rows with drift
+    // The instance filter on top trims row.instances to just the
+    // picked instance so per-row counts scope correctly. Search
+    // matches CF name OR any profile name (TRaSH or Arr) inside any
+    // instance block.
+    cfSyncRulesFiltered(appType) {
+      let rows = this.cfSyncRules[appType] || [];
+      const cat = this.cfSyncRulesActiveCat || 'all';
+      if (cat.startsWith('cat:')) {
+        const target = cat.slice('cat:'.length);
+        rows = rows.filter(r => (r.category || 'Other') === target);
+      } else if (cat.startsWith('sub:')) {
+        const rest = cat.slice('sub:'.length);
+        const pipe = rest.indexOf('|');
+        if (pipe > -1) {
+          const parent = rest.slice(0, pipe);
+          const child = rest.slice(pipe + 1);
+          rows = rows.filter(r =>
+            (r.category || 'Other') === parent
+            && (r.subcategory || '') === child);
+        }
+      }
+      const instId = this.cfSyncRulesActiveInstance || '';
+      if (instId) {
+        rows = rows
+          .map(r => {
+            const filtered = (r.instances || []).filter(i => i.id === instId);
+            if (filtered.length === 0) return null;
+            return { ...r, instances: filtered };
+          })
+          .filter(Boolean);
+      }
+      if (cat === 'view:drifted') {
+        // Trim each row's instances to only the drifted ones, and
+        // drop rows that end up with zero. Without the per-instance
+        // trim, a CF drifted on Radarr (main) but in-sync on Radarr
+        // (4K) would still render an "In sync" row in the 4K card —
+        // surprising when the user explicitly asked for "drifted".
+        rows = rows
+          .map(r => {
+            const driftedOnly = (r.instances || []).filter(i => i.drift);
+            if (driftedOnly.length === 0) return null;
+            return { ...r, instances: driftedOnly };
+          })
+          .filter(Boolean);
+      }
+      if (cat === 'view:updates') {
+        rows = rows
+          .map(r => {
+            const updOnly = (r.instances || []).filter(i => i.updateAvailable);
+            if (updOnly.length === 0) return null;
+            return { ...r, instances: updOnly };
+          })
+          .filter(Boolean);
+      }
+      const q = (this.cfSyncRulesSearch || '').trim().toLowerCase();
+      if (q) {
+        rows = rows.filter(r => {
+          if ((r.name || '').toLowerCase().includes(q)) return true;
+          for (const inst of (r.instances || [])) {
+            for (const p of (inst.profiles || [])) {
+              if ((p.trashProfileName || '').toLowerCase().includes(q)) return true;
+              if ((p.arrProfileName || '').toLowerCase().includes(q)) return true;
+            }
+          }
+          return false;
+        });
+      }
+      return rows;
+    },
+
+    // Pivot rows by instance so the main pane can render one
+    // v3-inst-card per instance, mirroring Profile Sync Rules. Result
+    // is sorted by instance name and only includes instances that
+    // actually have managed CFs after filters. Each entry carries
+    // the instance metadata + its slice of filtered rows.
+    cfSyncRulesByInstance(appType) {
+      const rows = this.cfSyncRulesFiltered(appType) || [];
+      const byInstId = new Map();
+      for (const row of rows) {
+        for (const inst of (row.instances || [])) {
+          if (!byInstId.has(inst.id)) {
+            byInstId.set(inst.id, { id: inst.id, name: inst.name, rows: [] });
+          }
+          // Each rendered row shows the CF + this instance's slice
+          // (one inst block) so a CF on two instances renders twice,
+          // once per card. Keeps each card a coherent per-instance view.
+          byInstId.get(inst.id).rows.push({
+            trashId: row.trashId,
+            name: row.name,
+            category: row.category,
+            subcategory: row.subcategory,
+            instance: inst,
+          });
+        }
+      }
+      const out = Array.from(byInstId.values());
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    },
+
+    // Drift count for a per-instance card. Walks the rows in the
+    // card and counts CFs that are drifted on this instance.
+    cfSRInstanceCardDriftCount(card) {
+      let n = 0;
+      for (const r of (card.rows || [])) {
+        if (r.instance && r.instance.drift) n++;
+      }
+      return n;
+    },
+
+    // Update-available count for the per-instance card.
+    cfSRInstanceCardUpdateCount(card) {
+      let n = 0;
+      for (const r of (card.rows || [])) {
+        if (r.instance && r.instance.updateAvailable) n++;
+      }
+      return n;
+    },
+
+    // Pull TRaSH then sync the rule(s) on this instance that pull
+    // this CF in. The pull step is shared (a single Update click on
+    // any CF gets the whole TRaSH-Guides advance), but only the
+    // specific rules tied to this CF run their per-Arr sync — other
+    // rules on the instance stay at their previous lastSyncCommit
+    // so the user can opt in CF-by-CF instead of having to commit
+    // to "sync everything".
+    async updateCFForInstance(instanceId, trashId, cfName, instanceName, ruleIds) {
+      if (!instanceId || !trashId || !Array.isArray(ruleIds) || ruleIds.length === 0) return;
+      const key = instanceId + ':' + trashId;
+      if (this.cfApplyingKey === key) return;
+      // updatingRuleId intentionally NOT guarded — see comment on the
+      // button's :disabled binding. updatingInstance is still checked
+      // since a card-level Update all on the same instance is a real
+      // mutex (both flows pull TRaSH).
+      if (this.updatingInstance === instanceId) return;
+      this.cfApplyingKey = key;
+      try {
+        const inst = this.instances.find(i => i.id === instanceId);
+        if (!inst) return;
+        await fetch('/api/trash/pull', { method: 'POST' });
+        await this._waitForPullDone();
+        if (this.trashStatus?.pullError) {
+          this.showToast(`Update CF: pull failed — ${this.trashStatus.pullError}`, 'error', 8000);
+          return;
+        }
+        await this.loadCFBrowse(inst.type);
+        await this.loadTrashProfiles(inst.type);
+        // Narrow the candidate rule set to ONLY rules that actually
+        // have a TRaSH-side pending change matching this trashId.
+        // Without this filter, every rule that pulls the CF into its
+        // profile would re-sync — bumping their LastSyncTime to "just
+        // now" and burning Arr API calls even when those rules had no
+        // upstream change to act on. The split-on-first-colon mirrors
+        // the backend's affectedId → trash_id recovery in cf_sync_rules.go.
+        const ruleHasPendingForCF = (rule) => {
+          for (const pc of (rule.pendingChanges || [])) {
+            if (pc.source !== 'trash') continue;
+            if (!pc.changeType || !pc.changeType.startsWith('cf-')) continue;
+            const aid = pc.affectedId || '';
+            const ci = aid.indexOf(':');
+            const pcTid = ci > 0 ? aid.slice(0, ci) : aid;
+            if (pcTid === trashId) return true;
+          }
+          return false;
+        };
+        const filteredRuleIds = ruleIds.filter(rid => {
+          const rule = this.autoSyncRules.find(r => r.id === rid);
+          return rule && ruleHasPendingForCF(rule);
+        });
+        // Defensive fallback: if nothing matches (stale state, dedup
+        // edge case), fall back to the full list so the user's click
+        // does SOMETHING rather than silently no-op'ing.
+        const effectiveRuleIds = filteredRuleIds.length > 0 ? filteredRuleIds : ruleIds;
+        let succeeded = 0;
+        const failures = [];
+        // Reuse syncAllForInstance's ruleToHistoryShape adapter so the
+        // sh body sent to quickSync is byte-identical to the working
+        // Update all path. Earlier attempt at hand-rolling the shape
+        // missed selectedCFs map + override fields, which quickSync
+        // would then read as undefined and the backend would reject
+        // silently → "Update button does nothing".
+        const ruleToShape = (r) => {
+          const cfMap = {};
+          for (const id of (r.selectedCFs || [])) cfMap[id] = true;
+          const arrName = (typeof this.resolveArrProfileName === 'function')
+            ? this.resolveArrProfileName(r.instanceId, r.arrProfileId)
+            : '';
+          const profileName = arrName
+            ? `${arrName} (#${r.arrProfileId})`
+            : `Arr profile #${r.arrProfileId}`;
+          return {
+            profileTrashId: r.trashProfileId || '',
+            importedProfileId: r.importedProfileId || '',
+            arrProfileId: r.arrProfileId,
+            arrProfileName: arrName,
+            profileName: profileName,
+            selectedCFs: cfMap,
+            scoreOverrides: r.scoreOverrides || null,
+            qualityOverrides: r.qualityOverrides || null,
+            qualityStructure: r.qualityStructure || null,
+            overrides: r.overrides || null,
+            behavior: r.behavior || null,
+          };
+        };
+        for (const rid of effectiveRuleIds) {
+          const rule = this.autoSyncRules.find(r => r.id === rid);
+          if (!rule) continue;
+          const sh = ruleToShape(rule);
+          try {
+            const res = await this.quickSync(inst, sh, /* silent */ true);
+            if (res && res.ok) {
+              succeeded++;
+            } else {
+              failures.push(`${sh.profileName}: ${res?.error || 'unknown'}`);
+            }
+          } catch (e) {
+            failures.push(`${sh.profileName || rule.id}: ${e.message}`);
+          }
+        }
+        await this.loadAutoSyncRules();
+        await this.loadCFSyncRules(this.activeAppType);
+        if (failures.length === 0) {
+          this.showToast(`"${cfName}" updated on ${instanceName}.`, 'success', 4000);
+        } else {
+          this.showToast(`"${cfName}" partial update on ${instanceName}: ${succeeded} ok, ${failures.length} failed.`, 'warning', 6000);
+        }
+      } finally {
+        this.cfApplyingKey = '';
+      }
+    },
+
+    // Most recent sync timestamp across all profiles pulling this CF
+    // into this instance. Used for the collapsed row's "Last sync"
+    // column — gives the user a single representative value when a
+    // CF is in multiple profiles on the same instance. ISO strings
+    // compare lexicographically so a plain string max works.
+    cfSRInstanceLastSync(instance) {
+      if (!instance || !instance.profiles) return '';
+      let latest = '';
+      for (const p of instance.profiles) {
+        if (p.lastSync && p.lastSync > latest) latest = p.lastSync;
+      }
+      return latest;
+    },
+
+    // Update all for a single instance card — pushes the saved spec
+    // for every drifted CF on that instance. Replaces the old
+    // global Update all (which used the cross-instance filter).
+    // Sequential with concurrency cap to avoid hammering Arr.
+    async applyAllCFDriftForInstance(card) {
+      if (this.cfApplyAllProgress.running) return;
+      const queue = (card.rows || [])
+        .filter(r => r.instance && r.instance.drift)
+        .map(r => ({
+          instanceId: card.id,
+          instanceName: card.name,
+          trashId: r.trashId,
+          cfName: r.name,
+        }));
+      if (queue.length === 0) {
+        this.showToast('Nothing to update on ' + card.name + '.', 'info', 3000);
+        return;
+      }
+      this.cfApplyAllProgress = { running: true, total: queue.length, done: 0, label: '' };
+      let succeeded = 0;
+      const failures = [];
+      const concurrency = 2;
+      let next = 0;
+      const worker = async () => {
+        while (next < queue.length) {
+          const idx = next++;
+          const item = queue[idx];
+          this.cfApplyAllProgress.label = `${item.cfName} → ${item.instanceName}`;
+          try {
+            const r = await fetch('/api/cf-drift/apply', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ instanceId: item.instanceId, trashId: item.trashId }),
+            });
+            if (r.ok) {
+              succeeded++;
+            } else {
+              let msg = 'unknown error';
+              try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+              failures.push(`${item.cfName}: ${msg}`);
+            }
+          } catch (e) {
+            failures.push(`${item.cfName}: ${e.message}`);
+          }
+          this.cfApplyAllProgress.done++;
+        }
+      };
+      const workers = [];
+      for (let i = 0; i < Math.min(concurrency, queue.length); i++) workers.push(worker());
+      await Promise.all(workers);
+      this.cfApplyAllProgress = { running: false, total: 0, done: 0, label: '' };
+      await this.loadCFSyncRules(this.activeAppType);
+      if (failures.length === 0) {
+        this.showToast(`Updated ${succeeded} drifted CF${succeeded === 1 ? '' : 's'} on ${card.name}.`, 'success', 4000);
+      } else if (succeeded === 0) {
+        this.showToast(`Update all failed on ${card.name} (${failures.length} error${failures.length === 1 ? '' : 's'}):\n${failures.slice(0, 4).join('\n')}${failures.length > 4 ? `\n+${failures.length - 4} more` : ''}`, 'error', 8000);
+      } else {
+        this.showToast(`Updated ${succeeded} of ${queue.length} on ${card.name}. ${failures.length} failed:\n${failures.slice(0, 3).join('\n')}${failures.length > 3 ? `\n+${failures.length - 3} more` : ''}`, 'warning', 8000);
+      }
+    },
+
+    // Drifted-row total for the sidebar's "Drifted (N)" pin. Respects
+    // instance picker so the count matches what the user would see if
+    // they activate the view filter, but ignores category + search so
+    // the badge advertises a real "jump to" affordance regardless of
+    // where the user currently is.
+    cfSyncRulesDriftedTotal(appType) {
+      let rows = this.cfSyncRules[appType] || [];
+      const instId = this.cfSyncRulesActiveInstance || '';
+      if (instId) {
+        rows = rows
+          .map(r => {
+            const filtered = (r.instances || []).filter(i => i.id === instId);
+            if (filtered.length === 0) return null;
+            return { ...r, instances: filtered };
+          })
+          .filter(Boolean);
+      }
+      let n = 0;
+      for (const row of rows) {
+        if (this.cfRowDriftCount(row) > 0) n++;
+      }
+      return n;
+    },
+
+    // Mirror of cfSyncRulesDriftedTotal for upstream-update view-pin.
+    cfSyncRulesUpdatesTotal(appType) {
+      let rows = this.cfSyncRules[appType] || [];
+      const instId = this.cfSyncRulesActiveInstance || '';
+      if (instId) {
+        rows = rows
+          .map(r => {
+            const filtered = (r.instances || []).filter(i => i.id === instId);
+            if (filtered.length === 0) return null;
+            return { ...r, instances: filtered };
+          })
+          .filter(Boolean);
+      }
+      let n = 0;
+      for (const row of rows) {
+        if (this.cfRowUpdateCount(row) > 0) n++;
+      }
+      return n;
+    },
+
+    // List of instance options for the picker. Sorted by name for
+    // a predictable dropdown. Empty when the app type has only one
+    // instance — the picker is then redundant and gets hidden.
+    cfSyncRulesInstanceOptions(appType) {
+      const list = this.instancesOfType(appType) || [];
+      return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    // Toggle the per-(instance, CF) expand row. Single-open: opening
+    // row B closes row A. Re-clicking the open row collapses it.
+    // Compound key "<instanceId>:<trashId>" — trashId may itself
+    // contain colons (custom: prefix) so we split on the FIRST colon
+    // only, not via String.split which would mis-segment custom CFs.
+    // When opening a drifted row, auto-load the diff for that
+    // specific (instance, CF) pair.
+    cfSyncRulesToggleExpand(key) {
+      if (this.cfSyncRulesExpandedRow === key) {
+        this.cfSyncRulesExpandedRow = '';
+        return;
+      }
+      this.cfSyncRulesExpandedRow = key;
+      const colonIdx = key.indexOf(':');
+      if (colonIdx === -1) return;
+      const instanceId = key.slice(0, colonIdx);
+      const trashId = key.slice(colonIdx + 1);
+      const row = (this.cfSyncRules[this.activeAppType] || []).find(r => r.trashId === trashId);
+      if (!row) return;
+      const inst = (row.instances || []).find(i => i.id === instanceId);
+      if (!inst || !inst.drift) return;
+      if (this.cfDriftDiffCache[key]
+          && (this.cfDriftDiffCache[key].diff || this.cfDriftDiffCache[key].error)) {
+        return;
+      }
+      this.loadCFDriftDiff(instanceId, trashId);
+    },
+
+    // Fetch the per-CF drift diff for a single (instance, trashId)
+    // pair. Stores into cfDriftDiffCache. Surfaces a loading
+    // placeholder while in-flight and an error string on failure so
+    // the UI can render either state cleanly.
+    async loadCFDriftDiff(instanceId, trashId) {
+      const key = instanceId + ':' + trashId;
+      this.cfDriftDiffCache[key] = { loading: true, diff: null, error: '' };
+      try {
+        const r = await fetch(`/api/cf-drift/diff?instanceId=${encodeURIComponent(instanceId)}&trashId=${encodeURIComponent(trashId)}`);
+        if (!r.ok) {
+          let msg = `HTTP ${r.status}`;
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.cfDriftDiffCache[key] = { loading: false, diff: null, error: msg };
+          return;
+        }
+        const data = await r.json();
+        this.cfDriftDiffCache[key] = {
+          loading: false,
+          diff: data.diff || null,
+          liveMissing: !!data.liveMissing,
+          error: '',
+        };
+      } catch (e) {
+        this.cfDriftDiffCache[key] = { loading: false, diff: null, error: e.message };
+      }
+    },
+
+    // Helper for the expand panel — returns true when the diff for
+    // a given (instance, trashId) pair carries any reportable change.
+    // Used to gate "Drift was already resolved" vs "Drift detail" sub-states.
+    cfDriftDiffHasChanges(diff) {
+      if (!diff) return false;
+      return (diff.addedConditions || []).length > 0
+        || (diff.removedConditions || []).length > 0
+        || (diff.changedConditions || []).length > 0
+        || (diff.settingsChanges || []).length > 0;
+    },
+
+    // Apply every (instance, trashId) drifted pair currently visible
+    // through the active filter. Sequential with a 2-at-a-time
+    // concurrency cap so a 50-CF drift batch doesn't fan-out 50
+    // simultaneous PUTs at one Arr instance. Progress surface visible
+    // in the header bar (X / Y); per-failure log in the post-batch
+    // toast. Stops cleanly when the user navigates away (in-flight
+    // POSTs complete; queued ones are abandoned on the cfApplyingKey
+    // check at start).
+    async applyAllCFDrift(appType) {
+      if (this.cfApplyAllProgress.running) return;
+      const rows = this.cfSyncRulesFiltered(appType);
+      const queue = [];
+      for (const row of rows) {
+        for (const inst of (row.instances || [])) {
+          if (!inst.drift) continue;
+          queue.push({ instanceId: inst.id, instanceName: inst.name, trashId: row.trashId, cfName: row.name });
+        }
+      }
+      if (queue.length === 0) {
+        this.showToast('Nothing to apply — no drift detected.', 'info', 3000);
+        return;
+      }
+      this.cfApplyAllProgress = { running: true, total: queue.length, done: 0, label: '' };
+      let succeeded = 0;
+      const failures = [];
+      // Worker pool — 2 parallel Apply calls feels safe on Arr. The
+      // body is tiny and the bottleneck is Arr-side validation.
+      const concurrency = 2;
+      let next = 0;
+      const worker = async () => {
+        while (next < queue.length) {
+          const idx = next++;
+          const item = queue[idx];
+          this.cfApplyAllProgress.label = `${item.cfName} → ${item.instanceName}`;
+          try {
+            const r = await fetch('/api/cf-drift/apply', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ instanceId: item.instanceId, trashId: item.trashId }),
+            });
+            if (r.ok) {
+              succeeded++;
+            } else {
+              let msg = 'unknown error';
+              try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+              failures.push(`${item.cfName} → ${item.instanceName}: ${msg}`);
+            }
+          } catch (e) {
+            failures.push(`${item.cfName} → ${item.instanceName}: ${e.message}`);
+          }
+          this.cfApplyAllProgress.done++;
+        }
+      };
+      const workers = [];
+      for (let i = 0; i < Math.min(concurrency, queue.length); i++) workers.push(worker());
+      await Promise.all(workers);
+      this.cfApplyAllProgress = { running: false, total: 0, done: 0, label: '' };
+      await this.loadCFSyncRules(appType);
+      if (failures.length === 0) {
+        this.showToast(`Updated ${succeeded} drifted custom format${succeeded === 1 ? '' : 's'}.`, 'success', 4000);
+      } else if (succeeded === 0) {
+        this.showToast(`Update all failed (${failures.length} error${failures.length === 1 ? '' : 's'}):\n${failures.slice(0, 4).join('\n')}${failures.length > 4 ? `\n+${failures.length - 4} more` : ''}`, 'error', 8000);
+      } else {
+        this.showToast(`Updated ${succeeded} of ${queue.length}. ${failures.length} failed:\n${failures.slice(0, 3).join('\n')}${failures.length > 3 ? `\n+${failures.length - 3} more` : ''}`, 'warning', 8000);
+      }
+    },
+
+    // Push clonarr's saved spec for one CF back to one instance. The
+    // backend writes a CF-tagged history entry, clears the fingerprint,
+    // and fires NotifyCFDriftReconciled. We refresh the local data so
+    // the row's pill flips to "In sync" without a page reload.
+    async applyCFDrift(instanceId, trashId, cfName, instanceName) {
+      if (!instanceId || !trashId) return;
+      const key = instanceId + ':' + trashId;
+      if (this.cfApplyingKey === key) return;
+      this.cfApplyingKey = key;
+      try {
+        const r = await fetch('/api/cf-drift/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceId, trashId }),
+        });
+        if (!r.ok) {
+          let msg = 'Failed to apply drift';
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.showToast(msg, 'error', 5000);
+          return;
+        }
+        await this.loadCFSyncRules(this.activeAppType);
+        this.showToast(`"${cfName}" updated on ${instanceName}.`, 'success', 4000);
+      } catch (e) {
+        this.showToast('Network error during apply: ' + e.message, 'error', 5000);
+      } finally {
+        this.cfApplyingKey = '';
+      }
+    },
+
     historyEventCount(instId, arrProfileId) {
       return (this.syncHistory[instId] || []).filter(sh => sh.arrProfileId === arrProfileId && sh.changes).length;
     },
@@ -5552,6 +6304,14 @@ export default {
         await this.loadTrashProfiles(inst.type);
         // Now run the existing per-instance sync-all loop
         await this.syncAllForInstance(inst);
+        // Refresh CF Sync Rules cache so its pills (Updates / Arr
+        // drift) reflect the post-sync state. Without this the user
+        // sees stale Update/drift indicators on Custom Formats →
+        // Sync Rules even though backend cleared PendingChanges +
+        // CFDriftFingerprints during the sync.
+        if (typeof this.loadCFSyncRules === 'function' && this.cfSyncRulesLoaded?.[inst.type]) {
+          await this.loadCFSyncRules(inst.type);
+        }
         if (this.trashStatus?.commitHash && this.trashStatus.commitHash !== prevCommit) {
           this.showToast(`Update all complete (${inst.name}) — TRaSH advanced to ${this.trashStatus.commitHash}`, 'success', 4000);
         }
@@ -5581,6 +6341,12 @@ export default {
         // Reuse the existing quickSync path for the actual Arr write.
         await this.quickSync(inst, sh);
         await this.loadAutoSyncRules();
+        // Same CF Sync Rules refresh as updateAllForInstance — without
+        // this, a user updating one profile sees its pills clear on the
+        // Profile Sync surface but the CF surface stays stuck.
+        if (typeof this.loadCFSyncRules === 'function' && this.cfSyncRulesLoaded?.[inst.type]) {
+          await this.loadCFSyncRules(inst.type);
+        }
       } finally {
         this.updatingRuleId = '';
       }
@@ -5600,8 +6366,28 @@ export default {
           fetch('/api/drift/check', { method: 'POST' }),
         ]);
         let driftFailed = false;
+        let cfDriftCount = 0;
+        let cfDriftNames = [];
         if (dr.status === 'rejected' || (dr.value && !dr.value.ok)) {
           driftFailed = true;
+        } else if (dr.value && dr.value.ok) {
+          // Drift response carries both profile drift (`results`) AND
+          // CF drift (`cfDrift`) since the Phase 1 cf-drift work. The
+          // toast surfaces the CF channel as a separate line so the
+          // user sees all three signals (TRaSH update / profile drift /
+          // CF drift) without scanning multiple views.
+          try {
+            const drBody = await dr.value.clone().json();
+            const list = Array.isArray(drBody?.cfDrift) ? drBody.cfDrift : [];
+            cfDriftCount = list.length;
+            cfDriftNames = list.map(e => e.name || e.trashId).filter(Boolean);
+          } catch (_) { /* leave cfDriftCount=0 on parse failure */ }
+        }
+        // Refresh the Sync Rules → Custom Formats sub-tab cache if it
+        // was previously loaded so the row pills update right away
+        // when the user is already viewing the sub-tab.
+        if (this.cfSyncRulesLoaded?.[this.activeAppType]) {
+          this.loadCFSyncRules(this.activeAppType);
         }
         const r = tr.status === 'fulfilled' ? tr.value : null;
         if (!r || !r.ok) {
@@ -5661,11 +6447,19 @@ export default {
           : (driftRuleCount > 0
               ? `${driftRuleCount} profile${driftRuleCount === 1 ? '' : 's'} with Arr drift:\n${namesShort(rulesWithDrift)}`
               : '');
+        // CF drift line: lists up to N drifted CF names. Skipped when
+        // empty so a clean Check is a one-line "in sync" message
+        // instead of three reassurance lines.
+        const cfDriftLine = cfDriftCount > 0
+          ? `${cfDriftCount} custom format${cfDriftCount === 1 ? '' : 's'} with Arr drift:\n${cfDriftNames.slice(0, 5).map(n => `• ${n}`).join('\n')}${cfDriftNames.length > 5 ? `\n• +${cfDriftNames.length - 5} more` : ''}`
+          : '';
         if (!upstreamAhead) {
-          if (driftRuleCount > 0) {
-            this.showToast(`TRaSH up to date\n${driftLine}`, 'info', 6000);
-          } else if (driftFailed) {
-            this.showToast(`TRaSH up to date\n${driftLine}`, 'warning', 6000);
+          const channels = [];
+          if (driftRuleCount > 0) channels.push(driftLine);
+          if (cfDriftCount > 0) channels.push(cfDriftLine);
+          if (driftFailed) channels.push(driftLine);
+          if (channels.length > 0) {
+            this.showToast(`TRaSH up to date\n\n${channels.join('\n\n')}`, driftFailed ? 'warning' : 'info', 7000);
           } else {
             this.showToast('TRaSH-Guides is up to date — no upstream changes', 'success', 3000);
           }
@@ -5677,7 +6471,10 @@ export default {
         // with stale state that aren't rendered in the table.
         const affectedRules = rulesByStatus('updates');
         if (affectedRules.length === 0) {
-          const tail = driftLine ? `\n${driftLine}` : '';
+          const extras = [];
+          if (driftLine) extras.push(driftLine);
+          if (cfDriftLine) extras.push(cfDriftLine);
+          const tail = extras.length > 0 ? `\n\n${extras.join('\n\n')}` : '';
           this.showToast(`TRaSH has new commits but none affect your synced profiles${tail}`, 'info', 6000);
           return;
         }
@@ -5701,7 +6498,10 @@ export default {
         // Profile names on their own line for readability — long lists wrap
         // poorly when crammed after the header.
         const updateLine = `Found ${cfLabel} affecting ${updLabel}:\n${namesShort(affectedRules)}`;
-        const tail = driftLine ? `\n\n${driftLine}` : '';
+        const extras = [];
+        if (driftLine) extras.push(driftLine);
+        if (cfDriftLine) extras.push(cfDriftLine);
+        const tail = extras.length > 0 ? `\n\n${extras.join('\n\n')}` : '';
         this.showToast(`${updateLine}\n\nUse Update all / Update profile to apply${tail}`, 'info', 7000);
       } catch (e) {
         this.showToast('Check failed (network error)', 'error', 4000);

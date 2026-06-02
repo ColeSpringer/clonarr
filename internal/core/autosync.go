@@ -248,6 +248,33 @@ const (
 // a one-line summary string for the changed case (empty for the others).
 // The caller composes these into the tick-summary line so the trace
 // shows exactly which rules contributed work without per-rule fanout.
+
+// DeriveSyncCategories classifies what kind of state a SyncResult
+// touched so SyncHistoryEntry.Categories can drive the History tab's
+// Profile / Custom Formats sub-tab filter. Returns:
+//   - "cf"      when the sync wrote a CF entity to Arr (create / update
+//     / drift-apply produced an action on the /customformat endpoint).
+//   - "profile" when the sync changed profile-level state (scores,
+//     quality items, settings, profile creation).
+// A regular sync that touches both gets both tags; either-only flows
+// get the single applicable tag; a no-op sync returns nil so the
+// resulting omitempty field keeps the JSON quiet for the 70-80% of
+// auto-syncs that didn't actually change anything.
+func DeriveSyncCategories(result *SyncResult) []string {
+	if result == nil {
+		return nil
+	}
+	var cats []string
+	if result.CFsCreated > 0 || result.CFsUpdated > 0 || len(result.CFSpecDiffs) > 0 {
+		cats = append(cats, "cf")
+	}
+	if result.ScoresUpdated > 0 || result.ScoresZeroed > 0 || result.QualityUpdated ||
+		len(result.SettingsDetails) > 0 || result.ProfileCreated {
+		cats = append(cats, "profile")
+	}
+	return cats
+}
+
 func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string, parent *Operation) (ruleOutcome, string) {
 	// Re-check rule still exists (may have been deleted since snapshot was taken)
 	cfg := app.Config.Get()
@@ -634,6 +661,7 @@ func (app *App) runAutoSyncRule(rule AutoSyncRule, currentCommit string, parent 
 		LastSync:          now,
 		Changes:           changes,
 		TriggerType:       parent.SourceTrigger(),
+		Categories:        DeriveSyncCategories(result),
 	}
 	// Freeze AppliedAt on real-change entries so the History tab's "Last
 	// Changed" column shows when changes actually landed, not when the last
@@ -1724,6 +1752,34 @@ func (app *App) UpdateAutoSyncRuleCommit(ruleID, commit string, priorGroups map[
 				}
 				if priorSyncedCFs != nil {
 					cfg.AutoSync.Rules[i].PriorSyncedCFs = priorSyncedCFs
+				}
+				// Clear per-CF drift fingerprints on this rule's
+				// instance for every CF the sync just pushed. Without
+				// this the CF Sync Rules view keeps showing "Arr drift"
+				// even after a successful sync — Profile Sync Rules
+				// would say "in sync" (WatchState cleared above) but
+				// the per-CF surface stays stuck until the next Check
+				// pass recomputes Instance.CFDriftFingerprints. After
+				// a successful push the live Arr spec matches disk by
+				// definition, so the prior drift is reconciled.
+				if len(priorSyncedCFs) > 0 {
+					instID := cfg.AutoSync.Rules[i].InstanceID
+					for j := range cfg.Instances {
+						if cfg.Instances[j].ID != instID {
+							continue
+						}
+						fp := cfg.Instances[j].CFDriftFingerprints
+						if len(fp) == 0 {
+							break
+						}
+						for _, tid := range priorSyncedCFs {
+							delete(fp, tid)
+						}
+						if len(fp) == 0 {
+							cfg.Instances[j].CFDriftFingerprints = nil
+						}
+						break
+					}
 				}
 				return
 			}

@@ -575,6 +575,36 @@ export function clonarr() {
       this.$watch('profileTabs', maybeLoadCustomizations);
       this.$watch('activeAppType', maybeLoadCustomizations);
 
+      // Custom Formats → Sync Rules sub-tab: re-fetch the per-CF
+      // state every time the user lands on the sub-tab (not just
+      // the first time). Without this, auto-sync ticks that fire
+      // server-side while the page is open would update PendingChanges
+      // and CFDriftFingerprints but the open UI would keep showing
+      // stale "in sync" pills until the user manually clicked Check.
+      // Re-fetching on tab-visit + on visibility change covers both
+      // the navigate-back and the return-to-tab cases.
+      const maybeLoadCFSyncRules = () => {
+        if (this.currentSection === 'custom-formats'
+            && this.getCustomFormatsTab(this.activeAppType) === 'sync-rules'
+            && typeof this.loadCFSyncRules === 'function') {
+          this.loadCFSyncRules(this.activeAppType);
+        }
+      };
+      this.$watch('currentSection', maybeLoadCFSyncRules);
+      this.$watch('customFormatsTabs', maybeLoadCFSyncRules);
+      // Attach the visibilitychange listener ONCE across the document
+      // lifetime regardless of how many Alpine roots end up sharing this
+      // init function. The window-level flag survives Alpine teardowns
+      // and re-mounts (rare today since index.html has a single x-data
+      // root, but defensive — split-root refactors otherwise stack a new
+      // listener per init() call and refresh N times per focus event).
+      if (!window._cfSyncRulesVisListenerAttached) {
+        window._cfSyncRulesVisListenerAttached = true;
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') maybeLoadCFSyncRules();
+        });
+      }
+
       // Expanding the sidebar (Ctrl+B or click-toggle) closes the popup —
       // when the inline subnav becomes visible, the popup is redundant.
       // Also cancel any pending show-timer: if user was hovering an icon
@@ -647,6 +677,16 @@ export function clonarr() {
         if (this.mediaInstanceId[appType]) {
           this.loadInstanceQS(appType, this.mediaInstanceId[appType]);
           this.loadInstanceNaming(appType);
+        }
+        // Custom Formats → Sync Rules sub-tab: per-app-type fetch, so
+        // an app switch on this sub-tab needs to load the other app's
+        // data on its own. Without this the table is stuck on a
+        // "Loading custom formats..." spinner because the click handler
+        // is the only other fetcher.
+        if (this.currentSection === 'custom-formats'
+          && this.getCustomFormatsTab(appType) === 'sync-rules'
+          && typeof this.loadCFSyncRules === 'function') {
+          this.loadCFSyncRules(appType);
         }
         ensureHistory();
       });

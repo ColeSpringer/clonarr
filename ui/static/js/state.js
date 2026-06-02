@@ -5,6 +5,57 @@ export default function baseState() {
     activeAppType: 'radarr',     // NEW — 'radarr' or 'sonarr', independent of section
     advancedTab: 'builder',      // NEW — sub-tab within Advanced: 'builder', 'scoring', 'group-builder'
 
+    // cfSyncRules: per-app-type cache of the per-CF view. Populated by
+    // loadCFSyncRules and refreshed after a successful applyCFDrift.
+    cfSyncRules: { radarr: [], sonarr: [] },
+    cfSyncRulesLoaded: { radarr: false, sonarr: false },
+    // cfApplyingKey: "<instanceId>:<trashId>" of the in-flight apply, so
+    // the matching button can switch to "Applying..." without racing
+    // multiple Apply clicks on the same row.
+    cfApplyingKey: '',
+    // CF sub-tab sidebar filter — 'all' shows every managed CF,
+    // 'cat:<name>' narrows to one category. Per-browser persisted so
+    // returning to the sub-tab restores the last filter the user
+    // picked. Matches the Custom Formats Browse tab's own persisted
+    // category state in localStorage shape.
+    cfSyncRulesActiveCat: 'all',
+    // CF sub-tab instance picker — '' means "every instance of the
+    // active app type"; otherwise a specific instance ID. Narrowing
+    // to one instance scopes the row list AND the drift counts AND
+    // the Update all batch to that instance, so a 4K-Radarr-only
+    // drift event can be acted on without touching main Radarr.
+    cfSyncRulesActiveInstance: '',
+    // CF sub-tab search query — matches against CF name OR any of
+    // the row's usedByProfiles[].profileName entries. Lets a user
+    // find "all CFs in SQP-3" or "Bad Release Group" without
+    // scrolling. Case-insensitive substring.
+    cfSyncRulesSearch: '',
+    // CF sub-tab expand-row state — trashId of the currently-open
+    // detail row showing per-profile usage. Single-open (clicking a
+    // different row collapses the previous) to keep the layout
+    // compact; empty string = nothing expanded.
+    cfSyncRulesExpandedRow: '',
+    // "Apply all" progress state — total drifted (instance, trashId)
+    // pairs queued, completed so far, current label. Visible while
+    // running so the user sees the batch progressing rather than a
+    // single multi-second spinner with no indication something's
+    // happening. Cleared on completion.
+    cfApplyAllProgress: { running: false, total: 0, done: 0, label: '' },
+    // Per-row drift detail cache. Keyed by "<instanceId>:<trashId>"
+    // so the same CF on two instances caches independently. Loaded
+    // lazily when a drifted row is expanded; entries persist for the
+    // tab session so re-opening a previously-viewed row is instant.
+    // Shape: { loading: bool, diff: CFSpecDiff|null, error: string }.
+    cfDriftDiffCache: {},
+    // CF sub-tab sidebar parent-collapse state. Map of parentName →
+    // explicit visibility. Loaded from localStorage on init; mutated
+    // via cfSRToggleSidebarParent. Empty value means "auto-expand
+    // when active filter targets this parent or a child of it".
+    cfSyncRulesSidebarExpanded: (() => {
+      try { return JSON.parse(localStorage.getItem('clonarr_cfSRSidebarExpanded') || '{}'); }
+      catch (_) { return {}; }
+    })(),
+
     // Debug-log download options. When true, the Download button hits
     // ?activity=1 and the server bundles activity.log alongside debug.log
     // in a ZIP. Default off — most bug reports only need the operation
@@ -103,6 +154,12 @@ export default function baseState() {
     updatingRuleId: '',   // rule id currently running Update profile
     trashResetting: false,
     profileTabs: {},  // per app-type profile tab: { radarr: 'trash-profiles', sonarr: 'sync-rules', ... }
+    // Per app-type Custom Formats sub-tab: { radarr: 'browse' | 'sync-rules', sonarr: ... }.
+    // browse = the existing TRaSH + custom CF catalog (default).
+    // sync-rules = per-CF state for everything any rule pushes to Arr,
+    // including drift status + per-instance Update. Mirror of how
+    // Profiles section uses sub-tabs (TRaSH Profiles + Sync Rules).
+    customFormatsTabs: {},
     // Per app-type Media Management sub-tab: { radarr: 'quality' | 'naming', sonarr: ... }.
     // Section merges the former 'quality-size' + 'naming' top-level pages so
     // *arr-savvy users find both under the same "Media Management" heading.
@@ -334,6 +391,14 @@ export default function baseState() {
     inputModal: { show: false, title: '', message: '', value: '', placeholder: '', confirmLabel: '', onConfirm: null, onCancel: null },
     cloneProfileModal: { open: false, sh: null, sourceInstanceId: '', appType: '', sourceName: '', name: '', targetInstanceId: '', saving: false, error: '' },
     sandboxCopyModal: { show: false, title: '', text: '', copied: false },
+    // Sandbox export modal — exports the currently-visible-and-sorted
+    // result list as plain text, diff-tool friendly (line-per-release).
+    // includeBreakdown toggles between "title + total only" (compact,
+    // good for high-level diff) and "per-release block with CF rows"
+    // (deep diff for per-CF score comparison across two sessions).
+    // The "no scoring" path is implicit: if a release has no scoring,
+    // its line shows just the title regardless of toggle.
+    sandboxExportModal: { show: false, appType: '', includeBreakdown: false, text: '', copied: false },
     // Import
     importedProfiles: { radarr: [], sonarr: [] },
     showImportModal: false, // false or app type string

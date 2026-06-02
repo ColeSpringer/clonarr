@@ -7,8 +7,10 @@
         <!-- ===== Sync Rules tab ===== -->
         <div class="page" x-show="getProfileTab(activeAppType) === 'sync-rules'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">Sync Rules</div>
-          <div style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-            Your active TRaSH sync rules for this <span x-text="activeAppLabel"></span> instance. Toggle auto-sync, edit per-rule overrides, or re-sync on demand. Add new rules from the <strong>TRaSH Profiles</strong> tab.
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+            Every TRaSH profile you've set up to sync with this <span x-text="activeAppLabel"></span> instance. Toggle auto-sync, edit per-rule overrides, or update on demand.
+            Add new rules from <a class="inline-link" :href="navHref('profiles', { profileTab: 'trash-profiles' })">TRaSH Profiles</a>.
+            For a per-CF view with drift status, see <a class="inline-link" :href="navHref('custom-formats', { customFormatsTab: 'sync-rules' })">Custom Formats &rarr; Sync Rules</a>.
           </div>
 
           <!-- Per-instance cards. Each card carries its own auto-sync
@@ -203,7 +205,7 @@
             </template>
           </template>
           <template x-if="!instancesOfType(activeAppType).some(inst => sortedSyncRules(inst.id).length > 0)">
-            <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No sync rules yet. Sync a profile from the <strong>TRaSH Profiles</strong> tab to get started.</div>
+            <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No sync rules yet. Sync a profile from <a class="inline-link" :href="navHref('profiles', { profileTab: 'trash-profiles' })">TRaSH Profiles</a> to get started.</div>
           </template>
 
         </div>
