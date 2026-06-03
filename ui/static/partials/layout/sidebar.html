@@ -101,8 +101,8 @@
       <div class="sidebar-subnav" x-show="!sidebarCollapsed && currentSection === 'custom-formats'">
         <a class="sidebar-subnav-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'browse' }"
            :href="navHref('custom-formats', { customFormatsTab: 'browse' })">Browse</a>
-        <a class="sidebar-subnav-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'sync-rules' }"
-           :href="navHref('custom-formats', { customFormatsTab: 'sync-rules' })">Sync Rules</a>
+        <a class="sidebar-subnav-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'in-use' }"
+           :href="navHref('custom-formats', { customFormatsTab: 'in-use' })">In use</a>
       </div>
 
       <!-- Media Management — consolidates the former Quality Definitions
@@ -326,11 +326,16 @@
         </button>
       </div>
 
-      <!-- Changelog popover — position:fixed escapes the sidebar overflow
-           on its own (no teleport needed). x-show keeps directives in DOM
-           so x-for / x-text bindings always reflect current state. The
-           click-outside check ignores clicks on the trigger button so the
-           button's own @click toggle isn't immediately undone. -->
+      <!-- Changelog popover — teleported to <body> so it escapes the
+           .sidebar-foot stacking context (the foot has position:fixed +
+           z-index:51 which traps fixed children at that level globally;
+           the app-banner at z-index:52 would otherwise overlap the
+           popover's top edge). At <body> root it's free to use its own
+           z-index:1000. x-show keeps directives in DOM so x-for / x-text
+           bindings always reflect current state. The click-outside check
+           ignores clicks on the trigger button so the button's own
+           @click toggle isn't immediately undone. -->
+      <template x-teleport="body">
       <div id="trash-changelog-dropdown"
            x-show="showChangelog && !sidebarCollapsed"
            @click.outside="if (!$refs.trashChangelogButton?.contains($event.target)) showChangelog = false"
@@ -416,6 +421,7 @@
             </div>
           </template>
         </div>
+      </template>
     </div>
   </aside>
 
@@ -449,8 +455,8 @@
         <div class="sidebar-subnav-popup-header">Custom Formats</div>
         <a class="sidebar-subnav-popup-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'browse' }"
            :href="navHref('custom-formats', { customFormatsTab: 'browse' })" @click="sidebarSubnavPopup = ''">Browse</a>
-        <a class="sidebar-subnav-popup-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'sync-rules' }"
-           :href="navHref('custom-formats', { customFormatsTab: 'sync-rules' })" @click="sidebarSubnavPopup = ''">Sync Rules</a>
+        <a class="sidebar-subnav-popup-item" :class="{ active: getCustomFormatsTab(activeAppType) === 'in-use' }"
+           :href="navHref('custom-formats', { customFormatsTab: 'in-use' })" @click="sidebarSubnavPopup = ''">In use</a>
       </div>
     </template>
     <template x-if="sidebarSubnavPopup === 'media-management'">

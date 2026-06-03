@@ -212,7 +212,7 @@ export default {
       // bookmarks and hashes keep working after the sub-tab split. Mapped
       // during hash restore below.
       const validProfileTabs = ['trash-profiles','sync-rules','history','compare','trash-sync'];
-      const validCustomFormatsTabs = ['browse','sync-rules'];
+      const validCustomFormatsTabs = ['browse','in-use'];
       const validMediaTabs = ['quality','naming'];
       const validMaintenanceTabs = ['backup','cleanup'];
       const validAdvancedTabs = ['builder','group-builder','scoring','import'];

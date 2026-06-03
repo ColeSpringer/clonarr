@@ -585,7 +585,7 @@ export function clonarr() {
       // the navigate-back and the return-to-tab cases.
       const maybeLoadCFSyncRules = () => {
         if (this.currentSection === 'custom-formats'
-            && this.getCustomFormatsTab(this.activeAppType) === 'sync-rules'
+            && this.getCustomFormatsTab(this.activeAppType) === 'in-use'
             && typeof this.loadCFSyncRules === 'function') {
           this.loadCFSyncRules(this.activeAppType);
         }
@@ -684,7 +684,7 @@ export function clonarr() {
         // "Loading custom formats..." spinner because the click handler
         // is the only other fetcher.
         if (this.currentSection === 'custom-formats'
-          && this.getCustomFormatsTab(appType) === 'sync-rules'
+          && this.getCustomFormatsTab(appType) === 'in-use'
           && typeof this.loadCFSyncRules === 'function') {
           this.loadCFSyncRules(appType);
         }

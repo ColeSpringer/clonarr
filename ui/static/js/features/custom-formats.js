@@ -159,6 +159,43 @@ export default {
       return `https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/${app}/cf/${slug}.json`;
     },
 
+    // Look up a full CF object by trash_id, walking both the TRaSH catalog
+    // and the user's custom CFs cached in cfBrowseData. Used by the Custom
+    // Formats > In use sub-tab to wire the same hover-tooltip as Profile
+    // Sync (showCFTooltip + buildCFInfoHTML), since the cf-sync-rules API
+    // response only carries trashId + name and not the description.
+    findCFByTrashId(appType, trashId) {
+      if (!trashId) return null;
+      const data = this.cfBrowseData?.[appType];
+      if (!data) return null;
+      for (const cf of (data.cfs || [])) {
+        if (cf.trash_id === trashId) {
+          return { ...cf, trashId: cf.trash_id, isCustom: false };
+        }
+      }
+      for (const cf of (data.customCFs || [])) {
+        if (cf.id === trashId || cf.trash_id === trashId) {
+          return { ...cf, trashId: cf.id || cf.trash_id, isCustom: true };
+        }
+      }
+      return null;
+    },
+
+    // Row-tooltip glue for the In use sub-tab. Resolves the full CF on
+    // hover and short-circuits if there's nothing worth showing (no
+    // description and not a TRaSH CF with guide/json links). Keeps
+    // findCFByTrashId out of the Alpine render path - we only walk
+    // cfBrowseData when the user actually hovers a row.
+    cfRowShowTooltip(event, trashId) {
+      const cf = this.findCFByTrashId(this.activeAppType, trashId);
+      if (!cf) return;
+      const hasLinks = !cf.isCustom &&
+        ((this.trashCFGuideUrl ? this.trashCFGuideUrl(cf, this.activeAppType) : '') ||
+         (this.trashCFJsonUrl ? this.trashCFJsonUrl(cf, this.activeAppType) : ''));
+      if (!cf.description && !hasLinks) return;
+      this.showCFTooltip(event, this.buildCFInfoHTML(cf, this.activeAppType));
+    },
+
     // Category-snippet helper for the collapsed-card preview line.
     // Strips TRaSH's HTML description down to plain text and truncates
     // to ~120 chars. Memoised on the cat object itself (a hidden

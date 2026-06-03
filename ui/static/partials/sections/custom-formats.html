@@ -211,16 +211,19 @@
         </div>
         <!-- /Browse sub-tab -->
 
-        <!-- ====== Sync Rules sub-tab ======
+        <!-- ====== In use sub-tab ======
              Per-instance cards (one per Arr instance) listing every
              Custom Format clonarr manages on that instance. Each row
              shows the CF + which Arr profiles pull it in (with ID +
              last-sync chip), drift status, and an Update button when
-             drift exists. Mirrors Profiles → Sync Rules' v3-inst-card
-             layout so the two surfaces feel like the same product. -->
-        <div x-show="getCustomFormatsTab(activeAppType) === 'sync-rules'">
-          <div style="font-size:18px;font-weight:600;margin-bottom:4px">Sync Rules</div>
-          <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Status for every custom format your sync rules manage on <span x-text="activeAppLabel"></span>. Spot drift and pending TRaSH updates, see which profiles use a CF, and re-sync when needed.</div>
+             drift or a pending TRaSH update exists. Mirrors Profiles
+             → Sync Rules' v3-inst-card layout so the two surfaces
+             feel like the same product. Named "In use" (not "Sync
+             Rules") because there is no per-CF rule object - this is
+             a derived view of which CFs the sync rules are pushing. -->
+        <div x-show="getCustomFormatsTab(activeAppType) === 'in-use'">
+          <div style="font-size:18px;font-weight:600;margin-bottom:4px">In use</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Every custom format your sync rules push to <span x-text="activeAppLabel"></span>. Spot drift and pending TRaSH updates, see which profiles use a CF, and re-sync when needed.</div>
           <template x-if="!cfSyncRulesLoaded[activeAppType]">
             <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Loading custom formats...</div>
           </template>
@@ -414,7 +417,10 @@
                                @click="cfSyncRulesToggleExpand(card.id + ':' + r.trashId)"
                                @keydown.enter.prevent="cfSyncRulesToggleExpand(card.id + ':' + r.trashId)"
                                @keydown.space.prevent="cfSyncRulesToggleExpand(card.id + ':' + r.trashId)">
-                            <span class="cf-sr-name" x-text="r.name"></span>
+                            <span class="cf-sr-name"
+                                  x-text="r.name"
+                                  @mouseenter="cfRowShowTooltip($event, r.trashId)"
+                                  @mouseleave="hideCFTooltip()"></span>
                             <span class="cf-sr-cat">
                               <span x-text="r.category"></span>
                               <template x-if="r.subcategory">
@@ -599,6 +605,6 @@
             </div>
           </template>
         </div>
-        <!-- /Sync Rules sub-tab -->
+        <!-- /In use sub-tab -->
       </div>
 {{end}}
