@@ -3481,7 +3481,7 @@ export default {
     // surfaces. Counts respect the active instance scope; search is
     // NOT applied (sidebar is "jump to", not "narrow further").
     cfSyncRulesCategories(appType) {
-      let rows = this.cfSyncRules[appType] || [];
+      let rows = this._cfSRRowsForView(appType);
       const instId = this.cfSyncRulesActiveInstance || '';
       if (instId) {
         rows = rows
@@ -3638,8 +3638,205 @@ export default {
     // picked instance so per-row counts scope correctly. Search
     // matches CF name OR any profile name (TRaSH or Arr) inside any
     // instance block.
+    // True when the row's identity comes from a clonarr-known source
+    // (a TRaSH catalog CF or one of the user's custom CFs) rather than
+    // a synthesised arr:<name> key. Recognized unmanaged rows can show
+    // drift/update info AND can be "Adopted" into the managed set;
+    // unrecognized ones cannot be either.
+    cfRowIsRecognized(row) {
+      return !!row && !!row.trashId && !row.trashId.startsWith('arr:');
+    },
+
+    // Pill text + tone + tooltip for a (row, instance) pair. Encodes
+    // the truth table: only in-profile rows ever advertise a real sync
+    // state ("In sync" / "Arr drift" etc); added-directly and unmanaged
+    // get descriptor labels with optional drift / update suffixes.
+    // Recognized unmanaged blocks also run spec-diff + global update
+    // aggregation so they can carry "differs from TRaSH" / "TRaSH
+    // updated" suffixes when those signals fire.
+    cfRowPillData(row, block) {
+      if (!block) return null;
+      const drift = !!block.drift;
+      const upd = !!block.updateAvailable;
+      const managed = block.managed || 'in-profile';
+      if (managed === 'in-profile') {
+        if (drift && upd) return { text: 'Update + drift', tone: 'both' };
+        if (drift)        return { text: 'Arr drift',      tone: 'drift' };
+        if (upd)          return { text: 'Update',         tone: 'upd' };
+        return                       { text: 'In sync',        tone: 'ok' };
+      }
+      if (managed === 'added-directly') {
+        const base = 'You pushed this CF via the + Add to Arr button so clonarr tracks it. ';
+        if (drift && upd) {
+          return { text: 'Added directly · update + drift',
+                   tone: 'both',
+                   tip: base + 'Arr-side spec differs from the TRaSH guide AND new upstream changes are pending.' };
+        }
+        if (drift) {
+          return { text: 'Added directly · drift',
+                   tone: 'drift',
+                   tip: base + 'Arr-side spec differs from the TRaSH guide. Click Apply to push the saved spec back, or leave it if the change is intentional.' };
+        }
+        if (upd) {
+          return { text: 'Added directly · updates available',
+                   tone: 'upd',
+                   tip: base + 'TRaSH has published changes to this CF upstream. Click Update to pull them and push to Arr.' };
+        }
+        return { text: 'Added directly',
+                 tone: 'neutral',
+                 tip: base + 'In sync with the saved spec.' };
+      }
+      // managed === 'unmanaged'
+      // Reuse the in-profile pill vocabulary (In sync / Update / Arr
+      // drift / Update + drift) for visual consistency across the page.
+      // The tooltip explains the unmanaged caveat (clonarr will not
+      // auto-act; user must explicitly click Manage to adopt) and the
+      // Update/Apply buttons are gated off so there is no risk of
+      // accidental push.
+      const recognized = this.cfRowIsRecognized(row);
+      if (!recognized) {
+        // No reference spec, no comparison possible. "Untracked" is
+        // honest: clonarr neither knows nor judges this CF.
+        return { text: 'Untracked',
+                 tone: 'neutral',
+                 tip: 'This CF exists on the Arr instance but clonarr does not recognise the name from the TRaSH catalog or your custom CFs. Likely a CF created directly in Radarr/Sonarr without being imported into clonarr. clonarr leaves it alone.' };
+      }
+      const adoptHint = ' clonarr will not push or update this CF until you click Manage to adopt it.';
+      if (drift && upd) {
+        return { text: 'Update + drift', tone: 'both',
+                 tip: 'Recognised by name, but the Arr-side spec differs from the TRaSH guide AND TRaSH has new upstream changes pending.' + adoptHint };
+      }
+      if (drift) {
+        return { text: 'Arr drift', tone: 'drift',
+                 tip: 'Recognised by name. The Arr-side spec differs from the TRaSH guide - could be an intentional customisation in Radarr/Sonarr.' + adoptHint };
+      }
+      if (upd) {
+        return { text: 'Update', tone: 'upd',
+                 tip: 'Recognised by name. TRaSH has published changes to this CF upstream.' + adoptHint };
+      }
+      return { text: 'In sync', tone: 'ok',
+               tip: 'Recognised by name and the Arr-side spec matches the TRaSH guide.' + adoptHint };
+    },
+
+    // POST /api/custom-cfs/import-from-instance for a single Arr-side
+    // CF that clonarr does not recognise. Reads the CF spec from Arr,
+    // creates a matching entry in the user custom CF catalog under
+    // "Custom", then refreshes both browse data and the In use list
+    // so the row moves from Untracked to a recognised "Custom" row on
+    // next render. Equivalent of the bulk Import flow on Browse but
+    // for one CF at a time.
+    async importUntrackedCF(instanceId, row) {
+      if (!instanceId || !row || !row.name) return;
+      const key = instanceId + ':' + row.trashId;
+      if (this.cfApplyingKey === key) return;
+      this.cfApplyingKey = key;
+      try {
+        const r = await fetch('/api/custom-cfs/import-from-instance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instanceId,
+            cfNames: [row.name],
+            category: 'Custom',
+            appType: this.activeAppType,
+          }),
+        });
+        if (!r.ok) {
+          let msg = 'Failed to import CF';
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.showToast(msg, 'error', 4500);
+          return;
+        }
+        this.showToast(`Imported "${row.name}" into your custom CF catalog.`, 'success', 3500);
+        // The backend reads CustomCFs live from the store on every
+        // /api/cf-sync-rules call (cf_sync_rules.go: s.Core.CustomCFs.List),
+        // so we only need to refresh the In use list - no Browse
+        // refresh needed for the name lookup to pick up the new CF.
+        if (typeof this.loadCFSyncRules === 'function') {
+          await this.loadCFSyncRules(this.activeAppType);
+        }
+      } catch (e) {
+        this.showToast(e?.message || 'Network error', 'error', 4500);
+      } finally {
+        this.cfApplyingKey = '';
+      }
+    },
+
+    // POST /api/instances/{id}/cfs/manage - adopt an unmanaged
+    // recognized CF into Instance.PushedCFs so it moves to Managed
+    // (added-directly) on the next In use load. Re-fetches the page
+    // data on success so the row visibly moves between buckets.
+    //
+    // Recognized rows have rowKey == real TRaSH hash (no colon) OR
+    // "custom:<id>" for user customs. Unrecognized rows (rowKey
+    // "arr:<lower-name>") never render Manage so do not reach here.
+    async manageExistingCF(instanceId, row) {
+      if (!instanceId || !row || !row.trashId) return;
+      const body = row.trashId.startsWith('custom:')
+        ? { customCFId: row.trashId.slice('custom:'.length) }
+        : { trashId: row.trashId };
+      try {
+        const r = await fetch(`/api/instances/${instanceId}/cfs/manage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          let msg = 'Failed to adopt CF';
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.showToast(msg, 'error', 4500);
+          return;
+        }
+        const result = await r.json();
+        this.showToast(`Now managing "${result.name || row.name}"`, 'success', 3500);
+        if (typeof this.loadCFSyncRules === 'function') {
+          await this.loadCFSyncRules(this.activeAppType);
+        }
+      } catch (e) {
+        this.showToast(e?.message || 'Network error', 'error', 4500);
+      }
+    },
+
+    // Count CF rows for a given view-mode without mutating active
+    // state. Powers the count badge inside each view-strip pill so a
+    // user on Managed can see how many Unmanaged CFs exist without
+    // switching first. A row counts when at least one of its instance
+    // blocks falls into the view's keep-set.
+    cfSRCountByView(appType, view) {
+      const rows = this.cfSyncRules[appType] || [];
+      const keep = view === 'unmanaged'
+        ? (b) => b.managed === 'unmanaged'
+        : (b) => b.managed === 'in-profile' || b.managed === 'added-directly';
+      let n = 0;
+      for (const r of rows) {
+        if ((r.instances || []).some(keep)) n++;
+      }
+      return n;
+    },
+
+    // Trim rows to the active view-mode (managed vs unmanaged). Each
+    // row's instance blocks carry a `managed` field set by the backend
+    // ('in-profile' / 'added-directly' / 'unmanaged'). Managed view
+    // shows the first two; Unmanaged view shows the third. Instance
+    // blocks that don't match get dropped, and rows whose instance
+    // list goes empty drop out entirely.
+    _cfSRRowsForView(appType) {
+      const rows = this.cfSyncRules[appType] || [];
+      const view = this.cfSyncRulesViewMode || 'managed';
+      const keep = view === 'unmanaged'
+        ? (b) => b.managed === 'unmanaged'
+        : (b) => b.managed === 'in-profile' || b.managed === 'added-directly';
+      return rows
+        .map(r => {
+          const insts = (r.instances || []).filter(keep);
+          if (insts.length === 0) return null;
+          return { ...r, instances: insts };
+        })
+        .filter(Boolean);
+    },
+
     cfSyncRulesFiltered(appType) {
-      let rows = this.cfSyncRules[appType] || [];
+      let rows = this._cfSRRowsForView(appType);
       const cat = this.cfSyncRulesActiveCat || 'all';
       if (cat.startsWith('cat:')) {
         const target = cat.slice('cat:'.length);
@@ -3946,7 +4143,7 @@ export default {
     // the badge advertises a real "jump to" affordance regardless of
     // where the user currently is.
     cfSyncRulesDriftedTotal(appType) {
-      let rows = this.cfSyncRules[appType] || [];
+      let rows = this._cfSRRowsForView(appType);
       const instId = this.cfSyncRulesActiveInstance || '';
       if (instId) {
         rows = rows
@@ -3966,7 +4163,7 @@ export default {
 
     // Mirror of cfSyncRulesDriftedTotal for upstream-update view-pin.
     cfSyncRulesUpdatesTotal(appType) {
-      let rows = this.cfSyncRules[appType] || [];
+      let rows = this._cfSRRowsForView(appType);
       const instId = this.cfSyncRulesActiveInstance || '';
       if (instId) {
         rows = rows

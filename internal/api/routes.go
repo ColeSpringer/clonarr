@@ -25,6 +25,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{id}/languages", s.handleInstanceLanguages)
 	mux.HandleFunc("GET /api/instances/{id}/cfs", s.handleInstanceCFs)
 	mux.HandleFunc("POST /api/instances/{id}/cfs/add", s.handleAddCFsToInstance)
+	mux.HandleFunc("POST /api/instances/{id}/cfs/manage", s.handleManageExistingCF)
 	mux.HandleFunc("GET /api/sandbox/state/{appType}", s.handleSandboxGet)
 	mux.HandleFunc("PUT /api/sandbox/state/{appType}", s.handleSandboxPut)
 	mux.HandleFunc("GET /api/instances/{id}/quality-sizes", s.handleInstanceQualitySizes)

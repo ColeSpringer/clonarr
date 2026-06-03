@@ -19,6 +19,15 @@ export default function baseState() {
     // picked. Matches the Custom Formats Browse tab's own persisted
     // category state in localStorage shape.
     cfSyncRulesActiveCat: 'all',
+    // CF sub-tab view-mode toggle. Splits the In use page between
+    // CFs clonarr is responsible for (sync-rule profiles + Add to Arr
+    // direct pushes) and CFs that exist on Arr but clonarr never
+    // pushed (manual user adds, Recyclarr, etc). Default 'managed' is
+    // where drift detection + Update buttons live; 'unmanaged' is a
+    // read-only inventory. Sidebar view-pins (Updates / Drifted) and
+    // the Check button only make sense in 'managed' so they hide on
+    // 'unmanaged'.
+    cfSyncRulesViewMode: 'managed',
     // CF sub-tab instance picker — '' means "every instance of the
     // active app type"; otherwise a specific instance ID. Narrowing
     // to one instance scopes the row list AND the drift counts AND

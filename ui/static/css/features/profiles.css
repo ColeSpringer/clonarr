@@ -709,9 +709,14 @@ button.v3-status:hover { text-decoration: underline; }
 .cf-sr-row {
   display: grid;
   /* 6 columns: Name | Category | Used in | Status | Last sync | Actions
-     Name flexes (min 0 so long names truncate); Last sync is short
-     ("12h ago"); Actions is auto-sized to fit "Update" or "Updating...". */
-  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.6fr) 90px 100px 90px minmax(110px, auto);
+     Pill text now matches the managed vocabulary (In sync / Arr drift
+     / Update / Update + drift) so the longest case is ~13 chars and
+     fits in 110px. Category gets a real minimum so subcategory labels
+     like "Anime Filters" or "SQP-5 MA Hybrid" do not crash into the
+     count column. Name flexes (min 0 so long names truncate); Last
+     sync is short ("12h ago"); Actions auto-sizes to fit Update /
+     Updating... / Apply / Manage. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.6fr) 80px 110px 90px minmax(110px, auto);
   align-items: center; gap: 10px;
   padding: 8px 18px;
   border-bottom: 1px solid var(--border-subtle);
@@ -760,6 +765,13 @@ button.v3-status:hover { text-decoration: underline; }
   color: var(--accent-orange);
   cursor: help;
 }
+.cf-sr-pill-neutral {
+  /* "Untracked" pill on unrecognized unmanaged rows - clonarr has no
+     reference spec to compare against, so the row carries no sync
+     status. Muted text reads as informational, not action-needed. */
+  color: var(--text-muted);
+  cursor: help;
+}
 
 /* ===== CF sub-tab: sidebar + main pane layout =====
    Two-column grid mirroring the Custom Formats Browse tab so users
@@ -782,6 +794,61 @@ button.v3-status:hover { text-decoration: underline; }
   overflow-y: auto;
 }
 .cf-sr-side-all .cf-sr-side-label { font-weight: 500; }
+
+/* View-mode pills (Managed / Unmanaged). Tone matches the surrounding
+   filter-bar controls (.cf-browse-expand-toggle, .cf-sr-filter-group):
+   subtle text buttons, no border, no filled background. Active state
+   uses app-color text + bold weight + thin underline so the selection
+   is unambiguous without shouting at the user. */
+.cf-sr-view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  border-bottom: 1px solid transparent; /* reserved so active underline doesn't shift layout */
+}
+.cf-sr-view-pill:hover {
+  color: var(--app-color);
+}
+.cf-sr-view-pill.active {
+  color: var(--app-color);
+  font-weight: 600;
+  border-bottom-color: var(--app-color);
+}
+.cf-sr-view-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.cf-sr-view-pill.active .cf-sr-view-count {
+  background: var(--app-glow);
+  color: var(--app-color);
+}
+/* Thin vertical separator between the view-mode pills and the rest
+   of the filter bar so the two groups read distinctly. */
+.cf-sr-filter-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  margin: 0 6px;
+  align-self: center;
+}
 
 /* View-filter block (Drifted etc) sits at the top of the sidebar
    with a divider below so it visually separates from the

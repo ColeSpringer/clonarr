@@ -230,6 +230,38 @@
       <a class="topnav-subtab" :class="{ active: getMaintenanceTab(activeAppType) === 'cleanup' }"
          :href="navHref('maintenance', { maintenanceTab: 'cleanup' })">Cleanup</a>
     </div>
+    <!-- Advanced sub-nav. Mirrors the sidebar's Advanced subnav so
+         users on the top-bar layout still see Profile Builder /
+         Scoring Sandbox / CF Group Builder. dev-mode gate matches the
+         parent Advanced tab. -->
+    <div class="topnav-subnav" x-show="config.devMode && currentSection === 'advanced'">
+      <a class="topnav-subtab" :class="{ active: advancedTab === 'builder' }"
+         :href="navHref('advanced', { advancedTab: 'builder' })">Profile Builder</a>
+      <a class="topnav-subtab" :class="{ active: advancedTab === 'scoring' }"
+         :href="navHref('advanced', { advancedTab: 'scoring' })">Scoring Sandbox</a>
+      <a class="topnav-subtab" :class="{ active: advancedTab === 'group-builder' }"
+         :href="navHref('advanced', { advancedTab: 'group-builder' })">CF Group Builder</a>
+    </div>
+    <!-- Settings sub-nav. Mirrors the sidebar's Settings subnav so the
+         top-bar layout exposes all seven settings sections. Without
+         this the user lands on whichever section they last visited
+         under sidebar mode with no way to navigate to the others. -->
+    <div class="topnav-subnav" x-show="currentSection === 'settings'">
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'instances' }"
+         :href="navHref('settings', { settingsSection: 'instances' })">Instances</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'trash' }"
+         :href="navHref('settings', { settingsSection: 'trash' })">TRaSH-Guides</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'profile-sync' }"
+         :href="navHref('settings', { settingsSection: 'profile-sync' })">Auto-sync</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'notifications' }"
+         :href="navHref('settings', { settingsSection: 'notifications' })">Notifications</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'display' }"
+         :href="navHref('settings', { settingsSection: 'display' })">Display</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'security' }"
+         :href="navHref('settings', { settingsSection: 'security' })">Security</a>
+      <a class="topnav-subtab" :class="{ active: settingsSection === 'advanced' }"
+         :href="navHref('settings', { settingsSection: 'advanced' })">Advanced</a>
+    </div>
   </div>
 
 {{end}}

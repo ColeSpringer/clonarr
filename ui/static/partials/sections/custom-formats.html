@@ -223,7 +223,18 @@
              a derived view of which CFs the sync rules are pushing. -->
         <div x-show="getCustomFormatsTab(activeAppType) === 'in-use'">
           <div style="font-size:18px;font-weight:600;margin-bottom:4px">In use</div>
-          <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Every custom format your sync rules push to <span x-text="activeAppLabel"></span>. Spot drift and pending TRaSH updates, see which profiles use a CF, and re-sync when needed.</div>
+          <!-- View-mode-aware description so the page header matches
+               whichever bucket the user is looking at. Managed is the
+               clonarr-touched set (sync rules + Add to Arr); Unmanaged
+               is everything else that exists on Arr. -->
+          <div x-show="(cfSyncRulesViewMode || 'managed') === 'managed'"
+               style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+            Custom formats clonarr pushes to <span x-text="activeAppLabel"></span>, either from a sync rule's profile or via the "+ Add to Arr" button on Browse. Spot drift and pending TRaSH updates, see which profiles use a CF, and re-sync when needed.
+          </div>
+          <div x-show="cfSyncRulesViewMode === 'unmanaged'"
+               style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+            Custom formats that exist on <span x-text="activeAppLabel"></span> but clonarr never pushed. Manual user adds, Recyclarr, and anything else outside clonarr lives here. Drift detection and Update buttons don't apply - clonarr has no target spec to compare against.
+          </div>
           <template x-if="!cfSyncRulesLoaded[activeAppType]">
             <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Loading custom formats...</div>
           </template>
@@ -244,7 +255,11 @@
                      them as distinct from "All categories". Only
                      render the filters block when at least one filter
                      is applicable. -->
-                <template x-if="cfSyncRulesDriftedTotal(activeAppType) > 0 || cfSyncRulesUpdatesTotal(activeAppType) > 0">
+                <!-- Updates / Drifted view-pins only render on the
+                     Managed view. Unmanaged CFs have no target spec to
+                     diff against and so cannot fire updates/drift -
+                     the pins would always read 0 there. -->
+                <template x-if="(cfSyncRulesViewMode || 'managed') === 'managed' && (cfSyncRulesDriftedTotal(activeAppType) > 0 || cfSyncRulesUpdatesTotal(activeAppType) > 0)">
                   <div class="cf-sr-side-views">
                     <template x-if="cfSyncRulesUpdatesTotal(activeAppType) > 0">
                       <button type="button" class="cf-sr-side-item cf-sr-side-view-upd"
@@ -316,14 +331,34 @@
                     <span style="font-weight:600" x-text="cfSyncRulesFiltered(activeAppType).length + ' custom format' + (cfSyncRulesFiltered(activeAppType).length === 1 ? '' : 's')"></span>
                   </span>
                 </div>
-                <!-- Action row — all interactive controls together.
-                     Left-to-right: Expand/Collapse all → Instance
-                     picker → Search → Check. Keeps Expand/Collapse
-                     near the sidebar tree it controls; instance +
-                     search are the most-used filters; Check sits on
-                     the right as the primary "do something" action. -->
+                <!-- Action row — view-mode pills first (scope-setter
+                     for the rest of the bar), then filters. Order
+                     left-to-right: Managed/Unmanaged → Expand/Collapse
+                     all → Instance picker → Search → Check. Pills get
+                     a thin vertical divider so they read as a separate
+                     scope group rather than another filter pill. -->
                 <div class="cf-sr-filter-bar">
+                  <button type="button"
+                          class="cf-sr-view-pill"
+                          :class="{ active: (cfSyncRulesViewMode || 'managed') === 'managed' }"
+                          @click="cfSyncRulesViewMode = 'managed'; cfSyncRulesActiveCat = 'all'">
+                    <span>Managed</span>
+                    <span class="cf-sr-view-count" x-text="cfSRCountByView(activeAppType, 'managed')"></span>
+                  </button>
+                  <button type="button"
+                          class="cf-sr-view-pill"
+                          :class="{ active: cfSyncRulesViewMode === 'unmanaged' }"
+                          @click="cfSyncRulesViewMode = 'unmanaged'; cfSyncRulesActiveCat = 'all'">
+                    <span>Unmanaged</span>
+                    <span class="cf-sr-view-count" x-text="cfSRCountByView(activeAppType, 'unmanaged')"></span>
+                  </button>
+                  <span class="cf-sr-filter-divider" aria-hidden="true"></span>
+                  <!-- Expand all only makes sense when at least 2
+                       categories are visible. With 1 (e.g. the whole
+                       Unmanaged view collapsing into a single bucket)
+                       there is nothing meaningful to toggle. -->
                   <button type="button" class="cf-browse-expand-toggle"
+                          x-show="cfSyncRulesCategories(activeAppType).length > 1"
                           @click="cfSRToggleAllParents(activeAppType)"
                           x-text="cfSRAnyParentExpanded(activeAppType) ? 'Collapse all' : 'Expand all'"></button>
                   <template x-if="cfSyncRulesInstanceOptions(activeAppType).length > 1">
@@ -349,7 +384,13 @@
                               aria-label="Clear search">&times;</button>
                     </template>
                   </label>
-                  <span class="cf-sr-filter-actions">
+                  <!-- Check is Managed-only: it runs TRaSH-update +
+                       Arr-drift detection, neither of which applies to
+                       unmanaged CFs (no target spec). On Unmanaged the
+                       container collapses entirely so the action row
+                       does not show a stub. -->
+                  <span class="cf-sr-filter-actions"
+                        x-show="(cfSyncRulesViewMode || 'managed') === 'managed'">
                     <button class="v3-inst-action"
                             :disabled="checkingUpdates || pulling || cfApplyAllProgress.running"
                             @click="checkTrashUpdates()"
@@ -440,38 +481,38 @@
                                     aria-hidden="true">&#9656;</span>
                             </span>
                             <span>
-                              <template x-if="!r.instance.drift && !r.instance.updateAvailable">
-                                <span class="cf-sr-pill cf-sr-pill-ok">In sync</span>
-                              </template>
-                              <template x-if="r.instance.updateAvailable && !r.instance.drift">
-                                <span class="cf-sr-pill cf-sr-pill-upd">Update</span>
-                              </template>
-                              <template x-if="r.instance.drift && !r.instance.updateAvailable">
-                                <span class="cf-sr-pill cf-sr-pill-drift">Arr drift</span>
-                              </template>
-                              <template x-if="r.instance.drift && r.instance.updateAvailable">
-                                <span class="cf-sr-pill cf-sr-pill-both">Update + drift</span>
+                              <!-- Single pill computed by cfRowPillData
+                                   so the four states (in-profile, added-
+                                   directly, unmanaged-recognized,
+                                   unmanaged-unrecognized) each report
+                                   their truth without claiming sync
+                                   state they cannot verify. Recognized
+                                   unmanaged rows DO run spec-diff +
+                                   upstream-update aggregation so they
+                                   carry "differs" / "TRaSH updated"
+                                   suffixes when those fire, but the
+                                   pill stays muted because clonarr
+                                   does not push to unmanaged CFs. -->
+                              <template x-if="cfRowPillData(r, r.instance)">
+                                <span class="cf-sr-pill"
+                                      :class="'cf-sr-pill-' + (cfRowPillData(r, r.instance).tone || 'neutral')"
+                                      x-tt="cfRowPillData(r, r.instance).tip || ''"
+                                      x-text="cfRowPillData(r, r.instance).text"></span>
                               </template>
                             </span>
                             <span class="cf-sr-lastsync"
                                   x-text="cfSRInstanceLastSync(r.instance) ? timeAgo(cfSRInstanceLastSync(r.instance)) : 'never'"></span>
                             <span style="text-align:right">
-                              <!-- Update wins over Apply when both are
-                                   relevant: a sync push pulls the new
-                                   spec from disk and writes it to Arr,
-                                   covering the upstream change AND
-                                   overwriting any drifted Arr-side
-                                   edits in one operation. -->
-                              <template x-if="r.instance.updateAvailable">
-                                <!-- Only disable when THIS specific row or
-                                     THIS card's batch action is running.
-                                     The global updatingRuleId flag (used
-                                     by Profile Sync Rules' Update profile
-                                     button) intentionally NOT checked here
-                                     — it would otherwise leave every CF
-                                     Update button stuck across the page
-                                     when a stale flag survives from a
-                                     prior hung sync on Profile Sync. -->
+                              <!-- Update / Apply are gated to managed
+                                   rows only (in-profile or added-
+                                   directly). Unmanaged never renders a
+                                   push action - clonarr does not write
+                                   to CFs it does not own. Recognized
+                                   unmanaged rows get a Manage button
+                                   instead, which adopts the CF into
+                                   the managed set without modifying
+                                   it on Arr. -->
+                              <template x-if="r.instance.updateAvailable && (r.instance.managed === 'in-profile' || r.instance.managed === 'added-directly')">
                                 <button class="v3-inst-action"
                                         style="font-size:11px"
                                         :disabled="cfApplyingKey === card.id + ':' + r.trashId || cfApplyAllProgress.running || updatingInstance === card.id"
@@ -479,13 +520,38 @@
                                         x-tt="'Pull latest TRaSH-Guides spec for this CF and push it to ' + card.name + '. Resolves both the upstream update and any Arr drift on this CF.'"
                                         x-text="cfApplyingKey === card.id + ':' + r.trashId ? 'Updating...' : 'Update'"></button>
                               </template>
-                              <template x-if="r.instance.drift && !r.instance.updateAvailable">
+                              <template x-if="r.instance.drift && !r.instance.updateAvailable && (r.instance.managed === 'in-profile' || r.instance.managed === 'added-directly')">
                                 <button class="v3-inst-action"
                                         style="font-size:11px"
                                         :disabled="cfApplyingKey === card.id + ':' + r.trashId || cfApplyAllProgress.running"
                                         @click.stop="applyCFDrift(card.id, r.trashId, r.name, card.name)"
                                         x-tt="'Re-push clonarr&#39;s saved spec back to ' + card.name + ', overwriting the Arr-side edits on this CF.'"
                                         x-text="cfApplyingKey === card.id + ':' + r.trashId ? 'Applying...' : 'Apply'"></button>
+                              </template>
+                              <template x-if="r.instance.managed === 'unmanaged' && cfRowIsRecognized(r)">
+                                <button class="v3-inst-action"
+                                        style="font-size:11px"
+                                        @click.stop="manageExistingCF(card.id, r)"
+                                        x-tt="'Adopt this CF into the clonarr managed list on ' + card.name + '. clonarr will then track drift, surface updates, and let you re-sync it on demand. Nothing changes on Arr right now; this is a clonarr-side ownership claim.'">Manage</button>
+                              </template>
+                              <!-- Import button for unrecognized rows.
+                                   These CFs exist on Arr but clonarr
+                                   has no record of them (not in TRaSH
+                                   catalog, not in user customs). Click
+                                   reads the spec from Arr and creates
+                                   a matching entry in the user custom
+                                   CF catalog so the CF moves from
+                                   Untracked to a recognised row on
+                                   next load. Equivalent of the bulk
+                                   Import flow on Browse but for a
+                                   single CF. -->
+                              <template x-if="r.instance.managed === 'unmanaged' && !cfRowIsRecognized(r)">
+                                <button class="v3-inst-action"
+                                        style="font-size:11px"
+                                        :disabled="cfApplyingKey === card.id + ':' + r.trashId"
+                                        @click.stop="importUntrackedCF(card.id, r)"
+                                        x-tt="'Read this CF from ' + card.name + ' and add it to your clonarr custom CF catalog under Custom. After import, clonarr can track drift, surface updates, and you can manage or sync it like any other custom CF.'"
+                                        x-text="cfApplyingKey === card.id + ':' + r.trashId ? 'Importing...' : 'Import'"></button>
                               </template>
                             </span>
                           </div>

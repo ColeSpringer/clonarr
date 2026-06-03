@@ -45,6 +45,12 @@ data and configuration carry over from v2.5.9 with no manual migration.
 
 **Push any CF to a Radarr or Sonarr instance with one click.** Every Browse row now has a "+" button that adds the CF to a chosen instance without touching any profile. Use it to stage CFs before the next profile sync, or to make a CF available for ad-hoc testing in the Scoring Sandbox.
 
+**New "In use" sub-tab.** A per-CF status view for every Custom Format that clonarr touches on Radarr or Sonarr. Browse shows the whole CF catalog; In use shows which CFs you actually have deployed and how each is doing. Toggle between Managed (clonarr owns these via a sync rule profile or the "+ Add" button) and Unmanaged (everything else on Arr, whether you made it directly in Radarr or another tool put it there).
+
+**Per-CF drift and update detection.** Each In use row reports its real state: In sync, Update available (TRaSH has new commits affecting the CF), Arr drift (someone edited the spec directly on Arr), or both. Drift detection runs on every Managed CF and on Unmanaged CFs that clonarr recognises by name from the TRaSH catalog or your own customs.
+
+**Adopt or import unmanaged CFs into clonarr management.** Unmanaged CFs whose name matches the TRaSH catalog or one of your customs get a Manage button - one click records ownership in clonarr without modifying the CF on Arr, and the CF moves to the Managed bucket. Truly unknown CFs (created directly in Radarr without being imported) get an Import button that reads the spec into your custom catalog under the Custom group. clonarr never pushes or updates an unmanaged CF without an explicit user click - drift detection on these is purely informational until you adopt them.
+
 #### Sync Rules
 
 **Per-instance cards instead of a flat table.** Each Radarr or Sonarr instance gets its own card with a colour gradient header in the app colour. So you can see at a glance which rules belong to which instance, even when you have several of the same type (e.g. Radarr-main and Radarr-4K).

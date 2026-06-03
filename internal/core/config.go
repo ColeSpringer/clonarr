@@ -445,6 +445,35 @@ type Instance struct {
 	// the JSON for installations with no drift, so an instance never
 	// pays storage cost for a feature it has not exercised.
 	CFDriftFingerprints map[string]string `json:"cfDriftFingerprints,omitempty"`
+
+	// PushedCFs records every CF that clonarr has pushed to this Arr
+	// instance via the "Add to Arr" path (the "+" button on the Custom
+	// Formats Browse tab and the Sandbox Add Custom Formats picker),
+	// independent of any sync rule. Used by the Custom Formats > In use
+	// sub-tab to classify CFs as Managed (in a sync rule's profile OR
+	// in this list) vs Unmanaged (on Arr but neither). Without this
+	// list a "+ Add" push and a Recyclarr-pushed CF are
+	// indistinguishable on the Arr side, so the In use tab cannot
+	// honestly say "clonarr owns this one even though no profile
+	// references it".
+	//
+	// Stale entries (the user deletes a CF on Arr after clonarr
+	// added it) are harmless but accumulate over time - the In use
+	// tab only acts on records whose Name still matches a CF on Arr,
+	// so an orphan record never produces a bad action. Pruning is
+	// future work.
+	PushedCFs []PushedCFRecord `json:"pushedCFs,omitempty"`
+}
+
+// PushedCFRecord is one entry in Instance.PushedCFs. Either TrashID or
+// CustomCFID is set (never both); Name is the canonical Arr-side identifier
+// because Arr's numeric CF id changes when a CF is deleted and re-added,
+// while the name we pushed is stable.
+type PushedCFRecord struct {
+	TrashID    string `json:"trashId,omitempty"`    // set when sourced from TRaSH catalog
+	CustomCFID string `json:"customCFId,omitempty"` // set when sourced from user customs
+	Name       string `json:"name"`                 // CF name as known to Arr after push
+	AddedAt    string `json:"addedAt"`              // RFC3339 timestamp of the push
 }
 
 // TrashRepo holds TRaSH-Guides repository settings.

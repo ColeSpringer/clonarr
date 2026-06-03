@@ -958,9 +958,14 @@ func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Resolve each id to a TRaSH or custom CF, then to an Arr API payload.
+	// trashID and customCFID are mutually exclusive on a single item; we
+	// keep both fields so the post-push PushedCFs persistence loop can tell
+	// which catalog the CF came from without re-resolving by name.
 	type pushItem struct {
-		name  string
-		arrCF *arr.ArrCF
+		name       string
+		arrCF      *arr.ArrCF
+		trashID    string
+		customCFID string
 	}
 	var items []pushItem
 
@@ -973,7 +978,7 @@ func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) 
 		if !ok {
 			continue
 		}
-		items = append(items, pushItem{name: cf.Name, arrCF: core.TrashCFToArr(cf)})
+		items = append(items, pushItem{name: cf.Name, arrCF: core.TrashCFToArr(cf), trashID: tid})
 	}
 	for _, cid := range body.CustomCFIDs {
 		ccf, ok := s.Core.CustomCFs.Get(cid)
@@ -983,7 +988,7 @@ func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) 
 		if ccf.AppType != inst.Type {
 			continue // wrong app type, skip silently
 		}
-		items = append(items, pushItem{name: ccf.Name, arrCF: core.CustomCFToArr(&ccf)})
+		items = append(items, pushItem{name: ccf.Name, arrCF: core.CustomCFToArr(&ccf), customCFID: cid})
 	}
 
 	if len(items) == 0 {
@@ -1011,6 +1016,10 @@ func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) 
 		Error string `json:"error"`
 	}
 	failed := []failedItem{}
+	// addedRecords mirrors added but carries the source IDs needed to
+	// persist into Instance.PushedCFs so the Custom Formats > In use
+	// sub-tab can later classify this CF as Managed (added directly).
+	addedRecords := []core.PushedCFRecord{}
 
 	for _, it := range items {
 		if existingByName[strings.ToLower(it.name)] {
@@ -1022,15 +1031,175 @@ func (s *Server) handleAddCFsToInstance(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		added = append(added, it.name)
+		addedRecords = append(addedRecords, core.PushedCFRecord{
+			TrashID:    it.trashID,
+			CustomCFID: it.customCFID,
+			Name:       it.name,
+			AddedAt:    time.Now().UTC().Format(time.RFC3339),
+		})
 		// Throttle between writes to be gentle on slow Arr instances;
 		// matches the per-create delay used by the main sync engine.
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Persist the new PushedCFs entries on this instance. De-dup by Name
+	// against existing entries so a re-push (e.g. after the user deleted
+	// the CF on Arr and added it back via "+") refreshes AddedAt rather
+	// than producing a duplicate row. Best-effort: a save failure is
+	// logged but does not fail the request - the CFs are already on Arr
+	// and the user expects success. Worst case is they show up as
+	// Unmanaged on the In use tab until the next push refreshes the list.
+	if len(addedRecords) > 0 {
+		if err := s.Core.Config.Update(func(cfg *core.Config) {
+			for i := range cfg.Instances {
+				if cfg.Instances[i].ID != inst.ID {
+					continue
+				}
+				existing := cfg.Instances[i].PushedCFs
+				for _, rec := range addedRecords {
+					replaced := false
+					for j := range existing {
+						if strings.EqualFold(existing[j].Name, rec.Name) {
+							existing[j] = rec
+							replaced = true
+							break
+						}
+					}
+					if !replaced {
+						existing = append(existing, rec)
+					}
+				}
+				cfg.Instances[i].PushedCFs = existing
+				return
+			}
+		}); err != nil {
+			log.Printf("handleAddCFsToInstance: PushedCFs persist failed for instance %s: %v", inst.ID, err)
+		}
 	}
 
 	writeJSON(w, map[string]any{
 		"added":   added,
 		"skipped": skipped,
 		"failed":  failed,
+	})
+}
+
+// handleManageExistingCF "adopts" an unmanaged CF that already exists on
+// the Arr instance, recording it in Instance.PushedCFs so future In use
+// loads classify it as Managed (added-directly) instead of Unmanaged.
+// No Arr writes happen here - the CF must already be on Arr; this is
+// purely a clonarr-side ownership claim.
+//
+// Body: { trashId?: string, customCFId?: string }  (exactly one set)
+//
+// Use case: user has a CF on Arr that matches a TRaSH or custom CF by
+// name, sees "External" in the In use tab, and decides to let clonarr
+// manage it from now on. Click Manage -> appended to PushedCFs -> the
+// CF moves to the Managed bucket without any data destruction.
+func (s *Server) handleManageExistingCF(w http.ResponseWriter, r *http.Request) {
+	inst, ok := s.requireInstance(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		TrashID    string `json:"trashId"`
+		CustomCFID string `json:"customCFId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "Invalid request body")
+		return
+	}
+	if (body.TrashID == "" && body.CustomCFID == "") || (body.TrashID != "" && body.CustomCFID != "") {
+		writeError(w, 400, "Specify exactly one of trashId or customCFId")
+		return
+	}
+
+	// Resolve the expected CF name from the source ID.
+	var expectedName string
+	if body.TrashID != "" {
+		ad := s.Core.Trash.GetAppData(inst.Type)
+		if ad == nil {
+			writeError(w, 404, "TRaSH data not loaded for this app type")
+			return
+		}
+		cf, ok := ad.CustomFormats[body.TrashID]
+		if !ok || cf == nil {
+			writeError(w, 404, "TRaSH CF not found by id")
+			return
+		}
+		expectedName = cf.Name
+	} else {
+		ccf, ok := s.Core.CustomCFs.Get(body.CustomCFID)
+		if !ok {
+			writeError(w, 404, "Custom CF not found by id")
+			return
+		}
+		if ccf.AppType != inst.Type {
+			writeError(w, 400, "Custom CF app type does not match this instance")
+			return
+		}
+		expectedName = ccf.Name
+	}
+
+	// Verify the CF actually exists on Arr by name. We do not modify
+	// it; we just claim ownership in clonarr's records. If it is not
+	// there, the adopt is meaningless - either the user clicked from a
+	// stale list or something deleted the CF on Arr in the meantime.
+	client := arr.NewArrClient(inst.URL, inst.APIKey, s.Core.HTTPClient)
+	existing, err := client.ListCustomFormats()
+	if err != nil {
+		writeError(w, 502, "Failed to verify CF on Arr: "+err.Error())
+		return
+	}
+	matchedName := ""
+	for _, cf := range existing {
+		if strings.EqualFold(cf.Name, expectedName) {
+			matchedName = cf.Name
+			break
+		}
+	}
+	if matchedName == "" {
+		writeError(w, 404, "CF "+expectedName+" is not on this Arr instance")
+		return
+	}
+
+	// Append to PushedCFs (de-dup by Name with the same logic used by
+	// the regular Add path).
+	record := core.PushedCFRecord{
+		TrashID:    body.TrashID,
+		CustomCFID: body.CustomCFID,
+		Name:       matchedName,
+		AddedAt:    time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := s.Core.Config.Update(func(cfg *core.Config) {
+		for i := range cfg.Instances {
+			if cfg.Instances[i].ID != inst.ID {
+				continue
+			}
+			existingList := cfg.Instances[i].PushedCFs
+			replaced := false
+			for j := range existingList {
+				if strings.EqualFold(existingList[j].Name, record.Name) {
+					existingList[j] = record
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				existingList = append(existingList, record)
+			}
+			cfg.Instances[i].PushedCFs = existingList
+			return
+		}
+	}); err != nil {
+		writeError(w, 500, "Failed to record managed CF: "+err.Error())
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"managed": true,
+		"name":    matchedName,
 	})
 }
 
