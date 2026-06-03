@@ -17,10 +17,17 @@
         <span>Export Results</span>
         <span style="font-size:11px;color:var(--text-secondary);font-weight:400">(plain text · paste into a diff tool to compare scoring runs)</span>
       </h2>
-      <!-- Breakdown toggle — flips the formatter mode. Watching this
-           via @change re-renders the textbox on the fly so the user
-           sees the size of the export before they commit. -->
-      <div style="margin:8px 0 10px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <!-- Two independent toggles drive the formatter mode; each
+           @change re-renders the textbox on the fly so the user sees
+           the shape of the export before they commit. Score off +
+           Breakdown off = titles only, in sandbox sort order. -->
+      <div style="margin:8px 0 10px 0;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox"
+                 x-model="sandboxExportModal.includeScore"
+                 @change="rerenderSandboxExport()">
+          <span>Include score</span>
+        </label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
           <input type="checkbox"
                  x-model="sandboxExportModal.includeBreakdown"

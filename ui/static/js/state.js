@@ -407,7 +407,7 @@ export default function baseState() {
     // (deep diff for per-CF score comparison across two sessions).
     // The "no scoring" path is implicit: if a release has no scoring,
     // its line shows just the title regardless of toggle.
-    sandboxExportModal: { show: false, appType: '', includeBreakdown: false, text: '', copied: false },
+    sandboxExportModal: { show: false, appType: '', includeScore: true, includeBreakdown: false, text: '', copied: false },
     // Import
     importedProfiles: { radarr: [], sonarr: [] },
     showImportModal: false, // false or app type string
@@ -557,8 +557,8 @@ export default function baseState() {
 
     // Scoring Sandbox (per app-type state)
     sandbox: {
-      radarr: { instanceId: '', profileKey: '', compareKey: '', editOpen: false, editScores: {}, editToggles: {}, editMinScore: null, editOriginal: null, inputMode: 'paste', pasteInput: '', bulkInput: '', searchQuery: '', selectedIndexers: [], indexers: [], searchResults: [], results: [], parsing: false, searching: false, searchAbort: null, instanceProfiles: [], showBulk: false, searchError: '', indexerDropdown: false, searchFilterText: '', searchFilterRes: '', sortCol: 'score', sortDir: 'desc', filterToSelected: false, dragSrc: null, dragOver: null, scoreSets: [], activeScoreSet: '', searchCooldownRemaining: 0 },
-      sonarr: { instanceId: '', profileKey: '', compareKey: '', editOpen: false, editScores: {}, editToggles: {}, editMinScore: null, editOriginal: null, inputMode: 'paste', pasteInput: '', bulkInput: '', searchQuery: '', selectedIndexers: [], indexers: [], searchResults: [], results: [], parsing: false, searching: false, searchAbort: null, instanceProfiles: [], showBulk: false, searchError: '', indexerDropdown: false, searchFilterText: '', searchFilterRes: '', sortCol: 'score', sortDir: 'desc', filterToSelected: false, dragSrc: null, dragOver: null, scoreSets: [], activeScoreSet: '', searchCooldownRemaining: 0 },
+      radarr: { instanceId: '', profileKey: '', compareKey: '', editOpen: false, editScores: {}, editToggles: {}, editMinScore: null, editOriginal: null, inputMode: 'paste', pasteInput: '', bulkInput: '', searchQuery: '', selectedIndexers: [], indexers: [], searchResults: [], results: [], parsing: false, searching: false, searchAbort: null, instanceProfiles: [], showBulk: false, searchError: '', indexerDropdown: false, searchFilterText: '', searchFilterRes: '', sortCol: 'score', sortDir: 'desc', filterToSelected: false, hideFailed: false, dragSrc: null, dragOver: null, scoreSets: [], activeScoreSet: '', searchCooldownRemaining: 0 },
+      sonarr: { instanceId: '', profileKey: '', compareKey: '', editOpen: false, editScores: {}, editToggles: {}, editMinScore: null, editOriginal: null, inputMode: 'paste', pasteInput: '', bulkInput: '', searchQuery: '', selectedIndexers: [], indexers: [], searchResults: [], results: [], parsing: false, searching: false, searchAbort: null, instanceProfiles: [], showBulk: false, searchError: '', indexerDropdown: false, searchFilterText: '', searchFilterRes: '', sortCol: 'score', sortDir: 'desc', filterToSelected: false, hideFailed: false, dragSrc: null, dragOver: null, scoreSets: [], activeScoreSet: '', searchCooldownRemaining: 0 },
     },
     prowlarrTestResult: null,
     prowlarrTesting: false,

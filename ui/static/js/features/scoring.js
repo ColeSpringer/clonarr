@@ -217,6 +217,18 @@ export default {
         }
       }
       if (sb.filterToSelected) results = results.filter(r => r._selected === true);
+      // Hide-failed filter: drops scored releases whose status is a
+      // miss (below Min score OR quality not allowed by the profile).
+      // Unscored releases pass through so the user does not lose
+      // sight of rows they have not run yet. Toggled by the Hide
+      // failed button on the toolbar; persists per app-type so the
+      // user's preference survives a tab switch.
+      if (sb.hideFailed) {
+        results = results.filter(r => {
+          if (!r.scoring) return true;
+          return this.sandboxResultStatus(r, r.scoring, appType).pass === true;
+        });
+      }
       return results;
     },
 
@@ -316,30 +328,41 @@ export default {
       this.sandboxExportModal = {
         show: true,
         appType: appType,
+        includeScore: true,
         includeBreakdown: false,
-        text: this.formatSandboxExportText(appType, false),
+        text: this.formatSandboxExportText(appType, true, false),
         copied: false,
       };
     },
 
-    // Build the export string. Follows visibleSandboxResults' sort +
-    // filter order so what the user sees is what gets exported. Three
-    // formatting modes the function picks based on per-release scoring
-    // state + the includeBreakdown toggle:
-    //   • Release has no scoring             → "<title>"
-    //   • Scoring + !includeBreakdown        → "<title>\t<total>"
-    //   • Scoring + includeBreakdown         → header line then per-CF
-    //     rows (alphabetical by CF name for stable diffs across two
-    //     sessions of the same release scored on different profiles)
-    //   • Multi-release output joins blocks with a blank line so diff
-    //     tools align block boundaries cleanly.
-    formatSandboxExportText(appType, includeBreakdown) {
+    // Build the export string. Two independent toggles drive the
+    // output shape, so the user can pick what to share with whom:
+    //   • includeScore   - include the release total score
+    //   • includeBreakdown - include per-CF rows under the title
+    // Resulting matrix (per scored release; unscored releases always
+    // export as title-only regardless of the toggles):
+    //   • score=ON,  bd=OFF -> "<title>\t<total>"
+    //   • score=ON,  bd=ON  -> "<title>\tTOTAL <total>" + "  <cf>\t<s>" rows
+    //   • score=OFF, bd=OFF -> "<title>" only (in current sort order)
+    //   • score=OFF, bd=ON  -> "<title>" + "  <cf>" rows (names only,
+    //                           no scores) - useful when you want to
+    //                           share "which CFs hit this release"
+    //                           without revealing scoring intent.
+    // CF rows are sorted alphabetically by name so diff tools align
+    // same-CF rows across two sessions even when scores differ.
+    // Unmatched CFs are filtered out of breakdowns - they would be
+    // noise for any comparison view.
+    // Output follows visibleSandboxResults' sort + filter so what
+    // the user sees on the page is what they get on paste. Multi-
+    // release output joins blocks with a blank line so diff tools
+    // align block boundaries cleanly.
+    formatSandboxExportText(appType, includeScore, includeBreakdown) {
       const rows = (typeof this.visibleSandboxResults === 'function'
         ? this.visibleSandboxResults(appType)
         : (this.sandbox?.[appType]?.results || [])) || [];
       if (rows.length === 0) return '';
-      // Format the total score with the explicit sign so a +/- diff
-      // shows up cleanly in diff tools' alignment view.
+      // Format scores with explicit sign so +/- diff shows up
+      // cleanly in diff tools' alignment view.
       const fmtScore = (n) => {
         if (typeof n !== 'number') return '0';
         return (n > 0 ? '+' : '') + String(n);
@@ -347,40 +370,42 @@ export default {
       const blocks = rows.map(res => {
         const title = res.title || '';
         const scoring = res.scoring;
-        if (!scoring || typeof scoring.total !== 'number') {
-          // No scoring done — just the title. Common when the user
-          // pasted a list and exports before clicking Score.
-          return title;
-        }
-        if (!includeBreakdown) {
-          // Compact single-line: title + total. Tab separator picks
-          // up cleanly in diff tools and in pasted-into-spreadsheet
-          // workflows alike.
-          return `${title}\t${fmtScore(scoring.total)}`;
-        }
-        // Breakdown block: header line, then alphabetical CF rows so
-        // diff tools align same-CF rows across two sessions even when
-        // the scores differ. Unmatched CFs (score==0 from filter) are
-        // skipped — they're noise for a comparison view.
+        const hasScoring = scoring && typeof scoring.total === 'number';
+
+        // Unscored releases (the user pasted a list but hasn't run
+        // Score yet) always export as just the title. There is no
+        // scoring data to gate on the toggles.
+        if (!hasScoring) return title;
+
+        // Title line: with or without the total depending on the
+        // Score toggle.
+        const titleLine = includeScore
+          ? `${title}\t${includeBreakdown ? 'TOTAL ' : ''}${fmtScore(scoring.total)}`
+          : title;
+
+        if (!includeBreakdown) return titleLine;
+
+        // Breakdown: alphabetical so diff tools align same-CF rows
+        // across sessions. Per-CF score appended only when Score is
+        // also on; otherwise just the CF name.
         const breakdown = (scoring.breakdown || [])
           .filter(b => b && b.matched && typeof b.score === 'number' && b.score !== 0)
           .slice()
           .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        const lines = [`${title}\tTOTAL ${fmtScore(scoring.total)}`];
+        const lines = [titleLine];
         for (const cf of breakdown) {
-          lines.push(`  ${cf.name}\t${fmtScore(cf.score)}`);
+          lines.push(includeScore ? `  ${cf.name}\t${fmtScore(cf.score)}` : `  ${cf.name}`);
         }
         return lines.join('\n');
       });
       return blocks.join('\n\n');
     },
 
-    // Re-run the formatter when the toggle flips. Called from the
-    // modal's checkbox @change.
+    // Re-run the formatter when either toggle flips.
     rerenderSandboxExport() {
       const m = this.sandboxExportModal;
       if (!m || !m.show) return;
-      this.sandboxExportModal.text = this.formatSandboxExportText(m.appType, m.includeBreakdown);
+      this.sandboxExportModal.text = this.formatSandboxExportText(m.appType, m.includeScore, m.includeBreakdown);
     },
 
     // Copy the modal text to the clipboard. Mirrors copySandboxModalText

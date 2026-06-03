@@ -36,6 +36,12 @@
   .btn-danger { background: var(--accent-red-strong); border-color: var(--accent-red-strong); color: var(--text-on-accent); }
   .btn-danger:hover { background: var(--accent-red); }
   .btn-sm { padding: 4px 10px; font-size:13px; }
+  /* Toggled-state styling for buttons that act as a filter or mode
+     switch (e.g. Sandbox "Hide failed" stays "on" between clicks).
+     App-color tint matches the existing topnav and sidebar active
+     patterns so the page reads as one design language. */
+  .btn.btn-active { border-color: var(--app-color); background: color-mix(in srgb, var(--app-color) 12%, var(--bg-muted)); color: var(--text-primary); }
+  .btn.btn-active:hover { background: color-mix(in srgb, var(--app-color) 18%, var(--bg-muted)); border-color: var(--app-color); }
   .btn-icon { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:15px; padding:2px 4px; border-radius:4px; line-height:1; }
   .btn-icon:hover { color:var(--text-primary); background:var(--bg-muted); }
   .collapse-toggle,
