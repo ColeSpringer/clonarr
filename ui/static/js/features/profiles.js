@@ -1096,6 +1096,16 @@ export default {
       // Walk up parents until we find the first ancestor containing >1
       // .cf-info — that's the group container.
       let anchorRight = rect.right;
+      // .cf-sr-name in the In use sub-tab fills the whole grid column
+      // (overflow:hidden + text-overflow:ellipsis means the span box
+      // extends to the column edge regardless of how short the actual
+      // text is). rect.right would then anchor the tooltip to the
+      // column edge, far from where the user is actually looking.
+      // Use the cursor X instead so the tooltip pops next to the
+      // hovered text.
+      if (event.target.classList && event.target.classList.contains('cf-sr-name')) {
+        anchorRight = event.clientX;
+      }
       // Only walk ancestors when the trigger itself IS a .cf-info icon
       // (Sync Preview / classic editor / etc.). The new CF browse hover
       // moved off .cf-info onto .cf-name-text, where the X-anchor logic
