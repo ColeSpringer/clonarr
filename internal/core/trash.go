@@ -34,6 +34,13 @@ type TrashCF struct {
 	IncludeInRename bool              `json:"includeCustomFormatWhenRenaming"`
 	Specifications  []CFSpecification `json:"specifications"`
 	Description     string            `json:"description,omitempty"` // from includes/cf-descriptions/*.md
+	// JSONSlug is the disk filename stem (e.g. "french-vfq" for
+	// french-vfq.json). Populated during CF load. Frontend uses this
+	// when building the TRaSH-Guides JSON link and docs anchor so
+	// language-prefixed CFs (where Name="VFQ" but file="french-vfq")
+	// resolve to the correct URL instead of the slug-from-name guess.
+	// Not present in disk JSON; populated post-parse from filepath.
+	JSONSlug string `json:"jsonSlug,omitempty"`
 }
 
 // CFSpecification is a single matching rule within a Custom Format.
@@ -1314,6 +1321,10 @@ func (ts *TrashStore) parseAppData(app string) (AppData, error) {
 				} else if desc, ok := descMap[key]; ok {
 					cf.Description = desc
 				}
+				// Preserve filename stem so the frontend can build
+				// accurate TRaSH-Guides URLs (json link + docs anchor)
+				// without guessing from cf.Name.
+				cf.JSONSlug = key
 				ad.CustomFormats[cf.TrashID] = cf
 			}
 		}

@@ -142,7 +142,12 @@ export default {
     // the destination page.
     trashCFGuideUrl(cf, appType) {
       if (!cf || cf.isCustom) return '';
-      const slug = this._cfSlug(cf.name);
+      // Prefer backend-provided JSONSlug (the actual disk filename
+      // stem) so language CFs like name="VFQ" / file="french-vfq.json"
+      // resolve to the right anchor. Fall back to the slug-from-name
+      // guess for CFs loaded from older container builds that did not
+      // populate JSONSlug yet.
+      const slug = cf.jsonSlug || this._cfSlug(cf.name);
       const base = appType === 'sonarr'
         ? 'https://trash-guides.info/Sonarr/sonarr-collection-of-custom-formats/'
         : 'https://trash-guides.info/Radarr/Radarr-collection-of-custom-formats/';
@@ -150,10 +155,13 @@ export default {
     },
 
     // Links a CF to the raw JSON file on TRaSH-Guides GitHub. TRaSH
-    // names files by the kebab-case slug, not trash_id.
+    // names files by a kebab-case slug that does NOT always match the
+    // CF's name field - language CFs in particular get a language
+    // prefix (vfq.json -> french-vfq.json). Use the backend-provided
+    // JSONSlug when available; fall back to deriving from name.
     trashCFJsonUrl(cf, appType) {
       if (!cf || cf.isCustom) return '';
-      const slug = this._cfSlug(cf.name);
+      const slug = cf.jsonSlug || this._cfSlug(cf.name);
       if (!slug) return '';
       const app = (appType === 'sonarr' || appType === 'radarr') ? appType : 'radarr';
       return `https://github.com/TRaSH-Guides/Guides/blob/master/docs/json/${app}/cf/${slug}.json`;
@@ -413,6 +421,7 @@ export default {
             trashId: cfEntry.trash_id,
             name: cfEntry.name || cf?.name || cfEntry.trash_id,
             description: cf?.description || '',
+            jsonSlug: cf?.jsonSlug || '',
             score: cf?.trash_scores?.default,
             specifications: cf?.specifications || [],
             category: categoryClass,
