@@ -51,7 +51,14 @@
    ============================================================ */
 
 /* Per-instance card */
-.v3-inst-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 7px; margin-bottom: 12px; overflow: hidden; }
+/* overflow-x: auto so the Actions column stays reachable via horizontal
+   scroll on viewports narrower than the rule grid (~1006px). overflow:
+   hidden would clip Actions invisibly - bug surfaced on phones using
+   browser desktop view and on Unraid sub-window side-by-side layouts.
+   Desktop monitors are wider than the grid so the scrollbar never
+   appears; band-aid until the full mobile pass converts these rows to
+   stacked cards on narrow viewports. */
+.v3-inst-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 7px; margin-bottom: 12px; overflow-x: auto; }
 .v3-inst-header {
   display: flex; align-items: center; gap: 10px; padding: 8px 14px;
   /* Match the app banner's gradient fade — the instance card is the
