@@ -357,10 +357,13 @@
   }
   /* Footer with the TRaSH-guide / JSON links — tiny muted text on its
      own line so it sits under the description without competing for
-     attention. */
+     attention. The bottom margin gives the description breathing room
+     before the next row's separator so adjacent rows do not blur into
+     one wall of text. */
   .cf-grid .cf-cell-pills .cf-cell-desc .cf-desc-links {
     display: block;
-    margin-top: 4px;
+    margin-top: 6px;
+    margin-bottom: 4px;
     font-size: 10px;
     color: var(--text-muted);
     letter-spacing: 0.2px;
@@ -536,14 +539,14 @@
     grid-template-columns: subgrid;
     grid-column: 1 / -1;
     align-items: center;
-    /* Padding zeroed so subgrid cells stay aligned with the parent
-       grid's column lines (subgrid offsets cells by the row's
-       padding). Horizontal padding moves to .cf-grid; vertical
-       spacing comes from min-height + the row border. */
-    padding: 0 14px;
+    /* Vertical padding gives multi-line descriptions breathing room so
+       successive rows are visually separated rather than blurring into
+       a continuous wall of text. Horizontal padding stays at the grid
+       wrapper to keep subgrid cells column-aligned. */
+    padding: 6px 14px;
     min-height: 28px;
     gap: 10px;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border-muted);
   }
   .cf-grid .cf-row-compact:first-child { border-top: 0; }
   .cf-grid .cf-row-compact:hover { background: var(--bg-elevated-hover); }
