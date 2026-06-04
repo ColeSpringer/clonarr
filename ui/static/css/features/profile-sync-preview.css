@@ -1251,3 +1251,19 @@ button.sp-summary-active:focus-visible {
   line-height: 1;
 }
 
+
+/* Stale-dry-run notice — replaces the Apply button on the dry-run
+   preview banner when the editor has been edited since the last
+   successful dry-run. Same vertical footprint as the button so the
+   banner does not jump on transition; muted styling so it reads as
+   informational, not an action. Cursor:help advertises the tooltip
+   that explains how Apply & Sync still works. */
+.sp-dryrun-stale {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: help;
+}

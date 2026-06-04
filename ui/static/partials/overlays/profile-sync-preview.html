@@ -84,11 +84,17 @@
               <a style="font-size:12px;color:var(--accent-blue);cursor:pointer;user-select:none" @click="dryrunDetailsOpen = !dryrunDetailsOpen"
                  x-text="dryrunDetailsOpen ? '▾ Hide details' : '▸ Show details'"></a>
               <div x-show="dryrunDetailsOpen" style="margin-top:4px;font-size:12px;color:var(--text-body);line-height:1.6">
-                <!-- Backend's settingsPreview first (will-change-in-Arr),
-                     then pdOverrides-derived customizations for the
-                     CREATE-mode / matched-state case. Skip the latter
-                     if settingsPreview already covered the same labels
-                     to avoid duplication.
+                <!-- Backend's settingsPreview lists the actual general /
+                     settings diffs that will be pushed to Arr. In
+                     CREATE mode the backend can't diff against an
+                     existing profile, so we fall back to the user's
+                     pdOverrides-derived customizations (modifiedBasics)
+                     to give them a preview of what the new profile
+                     will carry. In UPDATE mode we must NOT do that
+                     fallback - rendering modifiedBasics would surface
+                     every saved override as a ghost pending change
+                     even when Arr already matches the override and
+                     the backend correctly emitted no settings diff.
                      Optional-chaining on syncPlan throughout: the
                      outer x-if guards the visible DOM, but Alpine
                      still evaluates inner x-for/x-text expressions
@@ -97,7 +103,7 @@
                 <template x-for="s in (syncPlan?.settingsPreview || [])" :key="s">
                   <div><span style="color:var(--accent-blue)">General:</span> <span x-text="s"></span></div>
                 </template>
-                <template x-if="(syncPlan?.settingsPreview || []).length === 0">
+                <template x-if="(syncPlan?.settingsPreview || []).length === 0 && syncPlan?.createProfile === true">
                   <div>
                     <template x-for="b in spOverviewDiffs().modifiedBasics" :key="'dry-mb-'+b.label">
                       <div><span style="color:var(--accent-blue)">General:</span> <span x-text="b.label + ': ' + b.original + ' → ' + b.current"></span></div>
@@ -122,10 +128,25 @@
             </div>
           </template>
         </div>
-        <button class="btn btn-primary" @click="applySync()" :disabled="syncing">
-          <span x-show="syncing" class="spinner"></span>
-          <span x-show="!syncing">Apply to <span x-text="syncPlan?.instanceName || profileDetail?.instance?.name"></span></span>
-        </button>
+        <!-- Apply hides itself when the editor has been touched since
+             the dry-run output the user is looking at, so a click here
+             can never push something different from what the banner
+             shows. Apply &amp; Sync stays available because it does not
+             depend on the dry-run output - it pushes whatever the
+             editor currently holds, and the user opted into the sync
+             explicitly by clicking it. -->
+        <template x-if="!syncPlanIsStale()">
+          <button class="btn btn-primary" @click="applySync()" :disabled="syncing">
+            <span x-show="syncing" class="spinner"></span>
+            <span x-show="!syncing">Apply to <span x-text="syncPlan?.instanceName || profileDetail?.instance?.name"></span></span>
+          </button>
+        </template>
+        <template x-if="syncPlanIsStale()">
+          <div class="sp-dryrun-stale"
+               x-tt="'Re-run dry-run to apply the latest changes from this banner. Apply &amp; Sync below still works and will push everything in the editor.'">
+            <span>You've edited since this dry-run. Re-run to apply.</span>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -186,6 +207,7 @@
             <button x-show="profileDetail?.detail?.importedRaw && (profileDetail.detail.importedRaw.source === 'custom' || profileDetail.detail.importedRaw.source === 'import' || !profileDetail.detail.importedRaw.source)" class="btn btn-sm" @click="editCustomProfile(profileDetail.detail.importedRaw.appType || profileDetail.instance?.type, profileDetail.detail.importedRaw)">Edit</button>
             <button class="btn btn-sm btn-blue" @click="openExportModal()">Export</button>
             <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Update all, Update profile, or Auto-sync.'"></button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="syncing" @click="quickDryRun()" x-tt="'Preview the sync changes against the current Arr profile without writing anything. Shorter path than going through Apply &amp; Sync.'">Dry-run</button>
             <button class="btn btn-sm btn-primary" @click="openImportedSyncModal()" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openImportedSyncModalAsNew()" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>
@@ -193,6 +215,7 @@
         <template x-if="!profileDetail?.detail?.imported">
           <span class="sp-action-buttons-native" style="display:flex;gap:8px;align-items:center">
             <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="savingRule" @click="saveRuleOnly()" x-text="savingRule ? 'Applying…' : 'Apply'" x-tt="'Apply changes to the sync rule without syncing to Radarr/Sonarr now. Will apply on next Update all, Update profile, or Auto-sync.'"></button>
+            <button class="btn btn-sm" x-show="profileDetail?._editLockedArrProfileId" :disabled="syncing" @click="quickDryRun()" x-tt="'Preview the sync changes against the current Arr profile without writing anything. Shorter path than going through Apply &amp; Sync.'">Dry-run</button>
             <button class="btn btn-sm btn-primary" @click="openSyncModal(profileDetail.instance, profileDetail.profile)" x-tt="'Apply changes and sync to the existing Arr profile right away.'">Apply &amp; Sync</button>
             <button class="btn btn-sm" style="border-color:var(--accent-blue);color:var(--accent-blue)" @click="openSyncModalAsNew(profileDetail.instance, profileDetail.profile)" x-tt="'Create a new Arr profile with these settings'">Create New</button>
           </span>

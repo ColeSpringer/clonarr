@@ -753,6 +753,7 @@ export default {
     async openProfileDetail(inst, profile, restoreFromRule = false) {
       this.debugLog('UI', `Profile opened: "${profile.name}" on ${inst.name} (restoreFromRule=${restoreFromRule})`);
       this.syncPlan = null;
+      this.syncPlanSnapshot = '';
       this.syncResult = null;
       this.selectedOptionalCFs = {};
       // Reset the CF search filter so a new profile doesn't open looking
@@ -1881,12 +1882,96 @@ export default {
           if (inst && profile) await this.openProfileDetail(inst, profile, true);
         }
         this.syncPlan = data;
+        this.syncPlanSnapshot = this._syncBodyFingerprint();
         this.dryrunDetailsOpen = false;
       } catch (e) {
         console.error('dryRun:', e);
       } finally {
         this.syncing = false;
       }
+    },
+
+    // Inline dry-run for an already-edited rule. Skips the Save & Sync
+    // modal that openSyncModal opens - the user has been editing an
+    // existing rule, so we know the target Arr profile already; we
+    // just need to compute the diff and surface it in the dry-run
+    // banner. Used by the "Dry-run" button next to Apply / Apply &
+    // Sync. Create mode does not offer this shortcut because it still
+    // needs the modal to pick the new profile name + collision check.
+    async quickDryRun() {
+      if (!this.profileDetail || !this.profileDetail.instance) return;
+      const inst = this.profileDetail.instance;
+      const profile = this.profileDetail.profile || {};
+      const arrId = this.profileDetail._editLockedArrProfileId || 0;
+      if (!arrId) {
+        this.showToast('No saved rule yet — Save with Apply first, then dry-run.', 'warning', 6000);
+        return;
+      }
+      // Seed syncForm so buildSyncBody picks up the right instance +
+      // profile reference. Mirrors the subset openSyncModal sets that
+      // buildSyncBody actually reads.
+      this.syncForm = {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        appType: inst.type,
+        profileTrashId: profile.trashId || '',
+        importedProfileId: (this.profileDetail.detail?.importedRaw?.id) || '',
+        profileName: profile.name || '',
+        arrProfileId: String(arrId),
+        newProfileName: profile.name || '',
+        behavior: this.syncForm?.behavior || { addMode: 'add_missing', removeMode: 'remove_custom', resetMode: 'reset_to_zero' },
+      };
+      this.syncMode = 'update';
+      this.resyncTargetArrProfileId = arrId;
+      this.syncing = true;
+      try {
+        const r = await fetch('/api/sync/dry-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.buildSyncBody()),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          this.showToast(data.error || 'Dry-run failed', 'error', 8000);
+          return;
+        }
+        this.syncPlan = data;
+        this.syncPlanSnapshot = this._syncBodyFingerprint();
+        this.dryrunDetailsOpen = true;
+      } catch (e) {
+        console.error('quickDryRun:', e);
+        this.showToast('Dry-run failed: ' + (e?.message || 'network error'), 'error', 8000);
+      } finally {
+        this.syncing = false;
+      }
+    },
+
+    // JSON fingerprint of the dry-run-relevant slice of buildSyncBody().
+    // Drops fields that do not change what the sync plan emits
+    // (description: pure metadata; behavior: included since it does
+    // affect remove/zero choices). Used by syncPlanIsStale() to detect
+    // whether the editor has been edited since the last successful
+    // dry-run so the Apply button in the dry-run banner can hide
+    // itself rather than push something other than what the user is
+    // looking at.
+    _syncBodyFingerprint() {
+      try {
+        const b = this.buildSyncBody();
+        delete b.description; // metadata, no effect on the plan
+        return JSON.stringify(b);
+      } catch (_) {
+        return '';
+      }
+    },
+
+    // True when the last successful dry-run no longer matches the
+    // editor's current state. Used to hide the Apply button on the
+    // dry-run preview banner so the user re-runs dry-run before they
+    // commit something different from what they see.
+    syncPlanIsStale() {
+      if (!this.syncPlan) return false;
+      if (!this.syncPlanSnapshot) return false;
+      return this._syncBodyFingerprint() !== this.syncPlanSnapshot;
     },
 
     async startApply() {
@@ -2043,6 +2128,7 @@ export default {
         this.syncResult = result;
         this.syncResultDetailsOpen = false;
         this.syncPlan = null;
+        this.syncPlanSnapshot = '';
         // Issue #52 — Save & Sync success: re-snapshot baseline so the
         // editor doesn't show as dirty after a clean save.
         this._captureProfileBaseline();
@@ -2242,16 +2328,12 @@ export default {
         }
         await this.loadAutoSyncRules();
         this.showToast('Changes applied. Will sync on next Update all / Update profile / Auto-sync.', 'success', 6000);
-        // Auto-close the editor after a clean Apply — leaves the user
-        // back where they came from (Sync Rules tab / TRaSH Profiles
-        // grid). Pre-fix the user had to manually click Cancel to leave
-        // even though they'd already committed their changes, which
-        // also made "Cancel" read as "discard" right after a save.
-        // Clear the dirty-tracking baseline first so closeProfileEditor's
-        // unsaved-changes guard doesn't fire — Apply IS the save, the
-        // editor state matches what was just persisted.
+        // Apply persists the rule but leaves the editor open so the
+        // user can keep tweaking - mirrors how a normal save-in-place
+        // works elsewhere. Apply & Sync still closes via its own path.
+        // Reset the dirty-tracking baseline so further edits are
+        // measured from this newly-saved state.
         this._clearProfileBaseline();
-        this.closeProfileEditor();
       } catch (e) {
         console.error('saveRuleOnly:', e);
         this.showToast('Apply failed: ' + e.message, 'error', 8000);
@@ -5359,6 +5441,7 @@ export default {
         this._clearProfileBaseline();
         this.profileDetail = null;
         this.syncPlan = null;
+        this.syncPlanSnapshot = '';
         this.syncResult = null;
         this.selectedOptionalCFs = {};
         this.groupExpanded = {};

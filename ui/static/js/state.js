@@ -526,6 +526,14 @@ export default function baseState() {
     arrProfiles: [],
     instanceLanguages: {},  // instanceId → [{id, name}] cache
     syncPlan: null,
+    // JSON fingerprint of the buildSyncBody() shape at the moment of
+    // the last successful dry-run. syncPlanIsStale() compares this
+    // against a freshly-computed fingerprint to decide whether the
+    // editor has been edited since the dry-run output the user is
+    // looking at. When stale, the Apply button on the dry-run banner
+    // hides so the user is forced to re-run dry-run before pushing
+    // something different from what they see.
+    syncPlanSnapshot: '',
     syncResult: null,
     syncResultDetailsOpen: false,
     dryrunDetailsOpen: false,
