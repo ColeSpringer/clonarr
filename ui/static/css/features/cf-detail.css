@@ -497,6 +497,40 @@
   }
   .cf-table-header-pills { grid-column: 2; }
   .cf-table-header-actions { grid-column: 3; text-align: right; }
+  /* Wrapper around each cf-row + its optional conditions-panel.
+     display:contents makes the wrapper layout-transparent so the
+     row and the panel become direct grid items of .cf-grid; without
+     this the wrapper would itself become a grid item and break the
+     row's subgrid alignment. */
+  .cf-row-wrap { display: contents; }
+  /* Inline name click target — advertises that the name expands a
+     conditions panel below. cursor:pointer + a subtle hover colour
+     match the rest of the row's interactive elements. */
+  .cf-name-clickable { cursor: pointer; }
+  .cf-name-clickable:hover { color: var(--app-color); }
+  /* Inline conditions panel revealed by clicking the CF name. Spans
+     all three subgrid columns so the pills can wrap across the full
+     row width. Soft top divider + slightly elevated background so the
+     panel reads as a contextual extension of the row above without
+     looking like a new section. */
+  .cf-row-conditions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 14px 12px 32px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .cf-row-conditions-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  /* Row with the conditions panel visible. Slight tint highlights
+     which row the panel belongs to when scrolling past it. */
+  .cf-row-expanded { background: var(--bg-row-hover, var(--bg-elevated)); }
   .cf-grid .cf-row-compact {
     display: grid;
     grid-template-columns: subgrid;
@@ -651,14 +685,38 @@
 
   /* Custom badge — small, muted-orange pill replaces the inline-style
      "Custom" tag. Same color signal as before, less visual weight. */
-  .cf-custom-badge {
-    font-size: 10px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--accent-orange);
-    padding: 0 5px;
-    border: 1px solid var(--accent-orange);
-    border-radius: 3px;
+  /* Right-anchored cluster for the row's metadata badges (custom +
+     rename). margin-left: auto pushes the whole cluster to the right
+     edge of the name cell so the badges sit at a stable X position
+     across rows regardless of CF name length; margin-right gives the
+     description column breathing room. Badges inside flow with a
+     small gap. */
+  .cf-badge-cluster {
+    margin-left: auto;
+    margin-right: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     flex-shrink: 0;
+  }
+  /* User-CF tag — understated colored text, no border or background,
+     paired with the rename indicator inside the badge cluster. */
+  .cf-custom-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent-orange);
+    flex-shrink: 0;
+  }
+  /* Rename indicator — surfaces includeCustomFormatWhenRenaming.
+     Blue text reads as "behaviour flag" while the missing border /
+     background keeps it understated. Lives inside cf-badge-cluster
+     so positioning + spacing come from the wrapper. */
+  .cf-rename-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent-blue);
+    flex-shrink: 0;
+    cursor: help;
   }
 
   /* Custom-CF edit/delete cluster — only present for user CFs. Sits

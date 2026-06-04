@@ -9,9 +9,13 @@ export default {
     // CF row info-cell mode: 'description' (default — show the cf's
     // description + TRaSH guide / JSON links) or 'conditions' (show
     // the regex / quality / size condition pills). Toggled from the
-    // toolbar; persisted to localStorage. Replaces the hover-tooltip
-    // pattern so users get the same information without hovering.
-    cfBrowseViewMode: localStorage.getItem('clonarr_cfBrowseViewMode') || 'description',
+    // Browse list always renders the CF description inline; clicking
+    // the CF name expands an inline panel below the row with the
+    // matching condition pills. Single-open (opening row B collapses
+    // row A) keeps the list scannable while letting the user inspect
+    // conditions without losing scroll position. Empty string means
+    // no row is currently expanded.
+    cfBrowseExpandedCF: '',
     // Sidebar category-filter selection. Three formats:
     //   'all'                 — every category (today's stacked cards)
     //   'parent:<prefix>'     — filter to every sub-group under a parent
@@ -424,6 +428,10 @@ export default {
             jsonSlug: cf?.jsonSlug || '',
             score: cf?.trash_scores?.default,
             specifications: cf?.specifications || [],
+            // Surfaced to the Browse row as a small "rename" pill so
+            // users can tell which CFs append their name to renamed
+            // files. Backend serialises as includeCustomFormatWhenRenaming.
+            includeInRename: !!cf?.includeCustomFormatWhenRenaming,
             category: categoryClass,
           });
         }
@@ -483,6 +491,8 @@ export default {
             description: ccf.description || '',
             score: ccf.trashScores?.default,
             specifications: ccf.specifications || [],
+            // Surfaced as a "rename" pill on the row when true.
+            includeInRename: !!ccf.includeInRename,
             // Pill-color tinting reads this for the row background
             // hint. User-defined cats don't have an --cat-* token, so
             // pills fall back to neutral; the orange "is-custom" badge
@@ -841,10 +851,12 @@ export default {
     // concatenation to harden against future bugs in those helpers.
     // Toggle the Conditions/Description column for the CF browse view.
     // Persists to localStorage so the choice survives reload.
-    setCFBrowseViewMode(mode) {
-      if (mode !== 'description' && mode !== 'conditions') return;
-      this.cfBrowseViewMode = mode;
-      try { localStorage.setItem('clonarr_cfBrowseViewMode', mode); } catch (_) {}
+    // Toggle the per-row conditions panel on the Browse list. Single-
+    // open: clicking row B closes row A. Re-clicking the open row
+    // collapses it. Empty trash_id = nothing expanded.
+    toggleCFBrowseConditions(trashId) {
+      if (!trashId) return;
+      this.cfBrowseExpandedCF = this.cfBrowseExpandedCF === trashId ? '' : trashId;
     },
 
     // Inline description HTML for the CF browse row's description cell.

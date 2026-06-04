@@ -3,41 +3,46 @@
        in custom-formats.html (single-group categories, single-CF in
        multi-group categories, and multi-CF groups). Behaviour
        differences (custom badge, edit/delete cluster) gate on
-       cf.isCustom, so one template covers every case. -->
-  <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom }]">
+       cf.isCustom, so one template covers every case.
+
+       Layout: the wrapper uses `display: contents` so its children
+       (the row itself + the optional conditions-panel below) act as
+       direct grid items of the parent .cf-grid. That lets the
+       conditions panel span all three columns when expanded without
+       breaking the row's subgrid alignment. -->
+  <div class="cf-row-wrap">
+    <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom, 'cf-row-expanded': cfBrowseExpandedCF === cf.trashId }]">
     <div class="cf-cell-name">
-      <!-- Hover tooltip only in Conditions mode — Description mode
-           shows the same info inline, so the tooltip would just
-           duplicate it (and a help cursor on something that isn't
-           hover-actionable is misleading). -->
-      <span class="cf-name-text"
-            :class="{ 'has-tooltip': cfBrowseViewMode === 'conditions' && (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) }"
+      <!-- Name is clickable: tap toggles the conditions panel below
+           this row. cursor:pointer + the cf-name-clickable class
+           advertise that affordance. Hover tooltip is gone now that
+           description is always inline (would just duplicate info). -->
+      <span class="cf-name-text cf-name-clickable"
             x-text="cf.name" :title="cf.name"
-            @mouseenter="if (cfBrowseViewMode === 'conditions' && (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType))))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
-            @mouseleave="hideCFTooltip()"></span>
-      <span x-show="cf.isCustom" class="cf-custom-badge">Custom</span>
+            @click="toggleCFBrowseConditions(cf.trashId)"></span>
+      <!-- Right-anchored badge cluster. Wrapper pushes itself (and
+           every badge inside) to the right edge of the name cell so
+           the badges sit at a stable X position regardless of CF
+           name length. custom comes first (when present), then
+           rename - kept in the same visual cluster so the user reads
+           them as related metadata. -->
+      <div class="cf-badge-cluster">
+        <span x-show="cf.isCustom" class="cf-custom-badge">custom</span>
+        <!-- Rename indicator. Surfaces the includeCustomFormatWhenRenaming
+             flag so users can scan a category to see which CFs append
+             their name to renamed files. Same data source for both
+             TRaSH catalog CFs (via the API's includeCustomFormatWhenRenaming
+             tag) and user customs (rawCustom.includeInRename). -->
+        <span x-show="cf.includeInRename" class="cf-rename-badge"
+              x-tt="'Custom Format name is appended to renamed files when this CF matches. Toggle on the CF in Radarr/Sonarr or via the CF editor.'">rename</span>
+      </div>
     </div>
     <div class="cf-cell-pills">
-      <!-- Description mode (default): show cf.description rendered as
-           sanitized HTML plus TRaSH guide / JSON links. Replaces the
-           old name-hover tooltip so users get the same info inline
-           without hovering. -->
-      <template x-if="cfBrowseViewMode === 'description'">
-        <div class="cf-cell-desc"
-             x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
-      </template>
-      <!-- Conditions mode: original condition pills. -->
-      <template x-if="cfBrowseViewMode === 'conditions'">
-        <div class="cf-cell-pills-inner">
-          <template x-for="(p, pidx) in cfConditionPills(cf, 99)" :key="pidx + '_' + p.full">
-            <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
-                  x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
-              <span class="cf-pill-label" x-text="p.label"></span>
-              <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
-            </span>
-          </template>
-        </div>
-      </template>
+      <!-- Description always inline. Conditions live in the expand
+           row below (toggled by clicking the CF name) so users can
+           consult both dimensions without context-switching. -->
+      <div class="cf-cell-desc"
+           x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
     </div>
     <div class="cf-cell-actions">
       <button type="button" class="cf-action-btn cf-action-clone"
@@ -56,6 +61,24 @@
           <button type="button" class="cf-action-btn cf-action-delete" @click="deleteCustomCF(cf, activeAppType)" x-tt="'Delete'" aria-label="Delete custom format">&#10005;</button>
         </span>
       </template>
+    </div>
+    </div>
+    <!-- Conditions panel — full-width row below the main row when
+         expanded. Spans all three subgrid columns so the pills can
+         flow without constraint. Single-open per page: clicking
+         another row's name collapses this one. -->
+    <div class="cf-row-conditions"
+         x-show="cfBrowseExpandedCF === cf.trashId"
+         x-cloak>
+      <template x-for="(p, pidx) in cfConditionPills(cf, 999)" :key="pidx + '_' + p.full">
+        <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
+              x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
+          <span class="cf-pill-label" x-text="p.label"></span>
+          <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
+        </span>
+      </template>
+      <span x-show="(cfConditionPills(cf, 999) || []).length === 0"
+            class="cf-row-conditions-empty">No conditions on this Custom Format.</span>
     </div>
   </div>
 {{end}}

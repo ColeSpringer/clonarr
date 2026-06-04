@@ -77,18 +77,11 @@
               <button type="button" class="cf-browse-expand-toggle"
                       @click="toggleAllCFCategories(activeAppType)"
                       x-text="anyCFCategoryExpanded(activeAppType) ? 'Collapse all' : 'Expand all'"></button>
-              <!-- View mode toggle — swaps the per-row "Conditions" cell
-                   between description (with TRaSH guide + JSON links)
-                   and the actual condition pills. Replaces the older
-                   CF-name hover tooltip. Persists per-browser. -->
-              <div class="cf-browse-view-toggle" role="group" aria-label="CF row view mode">
-                <button type="button"
-                        :class="{ active: cfBrowseViewMode === 'description' }"
-                        @click="setCFBrowseViewMode('description')">Description</button>
-                <button type="button"
-                        :class="{ active: cfBrowseViewMode === 'conditions' }"
-                        @click="setCFBrowseViewMode('conditions')">Conditions</button>
-              </div>
+              <!-- Conditions used to live behind a view-mode toggle here;
+                   they are now revealed per-row by clicking the CF
+                   name, so the user can read both description and
+                   conditions for a CF without losing scroll position. -->
+
               <div class="cf-browse-search-wrap">
                 <input type="search" class="cf-browse-search js-page-search"
                        x-model="cfBrowseFilter"
@@ -116,7 +109,7 @@
                  differs from card to card). -->
             <div class="cf-table-header" aria-hidden="true" x-show="filteredCFBrowseGroups(activeAppType).length > 0">
               <div class="cf-table-header-cell cf-table-header-name">Name</div>
-              <div class="cf-table-header-cell cf-table-header-pills" x-text="cfBrowseViewMode === 'description' ? 'Description' : 'Conditions'"></div>
+              <div class="cf-table-header-cell cf-table-header-pills">Description</div>
               <div class="cf-table-header-cell cf-table-header-actions">Actions</div>
             </div>
 
