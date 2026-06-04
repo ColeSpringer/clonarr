@@ -1499,7 +1499,16 @@
           </template>
           <template x-if="spOverviewGroupCFs">
             <div>
-              <template x-for="section in spOverviewEnabledCFs()" :key="'ov-all-'+section.source">
+              <!-- Index-based :key (rather than label-based) because
+                   TRaSH groups can share suffix labels across bracket
+                   prefixes (e.g. "[Optional] Language Profiles" and
+                   "[Required] Language Profiles" both extract the same
+                   "Language Profiles" shortName). Sonarr profiles often
+                   carry such pairs, so a label-only key produced
+                   duplicate-key crashes in Alpine's DOM reconciler and
+                   the whole section pane went blank even though the
+                   count header said "121 total". -->
+              <template x-for="(section, idx) in spOverviewEnabledCFs()" :key="'ov-all-'+idx">
                 <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
                   <div class="sp-ov-cf-section-title">
                     <span x-text="section.source"></span>
@@ -1581,7 +1590,7 @@
           </template>
           <template x-if="spOverviewGroupCFs">
             <div>
-              <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'in-profile' && s.cfs.some(cf => !cf._isRequired))" :key="'ov-opt-'+section.source">
+              <template x-for="(section, idx) in spOverviewEnabledCFs().filter(s => s.kind === 'in-profile' && s.cfs.some(cf => !cf._isRequired))" :key="'ov-opt-'+idx">
                 <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
                   <div class="sp-ov-cf-section-title" x-text="section.source"></div>
                   <div class="sp-ov-cf-list">
@@ -1655,7 +1664,7 @@
           </template>
           <template x-if="spOverviewGroupCFs">
             <div>
-              <template x-for="section in spOverviewEnabledCFs().filter(s => s.kind === 'additional')" :key="'ov-add-'+section.source">
+              <template x-for="(section, idx) in spOverviewEnabledCFs().filter(s => s.kind === 'additional')" :key="'ov-add-'+idx">
                 <div class="sp-ov-cf-section" :class="getCategoryClass(section.sourceCategory)">
                   <div class="sp-ov-cf-section-title" x-text="section.source"></div>
                   <div class="sp-ov-cf-list">
