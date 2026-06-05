@@ -740,6 +740,31 @@ button.v3-status:hover { text-decoration: underline; }
   text-transform: uppercase; letter-spacing: 0.5px;
   background: var(--bg-page);
 }
+/* Sort button — looks identical to the previous static label, just
+   clickable. Inherits the header row's uppercase / muted styling so
+   the table looks the same when no sort is active. */
+.cf-sr-sort-btn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cf-sr-sort-btn:hover { color: var(--text-body); }
+.cf-sr-sort-btn:focus-visible {
+  outline: 2px solid var(--app-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.cf-sr-sort-arrow { font-size: 9px; color: var(--app-color); }
 .cf-sr-name { font-weight: 500; color: var(--text-body); }
 .cf-sr-cat { color: var(--text-muted); font-size: 12px; }
 .cf-sr-uses { color: var(--text-muted); font-size: 12px; cursor: help; }
@@ -945,7 +970,10 @@ button.v3-status:hover { text-decoration: underline; }
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  overflow: hidden;
+  /* overflow: hidden dropped so .cf-sr-header-bar + .cf-sr-filter-bar
+     below can be position:sticky and actually pin to the viewport
+     while the user scrolls the long list inside. Rounded corners on
+     the header bar itself carry the clip we used to rely on. */
 }
 .cf-sr-header-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -959,6 +987,17 @@ button.v3-status:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border-muted);
   border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-muted) 60%, var(--border-muted) 100%) 1;
   flex-wrap: wrap;
+  /* Sticks under the .app-banner (49px) so action row stays
+     reachable while the user scrolls the rules list.
+     --sticky-banner-offset pushes it further down when the first-run
+     no-instance banner is also sticky. Replaces the missing
+     overflow-hidden clip with a matching top-corner radius so the
+     gradient does not bleed past the card edge. */
+  position: sticky;
+  top: calc(49px + var(--sticky-banner-offset, 0px));
+  z-index: 19;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 .cf-sr-counts { display: flex; align-items: baseline; gap: 10px; }
 .cf-sr-counts > span:first-child { color: var(--app-color); }
@@ -967,13 +1006,19 @@ button.v3-status:hover { text-decoration: underline; }
 .cf-sr-header-actions { display: flex; gap: 8px; }
 
 /* Filter row — instance picker + search. Lighter weight than the
-   action row above so the action buttons read as primary. */
+   action row above so the action buttons read as primary.
+   Sticks immediately below the header bar (49 + ~46 = ~95px) so
+   the filter UI travels with the toolbar — switching view / search
+   is reachable no matter how far down the rules list you scroll. */
 .cf-sr-filter-bar {
   display: flex; align-items: center; gap: 14px;
   padding: 10px 18px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-page);
   flex-wrap: wrap;
+  position: sticky;
+  top: calc(95px + var(--sticky-banner-offset, 0px));
+  z-index: 18;
 }
 .cf-sr-filter-group {
   display: flex; align-items: center; gap: 6px;

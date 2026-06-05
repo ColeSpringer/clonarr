@@ -6,15 +6,14 @@ export default {
     // applies across all categories simultaneously; matching categories
     // auto-expand so results are visible without manual clicks.
     cfBrowseFilter: '',
-    // CF row info-cell mode: 'description' (default — show the cf's
-    // description + TRaSH guide / JSON links) or 'conditions' (show
-    // the regex / quality / size condition pills). Toggled from the
-    // Browse list always renders the CF description inline; clicking
-    // the CF name expands an inline panel below the row with the
-    // matching condition pills. Single-open (opening row B collapses
-    // row A) keeps the list scannable while letting the user inspect
-    // conditions without losing scroll position. Empty string means
-    // no row is currently expanded.
+    // Browse list view mode. 'description' (default) shows the CF
+    // description inline + lets the user click a row's name to expand
+    // an inline conditions panel below it. 'conditions' shows the
+    // condition pills inline directly (no per-row expand needed since
+    // they are already in view). Persisted to localStorage.
+    cfBrowseViewMode: localStorage.getItem('clonarr_cfBrowseViewMode') || 'description',
+    // Single-open per-row conditions panel. Only meaningful in
+    // 'description' view mode. Empty = no row expanded.
     cfBrowseExpandedCF: '',
     // Sidebar category-filter selection. Three formats:
     //   'all'                 — every category (today's stacked cards)
@@ -42,7 +41,15 @@ export default {
     // button is clicked, cleared by cancelAddCFToArr / commitAddCFToArr.
     // Pushes the CF entity to a chosen Arr instance without touching
     // any quality profile. Same modal-no-backdrop-close convention.
-    addCFToArrModal: { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', saving: false, error: '' },
+    // Add-CF-to-Arr modal — Custom Formats Browse + Add flow.
+    // target='arr'     : push the CF entity to the chosen instance only;
+    //                    no profile mutation, current "+" behaviour.
+    // target='profile' : add to a sync rule's profile with a score.
+    //                    ruleId picks the rule (filtered to profiles
+    //                    that do not already manage this CF); score is
+    //                    pre-filled from the CF's trash_scores entry
+    //                    for the rule's profile context.
+    addCFToArrModal: { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', target: 'arr', ruleId: '', score: 0, saving: false, error: '' },
     // cfEditorActiveTab + cfEditorDescriptionPreview live in state.js
     // alongside the rest of the cf-editor state — this section only
     // holds CF browse / clone state.
@@ -849,13 +856,23 @@ export default {
     // constructed from helper-emitted strings (no user input), but we
     // still escape via a quick attribute-safe encoder before
     // concatenation to harden against future bugs in those helpers.
-    // Toggle the Conditions/Description column for the CF browse view.
-    // Persists to localStorage so the choice survives reload.
+    // Switch the Browse list between description-only (with per-row
+    // click-to-expand conditions) and always-inline conditions.
+    // Closes any open expand panel when leaving description mode so
+    // we do not strand state the user can no longer see.
+    setCFBrowseViewMode(mode) {
+      if (mode !== 'description' && mode !== 'conditions') return;
+      this.cfBrowseViewMode = mode;
+      if (mode !== 'description') this.cfBrowseExpandedCF = '';
+      try { localStorage.setItem('clonarr_cfBrowseViewMode', mode); } catch (_) {}
+    },
     // Toggle the per-row conditions panel on the Browse list. Single-
     // open: clicking row B closes row A. Re-clicking the open row
-    // collapses it. Empty trash_id = nothing expanded.
+    // collapses it. Empty trash_id = nothing expanded. Only meaningful
+    // in description view mode.
     toggleCFBrowseConditions(trashId) {
       if (!trashId) return;
+      if (this.cfBrowseViewMode !== 'description') return;
       this.cfBrowseExpandedCF = this.cfBrowseExpandedCF === trashId ? '' : trashId;
     },
 
@@ -977,13 +994,110 @@ export default {
         customCFId: cf?.isCustom ? (cf?.id || '') : '',
         appType,
         instanceId: defaultId,
+        target: 'arr',
+        ruleId: '',
+        score: 0,
         saving: false,
         error: '',
       };
+      // Lazy-load cf-sync-rules so the profile-picker filter knows
+      // which profiles already manage this CF (excluded from the
+      // picker so the user does not accidentally double-add). Cheap
+      // no-op if already loaded.
+      if (typeof this.loadCFSyncRules === 'function' && !this.cfSyncRulesLoaded?.[appType]) {
+        this.loadCFSyncRules(appType);
+      }
+      // Same for the rule list — modal opens from Browse, which does
+      // not necessarily trigger loadAutoSyncRules on its own. Without
+      // this the picker would render before autoSyncRules populates
+      // and look empty until Alpine reacted to a later refresh.
+      if (typeof this.loadAutoSyncRules === 'function' && (!this.autoSyncRules || this.autoSyncRules.length === 0)) {
+        this.loadAutoSyncRules();
+      }
     },
 
     cancelAddCFToArr() {
-      this.addCFToArrModal = { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', saving: false, error: '' };
+      this.addCFToArrModal = { open: false, cfName: '', trashId: '', customCFId: '', appType: '', instanceId: '', target: 'arr', ruleId: '', score: 0, saving: false, error: '' };
+    },
+
+    // Identifier the backend's add-cf endpoint expects: raw TRaSH hash
+    // for catalog CFs, "custom:<hex>" for user customs. Mirrors what
+    // the rest of the codebase already stores in SelectedCFs.
+    addCFModalCFID() {
+      const m = this.addCFToArrModal;
+      if (!m) return '';
+      if (m.trashId) return m.trashId;
+      if (m.customCFId) return m.customCFId.startsWith('custom:') ? m.customCFId : 'custom:' + m.customCFId;
+      return '';
+    },
+
+    // Sync rules for the modal's instance whose profile does NOT yet
+    // manage this CF. cfSyncRules data carries per-instance "profiles"
+    // entries that list every (ruleId, arr-profile-name) pair already
+    // pushing the CF; we filter those out so the user never lands on
+    // an already-managed profile (which would 409 on submit).
+    addCFAvailableRules() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.instanceId || !m.appType) return [];
+      const cfId = this.addCFModalCFID();
+      if (!cfId) return [];
+      const rows = this.cfSyncRules?.[m.appType] || [];
+      const row = rows.find(r => r.trashId === cfId);
+      const managedRuleIds = new Set();
+      if (row) {
+        const inst = (row.instances || []).find(i => i.id === m.instanceId);
+        for (const p of (inst?.profiles || [])) {
+          if (p.ruleId) managedRuleIds.add(p.ruleId);
+        }
+      }
+      const out = [];
+      for (const rule of (this.autoSyncRules || [])) {
+        if (rule.instanceId !== m.instanceId) continue;
+        if (rule.orphanedAt) continue;
+        if (managedRuleIds.has(rule.id)) continue;
+        // Resolve a display name: persisted Arr profile name if we have
+        // a sync history entry, else the TRaSH profile name. syncHistory
+        // is an object keyed by instanceId, not a flat array.
+        const hist = (this.syncHistory?.[rule.instanceId] || []).find(h => h.arrProfileId === rule.arrProfileId);
+        const name = hist?.arrProfileName || rule.trashProfileName || `Arr profile #${rule.arrProfileId}`;
+        out.push({ id: rule.id, name, arrProfileId: rule.arrProfileId });
+      }
+      return out.sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    // TRaSH-context default score for this CF + selected rule's
+    // profile. Falls back to "default" context, then 0. Used to
+    // pre-fill the Score input when the user picks a profile so the
+    // common case of "use TRaSH suggested score" is a single click.
+    addCFResolveDefaultScore() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.appType) return 0;
+      const cfId = m.trashId; // customs have no trash_scores map
+      if (!cfId) return 0;
+      const cf = this.cfBrowseData?.[m.appType]?.cfs?.find(c => c.trash_id === cfId);
+      const scores = cf?.trash_scores || {};
+      if (m.ruleId) {
+        const rule = (this.autoSyncRules || []).find(r => r.id === m.ruleId);
+        if (rule) {
+          // Try resolving via the profile's score-set context.
+          const trashId = rule.trashProfileId;
+          const ad = this.cfBrowseData?.[m.appType];
+          // appData.profiles is not on cfBrowseData; fall through to
+          // walking trashProfiles instead.
+          const profile = (this.trashProfiles?.[m.appType] || []).find(p => p.trashId === trashId);
+          const ctx = profile?.trashScoreSet;
+          if (ctx && typeof scores[ctx] === 'number') return scores[ctx];
+        }
+      }
+      if (typeof scores.default === 'number') return scores.default;
+      return 0;
+    },
+
+    // Called when the user switches target=profile or picks a
+    // different rule from the picker so the Score input refreshes to
+    // the new context's TRaSH default.
+    addCFRefreshDefaultScore() {
+      this.addCFToArrModal.score = this.addCFResolveDefaultScore();
     },
 
     // Instances of the modal's app type, sorted alphabetically for a
@@ -1035,6 +1149,101 @@ export default {
           this.addCFToArrModal.error = result.failed[0].error || 'Add failed';
           this.addCFToArrModal.saving = false;
           return;
+        }
+        this.cancelAddCFToArr();
+      } catch (e) {
+        this.addCFToArrModal.error = e?.message || 'Network error';
+        this.addCFToArrModal.saving = false;
+      }
+    },
+
+    // Append the CF to a sync rule's SelectedCFs + ScoreOverrides.
+    // applyAndSync=true also kicks off a sync against the rule's Arr
+    // profile right after the rule mutation lands (same trigger the
+    // editor's Apply & Sync uses), so the user sees the CF on Arr in
+    // one click. Otherwise the rule stays "unsynced" until the next
+    // scheduled sync / manual Update.
+    async commitAddCFToProfile(applyAndSync) {
+      const m = this.addCFToArrModal;
+      if (!m || m.saving) return;
+      if (!m.ruleId) {
+        this.addCFToArrModal.error = 'Pick a profile first.';
+        return;
+      }
+      const cfId = this.addCFModalCFID();
+      if (!cfId) {
+        this.addCFToArrModal.error = 'CF id missing.';
+        return;
+      }
+      const rule = (this.autoSyncRules || []).find(r => r.id === m.ruleId);
+      if (!rule) {
+        this.addCFToArrModal.error = 'Rule no longer exists.';
+        return;
+      }
+      this.addCFToArrModal.saving = true;
+      this.addCFToArrModal.error = '';
+      try {
+        const r = await fetch(`/api/auto-sync/rules/${m.ruleId}/add-cf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cfId, score: Number(m.score) || 0 }),
+        });
+        if (!r.ok) {
+          let msg = 'Failed to add CF to profile';
+          try { const j = await r.json(); if (j?.error) msg = j.error; } catch (_) {}
+          this.addCFToArrModal.error = msg;
+          this.addCFToArrModal.saving = false;
+          return;
+        }
+        await r.json();
+        // Re-fetch rules so subsequent opens of this modal filter the
+        // picker correctly. Cheap enough to do unconditionally.
+        if (typeof this.loadAutoSyncRules === 'function') {
+          await this.loadAutoSyncRules();
+        }
+        const instName = ((this.instances || []).find(i => i.id === m.instanceId)?.name) || 'Arr';
+        // Resolve the Arr-side profile name the same way ruleToHistoryShape
+        // does (profiles.js:2626) so toasts read identically across flows.
+        // Falls back to the picker label, then "Arr profile #N".
+        const arrName = (typeof this.resolveArrProfileName === 'function')
+          ? this.resolveArrProfileName(rule.instanceId, rule.arrProfileId)
+          : null;
+        const pickerLabel = this.addCFAvailableRules().find(r => r.id === m.ruleId)?.name;
+        const profileName = arrName
+          ? `${arrName} (#${rule.arrProfileId})`
+          : (pickerLabel || `Arr profile #${rule.arrProfileId}`);
+        if (applyAndSync) {
+          // Reuse the same dry-run-then-apply path the editor uses by
+          // delegating to quickSync, which knows how to build the body
+          // from a rule + arrProfileId pair. quickSync re-resolves
+          // selectedCFs / scoreOverrides / etc. from the live rule, so
+          // sh only needs the identification fields + the display
+          // strings quickSync uses in toasts.
+          if (typeof this.quickSync === 'function') {
+            const sh = {
+              arrProfileId: rule.arrProfileId,
+              arrProfileName: arrName || null,
+              profileName,
+              profileTrashId: rule.trashProfileId || '',
+              importedProfileId: rule.importedProfileId || '',
+              selectedCFs: (rule.selectedCFs || []).reduce((acc, t) => (acc[t] = true, acc), {}),
+              excludedCFs: (rule.excludedCFs || []).slice(),
+              keepArrCFIDs: rule.keepArrCFIDs || null,
+              scoreOverrides: rule.scoreOverrides || null,
+              qualityOverrides: rule.qualityOverrides || null,
+              qualityStructure: rule.qualityStructure || null,
+              overrides: rule.overrides || null,
+              behavior: rule.behavior || null,
+            };
+            const inst = (this.instances || []).find(i => i.id === m.instanceId);
+            if (inst) await this.quickSync(inst, sh);
+          }
+          this.showToast(`Added "${m.cfName}" to ${profileName} and synced to ${instName}.`, 'success', 4500);
+        } else {
+          this.showToast(`Added "${m.cfName}" to ${profileName}. Will sync on next Update / Auto-sync.`, 'success', 4500);
+        }
+        if (typeof this.loadCFSyncRules === 'function') {
+          this.loadCFSyncRules(m.appType);
         }
         this.cancelAddCFToArr();
       } catch (e) {

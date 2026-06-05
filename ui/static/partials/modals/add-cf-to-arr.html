@@ -1,23 +1,54 @@
 {{define "modals/add-cf-to-arr"}}
   <!-- Add CF to Arr Modal — opened from the +Arr action on each CF row
-       in the Custom Formats library. User picks which Radarr / Sonarr
-       instance to push the CF entity to (profiles are NOT touched). -->
+       in the Custom Formats library. Two target modes:
+       - Arr instance only (default): pushes the CF entity to a chosen
+         instance without touching any profile.
+       - A profile on this instance: appends the CF to a sync rule's
+         SelectedCFs + sets a score override. Next sync pushes. Apply &
+         Sync triggers the sync immediately. The profile picker filters
+         out profiles that already manage this CF; the user goes to the
+         Profile Editor to edit existing entries. -->
   <template x-if="addCFToArrModal && addCFToArrModal.open">
   <div class="modal-overlay" @keydown.escape.window="cancelAddCFToArr()">
-    <div class="modal" style="max-width:480px" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-cf-arr" x-trap.noscroll.inert="addCFToArrModal.open">
-      <h2 id="modal-title-add-cf-arr" class="modal-title">Add to Arr</h2>
+    <div class="modal" style="max-width:520px" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-cf-arr" x-trap.noscroll.inert="addCFToArrModal.open">
+      <h2 id="modal-title-add-cf-arr" class="modal-title">Add to <span x-text="addCFToArrModal.appType === 'sonarr' ? 'Sonarr' : 'Radarr'"></span></h2>
 
       <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
-        Add
-        <strong x-text="addCFToArrModal.cfName"></strong>
-        to a <span x-text="addCFToArrModal.appType === 'sonarr' ? 'Sonarr' : 'Radarr'"></span> instance.
-        The custom format becomes available for matching but is not added to any quality profile.
+        Add <strong x-text="addCFToArrModal.cfName"></strong>.
       </p>
 
-      <div class="form-group" style="margin-bottom:0">
+      <!-- Target radio. arr = current "+" behaviour, profile = new
+           managed flow. Defaults to arr to preserve familiarity. -->
+      <div class="form-group" style="margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Target</label>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:4px 0;cursor:pointer">
+          <input type="radio" name="add-cf-target" value="arr"
+                 x-model="addCFToArrModal.target"
+                 :disabled="addCFToArrModal.saving"
+                 style="margin-top:3px">
+          <span>
+            <span style="font-weight:500">Arr instance only</span>
+            <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">CF becomes available for matching but is not added to any profile.</span>
+          </span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:4px 0;cursor:pointer">
+          <input type="radio" name="add-cf-target" value="profile"
+                 x-model="addCFToArrModal.target"
+                 @change="addCFRefreshDefaultScore()"
+                 :disabled="addCFToArrModal.saving"
+                 style="margin-top:3px">
+          <span>
+            <span style="font-weight:500">A profile on this instance</span>
+            <span style="display:block;font-size:12px;color:var(--text-muted);margin-top:1px">CF is added to a sync rule and will sync to Arr.</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px">
         <label for="add-cf-arr-instance-select">Instance</label>
         <select id="add-cf-arr-instance-select" class="input"
                 x-model="addCFToArrModal.instanceId"
+                @change="addCFToArrModal.ruleId = ''; addCFRefreshDefaultScore()"
                 :disabled="addCFToArrModal.saving">
           <template x-for="inst in addCFToArrInstances()" :key="inst.id">
             <option :value="inst.id" x-text="inst.name"></option>
@@ -29,18 +60,73 @@
         </div>
       </div>
 
+      <!-- Profile picker + score (target='profile' only). Picker
+           filters out profiles that already manage this CF so the
+           user only sees valid targets. -->
+      <template x-if="addCFToArrModal.target === 'profile'">
+        <div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label for="add-cf-arr-rule-select">Profile</label>
+            <select id="add-cf-arr-rule-select" class="input"
+                    x-model="addCFToArrModal.ruleId"
+                    @change="addCFRefreshDefaultScore()"
+                    :disabled="addCFToArrModal.saving">
+              <option value="">— select a profile —</option>
+              <template x-for="r in addCFAvailableRules()" :key="r.id">
+                <option :value="r.id" x-text="r.name + ' (ID #' + r.arrProfileId + ')'"></option>
+              </template>
+            </select>
+            <div x-show="addCFAvailableRules().length === 0 && addCFToArrModal.instanceId"
+                 style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4;font-style:italic">
+              <span x-text="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length === 0 ? 'No sync rules exist for this instance yet.' : 'Every sync rule on this instance already manages this CF.'"></span>
+              <span x-show="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length > 0"> Edit scores from the Profile Editor.</span>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label for="add-cf-arr-score-input">Score</label>
+            <input id="add-cf-arr-score-input" type="number" class="input"
+                   x-model.number="addCFToArrModal.score"
+                   :disabled="addCFToArrModal.saving || !addCFToArrModal.ruleId">
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4">
+              Pre-filled with the TRaSH guide's recommended score for the selected profile. Tweak before adding.
+            </div>
+          </div>
+        </div>
+      </template>
+
       <div x-show="addCFToArrModal.error" x-cloak
            style="margin-top:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent-red) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);border-radius:4px;color:var(--accent-red);font-size:12px"
            x-text="addCFToArrModal.error"></div>
 
-      <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
+      <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button type="button" class="btn btn-sm" @click="cancelAddCFToArr()" :disabled="addCFToArrModal.saving">Cancel</button>
-        <button type="button" class="btn btn-sm"
-                style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
-                @click="commitAddCFToArr()"
-                :disabled="addCFToArrModal.saving || !addCFToArrModal.instanceId"
-                x-text="addCFToArrModal.saving ? 'Adding…' : addCFToArrButtonLabel()"
-                x-tt="'Push the CF entity to the selected Arr instance. Profiles are not modified.'"></button>
+        <!-- Arr-only target: single button preserves the current
+             one-click flow. -->
+        <template x-if="addCFToArrModal.target === 'arr'">
+          <button type="button" class="btn btn-sm"
+                  style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
+                  @click="commitAddCFToArr()"
+                  :disabled="addCFToArrModal.saving || !addCFToArrModal.instanceId"
+                  x-text="addCFToArrModal.saving ? 'Adding…' : addCFToArrButtonLabel()"
+                  x-tt="'Push the CF entity to the selected Arr instance. Profiles are not modified.'"></button>
+        </template>
+        <!-- Profile target: Apply (rule-only, deferred sync) +
+             Apply & Sync (rule + immediate sync). Matches the
+             Profile Editor's two-button pattern. -->
+        <template x-if="addCFToArrModal.target === 'profile'">
+          <span style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm"
+                    @click="commitAddCFToProfile(false)"
+                    :disabled="addCFToArrModal.saving || !addCFToArrModal.ruleId"
+                    x-text="addCFToArrModal.saving ? 'Applying…' : 'Apply'"
+                    x-tt="'Add the CF to the chosen profile. Will be pushed on next Update / Auto-sync.'"></button>
+            <button type="button" class="btn btn-sm btn-primary"
+                    @click="commitAddCFToProfile(true)"
+                    :disabled="addCFToArrModal.saving || !addCFToArrModal.ruleId"
+                    x-text="addCFToArrModal.saving ? 'Syncing…' : 'Apply &amp; Sync'"
+                    x-tt="'Add the CF to the chosen profile and sync to Arr right away.'"></button>
+          </span>
+        </template>
       </div>
     </div>
   </div>

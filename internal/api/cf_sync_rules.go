@@ -119,6 +119,11 @@ func (s *Server) handleCFSyncRules(w http.ResponseWriter, r *http.Request) {
 		// (recognized unmanaged). Truly unrecognized unmanaged rows
 		// have no target spec, so the flags stay false.
 		Managed string `json:"managed"`
+		// AddedAt is the RFC3339 timestamp recorded in PushedCFs when
+		// the user pushed this CF via the "+ Add to Arr" flow. Only
+		// set for added-directly rows; in-profile rows derive their
+		// "Last sync" timestamp from their profile entries instead.
+		AddedAt string `json:"addedAt,omitempty"`
 	}
 	type CFRow struct {
 		TrashID     string           `json:"trashId"`
@@ -487,6 +492,9 @@ func (s *Server) handleCFSyncRules(w http.ResponseWriter, r *http.Request) {
 				Name:    inst.Name,
 				Drift:   false,
 				Managed: managedState,
+			}
+			if managedState == "added-directly" {
+				block.AddedAt = pushed.AddedAt
 			}
 			// Spec-diff drift detection for recognized CFs (either
 			// pushed-with-known-TRaSH-source OR unmanaged-but-matches-

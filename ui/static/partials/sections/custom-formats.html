@@ -77,10 +77,18 @@
               <button type="button" class="cf-browse-expand-toggle"
                       @click="toggleAllCFCategories(activeAppType)"
                       x-text="anyCFCategoryExpanded(activeAppType) ? 'Collapse all' : 'Expand all'"></button>
-              <!-- Conditions used to live behind a view-mode toggle here;
-                   they are now revealed per-row by clicking the CF
-                   name, so the user can read both description and
-                   conditions for a CF without losing scroll position. -->
+              <!-- Row info-cell toggle. Description: cf.description
+                   inline + click name to peek conditions in a per-row
+                   panel. Conditions: condition pills inline directly.
+                   Persists per-browser. -->
+              <div class="cf-browse-view-toggle" role="group" aria-label="CF row view mode">
+                <button type="button"
+                        :class="{ active: cfBrowseViewMode === 'description' }"
+                        @click="setCFBrowseViewMode('description')">Description</button>
+                <button type="button"
+                        :class="{ active: cfBrowseViewMode === 'conditions' }"
+                        @click="setCFBrowseViewMode('conditions')">Conditions</button>
+              </div>
 
               <div class="cf-browse-search-wrap">
                 <input type="search" class="cf-browse-search js-page-search"
@@ -109,7 +117,7 @@
                  differs from card to card). -->
             <div class="cf-table-header" aria-hidden="true" x-show="filteredCFBrowseGroups(activeAppType).length > 0">
               <div class="cf-table-header-cell cf-table-header-name">Name</div>
-              <div class="cf-table-header-cell cf-table-header-pills">Description</div>
+              <div class="cf-table-header-cell cf-table-header-pills" x-text="cfBrowseViewMode === 'description' ? 'Description' : 'Conditions'"></div>
               <div class="cf-table-header-cell cf-table-header-actions">Actions</div>
             </div>
 
@@ -226,7 +234,7 @@
           </div>
           <div x-show="cfSyncRulesViewMode === 'unmanaged'"
                style="font-size:14px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
-            Custom formats that exist on <span x-text="activeAppLabel"></span> but clonarr never pushed. Manual user adds, Recyclarr, and anything else outside clonarr lives here. Drift detection and Update buttons don't apply - clonarr has no target spec to compare against.
+            Custom formats that exist on <span x-text="activeAppLabel"></span> but clonarr never pushed. Anything added outside clonarr lives here. Drift detection and Update buttons don't apply, because clonarr has no saved spec to compare against. Click Manage on a recognized row to adopt the CF; clonarr will start tracking it without changing the Arr-side spec.
           </div>
           <template x-if="!cfSyncRulesLoaded[activeAppType]">
             <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">Loading custom formats...</div>
@@ -433,15 +441,51 @@
                       </span>
                     </div>
                     <div class="cf-sr-table">
+                      <!-- Header row. Each label is a button so the
+                           user can click to sort by that column. Three
+                           states: unset → asc → desc → unset. The
+                           backend already returns rows in category +
+                           name order, so the unset state matches the
+                           initial render. -->
                       <div class="cf-sr-row cf-sr-header">
-                        <span>Name</span>
-                        <span>Category</span>
-                        <span>Used in</span>
-                        <span>Status</span>
-                        <span>Last sync</span>
+                        <button type="button" class="cf-sr-sort-btn"
+                                @click="setCFSRSort('name')"
+                                :aria-sort="cfSyncRulesTableSort.col === 'name' ? (cfSyncRulesTableSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                          Name <span x-show="cfSyncRulesTableSort.col === 'name'"
+                                     x-text="cfSyncRulesTableSort.dir === 'asc' ? '▲' : '▼'"
+                                     class="cf-sr-sort-arrow"></span>
+                        </button>
+                        <button type="button" class="cf-sr-sort-btn"
+                                @click="setCFSRSort('category')"
+                                :aria-sort="cfSyncRulesTableSort.col === 'category' ? (cfSyncRulesTableSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                          Category <span x-show="cfSyncRulesTableSort.col === 'category'"
+                                         x-text="cfSyncRulesTableSort.dir === 'asc' ? '▲' : '▼'"
+                                         class="cf-sr-sort-arrow"></span>
+                        </button>
+                        <button type="button" class="cf-sr-sort-btn"
+                                @click="setCFSRSort('usedIn')"
+                                :aria-sort="cfSyncRulesTableSort.col === 'usedIn' ? (cfSyncRulesTableSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                          Used in <span x-show="cfSyncRulesTableSort.col === 'usedIn'"
+                                        x-text="cfSyncRulesTableSort.dir === 'asc' ? '▲' : '▼'"
+                                        class="cf-sr-sort-arrow"></span>
+                        </button>
+                        <button type="button" class="cf-sr-sort-btn"
+                                @click="setCFSRSort('status')"
+                                :aria-sort="cfSyncRulesTableSort.col === 'status' ? (cfSyncRulesTableSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                          Status <span x-show="cfSyncRulesTableSort.col === 'status'"
+                                       x-text="cfSyncRulesTableSort.dir === 'asc' ? '▲' : '▼'"
+                                       class="cf-sr-sort-arrow"></span>
+                        </button>
+                        <button type="button" class="cf-sr-sort-btn"
+                                @click="setCFSRSort('lastSync')"
+                                :aria-sort="cfSyncRulesTableSort.col === 'lastSync' ? (cfSyncRulesTableSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'">
+                          Last sync <span x-show="cfSyncRulesTableSort.col === 'lastSync'"
+                                          x-text="cfSyncRulesTableSort.dir === 'asc' ? '▲' : '▼'"
+                                          class="cf-sr-sort-arrow"></span>
+                        </button>
                         <span></span>
                       </div>
-                      <template x-for="r in card.rows" :key="'cfsr-row-'+card.id+'-'+r.trashId">
+                      <template x-for="r in cfSRSortedRows(card)" :key="'cfsr-row-'+card.id+'-'+r.trashId">
                         <div>
                           <div class="cf-sr-row cf-sr-row-clickable"
                                :class="{ 'cf-sr-row-expanded': cfSyncRulesExpandedRow === card.id + ':' + r.trashId }"

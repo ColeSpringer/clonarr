@@ -17,6 +17,16 @@
   top: 49px; /* sits flush under the .app-banner (min-height 48px + 1px border) */
   z-index: 51; /* under the .app-banner's 52 so it scrolls naturally beneath */
 }
+/* Down-stream sticky bars (CF Browse toolbar, In use header) read this
+   custom property so they offset themselves below the no-instance
+   banner whenever it is present + visible. The data-noinstance-banner
+   attribute is set on the Alpine root from the same x-show condition
+   that gates the banner element, so we don't have to couple to
+   Alpine's inline-style serialisation. When the banner is absent or
+   hidden, the variable stays 0 and the sticky offsets fall back to
+   just the app-banner. */
+[x-data="clonarr"] { --sticky-banner-offset: 0px; }
+[x-data="clonarr"][data-noinstance-banner="true"] { --sticky-banner-offset: 37px; }
 .app-noinstance-banner-text { flex: 1; min-width: 0; }
 .app-noinstance-banner-text strong { color: var(--app-color); font-weight: 600; }
 .app-noinstance-banner-action {

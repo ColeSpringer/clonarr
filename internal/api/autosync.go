@@ -244,6 +244,186 @@ func (s *Server) handleUpdateAutoSyncRule(w http.ResponseWriter, r *http.Request
 	writeJSON(w, rule)
 }
 
+// handleAddCFToRule appends a Custom Format to an existing sync rule's
+// SelectedCFs opt-in list and sets the per-CF score override. Used by
+// the Custom Formats > Browse "+ Add to Arr → To profile" flow so the
+// user can push a CF into a managed profile without opening the full
+// editor.
+//
+// Body: { cfId: string, score: int }
+//
+//   cfId  - either a TRaSH hash (raw, no prefix) or a custom CF ID
+//           with the "custom:<hex>" prefix the rest of the codebase
+//           uses. The backend treats the field as opaque; appropriate
+//           catalog lookups validate that the CF exists for the rule's
+//           app type before mutation.
+//   score - per-CF score override saved to rule.ScoreOverrides. The
+//           frontend resolves the TRaSH-context default before
+//           opening the modal; this endpoint just persists whatever
+//           the user confirmed.
+//
+// Refuses with 409 if the CF is already in the profile (SelectedCFs
+// or TRaSH defaults). Editing an existing CF's score is the Profile
+// Editor's job; from Custom Formats we only offer adding to profiles
+// that do not yet have it. The frontend filters such profiles out of
+// the picker so this 409 should only fire on a stale-data race.
+// Apply & Sync orchestration lives on the frontend - this endpoint
+// never triggers sync.
+func (s *Server) handleAddCFToRule(w http.ResponseWriter, r *http.Request) {
+	ruleID := r.PathValue("id")
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<14)
+	var req struct {
+		CFID  string `json:"cfId"`
+		Score int    `json:"score"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "Invalid JSON")
+		return
+	}
+	if req.CFID == "" {
+		writeError(w, 400, "cfId is required")
+		return
+	}
+
+	// Look up the rule + its instance + appData so we can validate the
+	// CF exists for this app type and resolve "already in profile"
+	// before mutating anything.
+	cfg := s.Core.Config.Get()
+	var rule *core.AutoSyncRule
+	for i := range cfg.AutoSync.Rules {
+		if cfg.AutoSync.Rules[i].ID == ruleID {
+			rule = &cfg.AutoSync.Rules[i]
+			break
+		}
+	}
+	if rule == nil {
+		writeError(w, 404, "Rule not found")
+		return
+	}
+	if rule.OrphanedAt != "" {
+		writeError(w, 400, "Rule is orphaned. Restore it first.")
+		return
+	}
+	inst, ok := s.Core.Config.GetInstance(rule.InstanceID)
+	if !ok {
+		writeError(w, 404, "Rule's instance no longer exists")
+		return
+	}
+	ad := s.Core.Trash.GetAppData(inst.Type)
+	if ad == nil {
+		writeError(w, 500, "TRaSH data not loaded for "+inst.Type)
+		return
+	}
+
+	// Validate the CF exists for this app type. Trash hashes look up
+	// in the catalog; "custom:" prefix looks up in the user-custom
+	// catalog filtered to the matching app type.
+	if strings.HasPrefix(req.CFID, "custom:") {
+		ccf, ok := s.Core.CustomCFs.Get(req.CFID)
+		if !ok {
+			writeError(w, 404, "Custom CF not found")
+			return
+		}
+		if ccf.AppType != inst.Type {
+			writeError(w, 400, "Custom CF app type does not match rule's instance")
+			return
+		}
+	} else {
+		if _, ok := ad.CustomFormats[req.CFID]; !ok {
+			writeError(w, 404, "TRaSH CF not found in current catalog")
+			return
+		}
+	}
+
+	// Refuse if CF is already managed by the profile (explicit prior
+	// opt-in OR resolved via TRaSH defaults). Editing scores on an
+	// already-managed CF is the Profile Editor's job; this endpoint
+	// only adds CFs to profiles that do not yet have them.
+	for _, tid := range rule.SelectedCFs {
+		if tid == req.CFID {
+			writeError(w, 409, "CF is already in this profile. Edit the score from the Profile Editor.")
+			return
+		}
+	}
+	if rule.ProfileSource != "imported" {
+		for _, p := range ad.Profiles {
+			if p.TrashID == rule.TrashProfileID {
+				defaults := core.ComputeTrashDefaults(p, ad)
+				if defaults[req.CFID] {
+					writeError(w, 409, "CF is part of the profile's TRaSH defaults. Edit the score from the Profile Editor.")
+					return
+				}
+				break
+			}
+		}
+	}
+
+	// Persist via Config.Update so the save mutex is held the same way
+	// other rule mutations grab it. Same per-instance sync mutex as
+	// handleUpdateAutoSyncRule so a concurrent /api/sync/apply cannot
+	// race the append.
+	mu := s.Core.GetSyncMutex(inst.ID)
+	if !mu.TryLock() {
+		writeError(w, 409, "Sync in progress for this instance. Try again in a moment.")
+		return
+	}
+	defer mu.Unlock()
+
+	var updated core.AutoSyncRule
+	if err := s.Core.Config.Update(func(cfg *core.Config) {
+		for i := range cfg.AutoSync.Rules {
+			if cfg.AutoSync.Rules[i].ID != ruleID {
+				continue
+			}
+			r := &cfg.AutoSync.Rules[i]
+			// Drop a matching ExcludedCFs entry so re-adding a CF that
+			// was previously opted-out flips it back on cleanly. Without
+			// this the next sync would honour the opt-out and skip the
+			// CF we just added.
+			r.ExcludedCFs = removeFromList(r.ExcludedCFs, req.CFID)
+			if !stringSliceContains(r.SelectedCFs, req.CFID) {
+				r.SelectedCFs = append(r.SelectedCFs, req.CFID)
+			}
+			if r.ScoreOverrides == nil {
+				r.ScoreOverrides = map[string]int{}
+			}
+			r.ScoreOverrides[req.CFID] = req.Score
+			r.UpdatedAt = time.Now().Format(time.RFC3339)
+			updated = *r
+			return
+		}
+	}); err != nil {
+		log.Printf("handleAddCFToRule: persist failed for rule %s: %v", ruleID, err)
+		writeError(w, 500, "Failed to save rule")
+		return
+	}
+
+	writeJSON(w, map[string]any{"rule": updated})
+}
+
+// removeFromList returns a copy of list with the first occurrence of v
+// dropped. Returns the input unchanged when v is not present.
+func removeFromList(list []string, v string) []string {
+	for i, s := range list {
+		if s == v {
+			return append(list[:i:i], list[i+1:]...)
+		}
+	}
+	return list
+}
+
+// stringSliceContains reports whether v appears in list. Named
+// distinctly from autosync_test.go's `contains` (substring search) to
+// avoid the package-level redeclaration that broke `go vet`.
+func stringSliceContains(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
 // handleDeleteAutoSyncRule deletes an auto-sync rule.
 func (s *Server) handleDeleteAutoSyncRule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

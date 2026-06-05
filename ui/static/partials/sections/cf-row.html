@@ -11,13 +11,15 @@
        conditions panel span all three columns when expanded without
        breaking the row's subgrid alignment. -->
   <div class="cf-row-wrap">
-    <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom, 'cf-row-expanded': cfBrowseExpandedCF === cf.trashId }]">
+    <div class="cf-row cf-row-compact" :class="[getCategoryClass(cf.category), { 'is-custom': cf.isCustom, 'cf-row-expanded': cfBrowseViewMode === 'description' && cfBrowseExpandedCF === cf.trashId }]">
     <div class="cf-cell-name">
-      <!-- Name is clickable: tap toggles the conditions panel below
-           this row. cursor:pointer + the cf-name-clickable class
-           advertise that affordance. Hover tooltip is gone now that
-           description is always inline (would just duplicate info). -->
-      <span class="cf-name-text cf-name-clickable"
+      <!-- In description view the name is clickable: tap toggles the
+           conditions panel below this row. In conditions view the
+           pills are already inline, so the click affordance + class
+           are both dropped to avoid implying interactivity that does
+           nothing. -->
+      <span class="cf-name-text"
+            :class="{ 'cf-name-clickable': cfBrowseViewMode === 'description' }"
             x-text="cf.name" :title="cf.name"
             @click="toggleCFBrowseConditions(cf.trashId)"></span>
       <!-- Right-anchored badge cluster. Wrapper pushes itself (and
@@ -38,11 +40,25 @@
       </div>
     </div>
     <div class="cf-cell-pills">
-      <!-- Description always inline. Conditions live in the expand
-           row below (toggled by clicking the CF name) so users can
-           consult both dimensions without context-switching. -->
-      <div class="cf-cell-desc"
-           x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
+      <!-- Description view: cf.description + TRaSH links inline. Click
+           the CF name to peek conditions in the expand row below. -->
+      <template x-if="cfBrowseViewMode === 'description'">
+        <div class="cf-cell-desc"
+             x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
+      </template>
+      <!-- Conditions view: pills rendered inline directly into the
+           parent .cf-cell-pills flex container so its flex-wrap +
+           gap apply to each pill. No expand row in this mode since
+           the pills are already visible. -->
+      <template x-if="cfBrowseViewMode === 'conditions'">
+        <template x-for="(p, pidx) in cfConditionPills(cf, 99)" :key="pidx + '_' + p.full">
+          <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"
+                x-tt="p.overflow ? cfAllConditionsTooltip(cf) : p.full">
+            <span class="cf-pill-label" x-text="p.label"></span>
+            <span x-show="p.value" class="cf-pill-value" x-text="p.value"></span>
+          </span>
+        </template>
+      </template>
     </div>
     <div class="cf-cell-actions">
       <button type="button" class="cf-action-btn cf-action-clone"
@@ -51,8 +67,8 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
       </button>
       <button type="button" class="cf-action-btn cf-action-add-arr"
-              @click.stop="openAddCFToArr(cf, activeAppType)"
-              x-tt="'Add to a ' + (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr') + ' instance (custom format only, not added to any profile)'" aria-label="Add to Arr">
+              @click.stop="$event.currentTarget.blur(); openAddCFToArr(cf, activeAppType)"
+              x-tt="'Add to ' + (activeAppType === 'sonarr' ? 'Sonarr' : 'Radarr') + ': the instance directly, or a sync rule profile with a score.'" aria-label="Add to Arr">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
       <template x-if="cf.isCustom">
@@ -66,9 +82,10 @@
     <!-- Conditions panel — full-width row below the main row when
          expanded. Spans all three subgrid columns so the pills can
          flow without constraint. Single-open per page: clicking
-         another row's name collapses this one. -->
+         another row's name collapses this one. Description-mode only;
+         in conditions mode the pills already live inline. -->
     <div class="cf-row-conditions"
-         x-show="cfBrowseExpandedCF === cf.trashId"
+         x-show="cfBrowseViewMode === 'description' && cfBrowseExpandedCF === cf.trashId"
          x-cloak>
       <template x-for="(p, pidx) in cfConditionPills(cf, 999)" :key="pidx + '_' + p.full">
         <span :class="'cf-pill ' + (p.overflow ? 'cf-pill-overflow' : (p.negate ? 'cf-pill-negate' : 'cf-pill-include')) + (p.required ? ' cf-pill-required' : '')"

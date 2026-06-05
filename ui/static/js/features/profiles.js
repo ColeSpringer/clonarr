@@ -3739,44 +3739,38 @@ export default {
       return !!row && !!row.trashId && !row.trashId.startsWith('arr:');
     },
 
-    // Pill text + tone + tooltip for a (row, instance) pair. Encodes
-    // the truth table: only in-profile rows ever advertise a real sync
-    // state ("In sync" / "Arr drift" etc); added-directly and unmanaged
-    // get descriptor labels with optional drift / update suffixes.
-    // Recognized unmanaged blocks also run spec-diff + global update
-    // aggregation so they can carry "differs from TRaSH" / "TRaSH
-    // updated" suffixes when those signals fire.
+    // Pill text + tone + tooltip for a (row, instance) pair. Managed
+    // rows (in-profile + added-directly) share the same status
+    // vocabulary so the user reads one consistent column. The origin
+    // ("via the + Add to Arr button" vs. "via a sync rule profile")
+    // lives in the tooltip - the Last sync timestamp and Managed/
+    // Unmanaged view-mode toggle already distinguish how the CF is
+    // tracked. Unmanaged rows that match a known TRaSH/custom CF
+    // (recognized) still get the same vocabulary so cards look
+    // uniform, but the tooltip explains clonarr will not push.
     cfRowPillData(row, block) {
       if (!block) return null;
       const drift = !!block.drift;
       const upd = !!block.updateAvailable;
       const managed = block.managed || 'in-profile';
-      if (managed === 'in-profile') {
-        if (drift && upd) return { text: 'Update + drift', tone: 'both' };
-        if (drift)        return { text: 'Arr drift',      tone: 'drift' };
-        if (upd)          return { text: 'Update',         tone: 'upd' };
-        return                       { text: 'In sync',        tone: 'ok' };
-      }
-      if (managed === 'added-directly') {
-        const base = 'You pushed this CF via the + Add to Arr button so clonarr tracks it. ';
+      if (managed === 'in-profile' || managed === 'added-directly') {
+        const originTip = managed === 'added-directly'
+          ? 'Pushed via the + Add to Arr button on the Custom Formats library. '
+          : '';
         if (drift && upd) {
-          return { text: 'Added directly · update + drift',
-                   tone: 'both',
-                   tip: base + 'Arr-side spec differs from the TRaSH guide AND new upstream changes are pending.' };
+          return { text: 'Update + drift', tone: 'both',
+                   tip: originTip + 'Arr-side spec differs from the saved spec AND TRaSH has published upstream changes.' };
         }
         if (drift) {
-          return { text: 'Added directly · drift',
-                   tone: 'drift',
-                   tip: base + 'Arr-side spec differs from the TRaSH guide. Click Apply to push the saved spec back, or leave it if the change is intentional.' };
+          return { text: 'Arr drift', tone: 'drift',
+                   tip: originTip + 'Arr-side spec differs from the saved spec. Apply pushes the saved spec back; leave it if the change is intentional.' };
         }
         if (upd) {
-          return { text: 'Added directly · updates available',
-                   tone: 'upd',
-                   tip: base + 'TRaSH has published changes to this CF upstream. Click Update to pull them and push to Arr.' };
+          return { text: 'Update', tone: 'upd',
+                   tip: originTip + 'TRaSH has published changes upstream. Update pulls them and pushes to Arr.' };
         }
-        return { text: 'Added directly',
-                 tone: 'neutral',
-                 tip: base + 'In sync with the saved spec.' };
+        return { text: 'In sync', tone: 'ok',
+                 tip: originTip + 'Arr-side spec matches the saved spec.' };
       }
       // managed === 'unmanaged'
       // Reuse the in-profile pill vocabulary (In sync / Update / Arr
@@ -4023,6 +4017,77 @@ export default {
       return out;
     },
 
+    // Click handler for the In use table's column headers. First click
+    // sorts ascending, second click flips to descending, third click
+    // returns to the backend's default (category + name) by clearing
+    // the column. Mirrors syncRulesSort's three-state behaviour.
+    setCFSRSort(col) {
+      const s = this.cfSyncRulesTableSort;
+      if (s.col === col) {
+        if (s.dir === 'asc') s.dir = 'desc';
+        else this.cfSyncRulesTableSort = { col: '', dir: 'asc' };
+      } else {
+        this.cfSyncRulesTableSort = { col, dir: 'asc' };
+      }
+    },
+
+    // Returns card.rows sorted by the active column. Empty col falls
+    // back to the backend's category + name ordering (already applied
+    // upstream, so just return the slice). "Used in" sorts by profile
+    // count; status reuses the urgency ordering Sync Rules uses
+    // (failed > drift > update > ok); last sync delegates to the
+    // shared cfSRInstanceLastSync helper that already falls back to
+    // addedAt for added-directly rows.
+    cfSRSortedRows(card) {
+      const rows = (card && card.rows) || [];
+      const col = this.cfSyncRulesTableSort.col;
+      if (!col) return rows;
+      const dir = this.cfSyncRulesTableSort.dir === 'desc' ? -1 : 1;
+      const statusOrder = { both: 0, drift: 1, upd: 2, ok: 3, neutral: 4 };
+      const cmp = (a, b) => {
+        switch (col) {
+          case 'name':
+            return dir * (a.name || '').localeCompare(b.name || '');
+          case 'category': {
+            const ac = (a.category || '') + ' ' + (a.subcategory || '');
+            const bc = (b.category || '') + ' ' + (b.subcategory || '');
+            const byCat = ac.localeCompare(bc);
+            return dir * (byCat !== 0 ? byCat : (a.name || '').localeCompare(b.name || ''));
+          }
+          case 'usedIn': {
+            const an = (a.instance?.profiles || []).length;
+            const bn = (b.instance?.profiles || []).length;
+            // Numeric primary key; name tiebreak stays alphabetical
+            // (not direction-flipped) so two rows with equal use
+            // counts always sit in stable name order across asc/desc
+            // flips of the primary column.
+            return (dir * (an - bn)) || (a.name || '').localeCompare(b.name || '');
+          }
+          case 'status': {
+            const ap = this.cfRowPillData(a, a.instance);
+            const bp = this.cfRowPillData(b, b.instance);
+            const av = statusOrder[ap?.tone] ?? 99;
+            const bv = statusOrder[bp?.tone] ?? 99;
+            // Same tiebreak rule as usedIn: alphabetical regardless of
+            // direction so the secondary order is stable.
+            return (dir * (av - bv)) || (a.name || '').localeCompare(b.name || '');
+          }
+          case 'lastSync': {
+            const at = this.cfSRInstanceLastSync(a.instance);
+            const bt = this.cfSRInstanceLastSync(b.instance);
+            // Empty timestamps sort last regardless of direction so
+            // "never" rows do not flood the top in descending order.
+            if (!at && !bt) return (a.name || '').localeCompare(b.name || '');
+            if (!at) return 1;
+            if (!bt) return -1;
+            return dir * (new Date(at).getTime() - new Date(bt).getTime());
+          }
+          default: return 0;
+        }
+      };
+      return rows.slice().sort(cmp);
+    },
+
     // Drift count for a per-instance card. Walks the rows in the
     // card and counts CFs that are drifted on this instance.
     cfSRInstanceCardDriftCount(card) {
@@ -4158,13 +4223,18 @@ export default {
     // into this instance. Used for the collapsed row's "Last sync"
     // column — gives the user a single representative value when a
     // CF is in multiple profiles on the same instance. ISO strings
-    // compare lexicographically so a plain string max works.
+    // compare lexicographically so a plain string max works. For
+    // added-directly rows (no profile entries because no rule pushes
+    // them) we fall back to the addedAt timestamp PushedCFs recorded
+    // when the user clicked + Add to Arr, so the column reads the
+    // actual push date instead of a misleading "never".
     cfSRInstanceLastSync(instance) {
-      if (!instance || !instance.profiles) return '';
+      if (!instance) return '';
       let latest = '';
-      for (const p of instance.profiles) {
+      for (const p of (instance.profiles || [])) {
         if (p.lastSync && p.lastSync > latest) latest = p.lastSync;
       }
+      if (!latest && instance.addedAt) return instance.addedAt;
       return latest;
     },
 

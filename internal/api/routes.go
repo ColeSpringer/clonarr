@@ -115,6 +115,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auto-sync/rules", s.handleCreateAutoSyncRule)
 	mux.HandleFunc("PUT /api/auto-sync/rules/{id}", s.handleUpdateAutoSyncRule)
 	mux.HandleFunc("DELETE /api/auto-sync/rules/{id}", s.handleDeleteAutoSyncRule)
+	mux.HandleFunc("POST /api/auto-sync/rules/{id}/add-cf", s.handleAddCFToRule)
 	mux.HandleFunc("POST /api/auto-sync/rules/{id}/restore", s.handleRestoreAutoSyncRule)
 
 	// External widget summary (homepage, glance, etc.) — stable contract

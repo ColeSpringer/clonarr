@@ -283,6 +283,16 @@
     border-image: linear-gradient(90deg, var(--app-color) 0%, var(--border-subtle) 60%, var(--border-subtle) 100%) 1;
     border-radius: 6px;
     flex-wrap: wrap;
+    /* Sticks just under the .app-banner (48px + 1px border = 49px) so
+       Description/Conditions toggle + search stay reachable while
+       scrolling the long CF list. --sticky-banner-offset pushes it
+       further down when the first-run no-instance banner is also
+       sticky (defined in app-banner.css). z-index sits above the
+       .cf-row-conditions panels but below the banners (52 / 51) and
+       modal overlays. */
+    position: sticky;
+    top: calc(49px + var(--sticky-banner-offset, 0px));
+    z-index: 20;
   }
   .cf-browse-app-tag {
     color: var(--app-color);
@@ -485,9 +495,6 @@
     margin-bottom: 6px;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--bg-elevated);
-    position: sticky;
-    top: 0;
-    z-index: 10;
     border-radius: 6px 6px 0 0;
   }
   .cf-table-header-cell {

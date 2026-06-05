@@ -49,7 +49,7 @@
      in main.js (CSP-tightening compatibility — no inline onclick). -->
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'" :data-content-align="contentAlign" :data-nav-style="navStyle">
+<div x-data="clonarr" x-init="init()" x-cloak :data-app="activeAppType || 'radarr'" :data-content-align="contentAlign" :data-nav-style="navStyle" :data-noinstance-banner="navStyle === 'sidebar' && !isGlobalSection() && instances && !instances.some(i => i.type === activeAppType) ? 'true' : 'false'">
 
   {{template "layout/sidebar" .}}
   {{template "layout/top-nav" .}}

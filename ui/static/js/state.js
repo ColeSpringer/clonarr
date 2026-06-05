@@ -180,6 +180,12 @@ export default function baseState() {
     compareInstanceIds: {},  // per app-type: { radarr: 'id', sonarr: 'id' }
     syncRulesExpanded: {},  // per app-type: { radarr: true, sonarr: false }
     syncRulesSort: { col: '', dir: 'asc' },
+    // Custom Formats > In use sub-tab column sort. Applies across all
+    // per-instance cards on the page so the user sorts one logical
+    // table even though it's rendered as cards. Default '' = the
+    // backend's category+name order. Columns: name, category, usedIn,
+    // status, lastSync.
+    cfSyncRulesTableSort: { col: '', dir: 'asc' },
     historyExpanded: '',      // 'instanceId:arrProfileId' of expanded row in History tab
     historySort: { col: '', dir: 'asc' },
     historyEntries: [],       // loaded change history for the expanded profile

@@ -90,6 +90,10 @@ export default {
       this.profileDetail = null;
       this.syncPlan = null;
       this.syncResult = null;
+      // Clear the Browse list's per-row expanded conditions panel.
+      // The state is keyed by trashId; if the same id existed on the
+      // other app type the panel would render on the wrong CF.
+      this.cfBrowseExpandedCF = '';
       // Auto-select maintenance instance for this type
       const typeInsts = this.instances.filter(i => i.type === appType);
       if (typeInsts.length === 1) {
