@@ -27,7 +27,13 @@
           Created: <span x-text="syncResult.cfsCreated || 0"></span> CFs,
           Updated: <span x-text="syncResult.cfsUpdated || 0"></span> CFs,
           Scores: <span x-text="syncResult.scoresUpdated || 0"></span> updated,
-          Settings: <span x-text="Math.max((syncResult?.settingsDetails || []).length, spOverviewDiffs().modifiedBasics.length)"></span> changed,
+          <!-- Settings count is the actual settingsDetails the backend
+               pushed, not the customizations list. Earlier Math.max
+               with modifiedBasics inflated the count to include every
+               saved override even when the Apply correctly no-op'd
+               (Arr already matched), making the post-Apply summary
+               disagree with the actual change list below it. -->
+          Settings: <span x-text="(syncResult?.settingsDetails || []).length"></span> changed,
           Quality: <span x-text="(syncResult?.qualityDetails || []).length"></span> changes
           <template x-if="syncResult?.errors?.length">
             <span> - <span x-text="syncResult.errors.length"></span> errors</span>
@@ -70,13 +76,14 @@
           <template x-if="syncPlan.summary.scoresToZero > 0">
             <span style="color:var(--accent-orange)"> - <span x-text="syncPlan.summary.scoresToZero"></span> extra scores zeroed</span>
           </template>
-          <!-- Basics customizations from pdOverrides. Always shown when
-               present - backend's settingsPreview only populates in
-               UPDATE-mode against a divergent Arr profile, so in CREATE
-               mode (fresh profile) or when Arr already matches the
-               overrides, this is the only place the user sees what
-               customized basics will be applied. -->
-          <template x-if="spOverviewDiffs().modifiedBasics.length > 0">
+          <!-- Customized-basics count is only meaningful in CREATE
+               mode where the new profile will receive all of them. In
+               UPDATE mode the dry-run banner needs to reflect the
+               actual plan diff (whatever the user is about to push) -
+               counting every saved override as if it were pending
+               would lie when Arr already matches the overrides and
+               the backend correctly emitted nothing. -->
+          <template x-if="syncPlan?.createProfile === true && spOverviewDiffs().modifiedBasics.length > 0">
             <span> - <span x-text="spOverviewDiffs().modifiedBasics.length"></span> customized settings</span>
           </template>
           <template x-if="(syncPlan?.settingsPreview || []).length > 0 || (syncPlan?.qualityPreview || []).length > 0 || (syncPlan?.cfActions || []).some(a => a.action !== 'unchanged') || (syncPlan?.scoreActions || []).some(a => a.action !== 'unchanged')">
