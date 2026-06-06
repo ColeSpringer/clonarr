@@ -2,132 +2,129 @@
 
 ## v3.0.0
 
-Ground-up UI redesign plus several new features built on top of it. Your
-data and configuration carry over from v2.5.9 with no manual migration.
+Ground-up UI redesign and a stack of new features on top. Config and data carry over from v2.5.9 with no manual migration.
 
 ### Highlights
 
-- New look: persistent sidebar navigation, app-themed banner above the main pane, dark and light themes.
-- Custom Formats tab completely rebuilt for browsing and side-by-side comparison.
-- Three new auto-sync modes: Apply automatically, Just notify me, or Wait before applying with a delay you choose.
-- Arr drift detection: get notified when someone edits a synced profile directly in Radarr or Sonarr.
-- Add your own notes per sync rule to document why you set each profile up the way you did.
-- One-click push of any CF to a Radarr or Sonarr instance, without touching profiles.
-- Scoring Sandbox state now persists to disk so it survives browser clears and syncs across devices.
+- Persistent sidebar nav (or top bar if you prefer), app-themed banner, dark and light themes.
+- Custom Formats tab rebuilt with hierarchical Browse, condition pills, and a new In use sub-tab with per-CF drift detection.
+- Three auto-sync modes: Apply automatically, Just notify me, or Wait before applying with a delay you choose.
+- Arr drift detection: get notified when something edits a synced profile directly in Radarr or Sonarr.
+- Notes per sync rule, sync-rule clone across instances, per-instance auto-sync pause.
+- One-click push of any CF to an Arr instance, without touching profiles.
+- Scoring Sandbox state persists to disk and survives browser clears.
 
 ### New
 
 #### The new look
 
-**Persistent sidebar navigation with three groups.** Library (Profiles, Custom Formats, Media Management), Tools (Maintenance, Advanced), and App (Notifications, Display, Security, Instances). Replaces the old wide top-tab strip so the page can use horizontal space for actual content instead of nav. Switch to a top bar in Settings then Display if you prefer that layout.
+**Persistent sidebar nav with three groups.** Library (Profiles, Custom Formats, Media Management), Tools (Maintenance, Advanced), and App (Notifications, Display, Security, Instances). Switch to a top bar under Settings then Display if you prefer.
 
-**App-themed banner above the main pane.** A strip that always tells you which app (Radarr or Sonarr) and which page you are on, themed in the app's colour. So you cannot get lost between switching apps, and the page repaints to make the active context obvious. Settings and About use a Clonarr-green theme.
+**App-themed banner above the main pane.** Always tells you which app (Radarr / Sonarr / Clonarr global) and which page you are on, themed in the app's colour, so you cannot get lost when switching context.
 
-**Dark and light themes.** Pick one explicitly under Display, or let it follow your OS setting. Both are tuned for AAA contrast on text and chips.
+**Dark and light themes.** Pick one under Display, or follow your OS. Both tuned for AAA contrast.
 
-**Browser back and forward works throughout.** Every section and sub-tab has its own URL. So bookmarks point at specific views and the browser history works as expected, instead of every back-button press dropping you out of the app.
+**Browser back and forward.** Every section and sub-tab has its own URL, so bookmarks land on specific views and history works as expected.
 
 #### Custom Formats
 
-**Hierarchical Browse with category sidebar.** TRaSH CFs are grouped under their cf-group categories (Standard, SQP, Audio, Streaming, Unwanted, etc.). Your own custom CFs sit under a Custom parent. Click a category to filter, or expand a parent and pick a sub-group. Replaces the previous flat scroll list, which got unwieldy as the CF count grew past ~150.
+**Hierarchical Browse with category sidebar.** TRaSH CFs grouped under their cf-group categories; your own customs sit under a Custom parent. Replaces the flat scroll list that got unwieldy past ~150 CFs.
 
-**See what each Custom Format actually checks for, without opening it.** Every CF row now shows its match conditions as inline pills next to the name. A Custom Format in Radarr or Sonarr is a rule that tags releases when their title, release group, codec, source flag, etc. match certain patterns. Green pills are things the release must include for the CF to apply, red pills are things it must not include. Lets you scan a category and compare CFs side-by-side without expanding anything.
+**Inline condition pills on every row.** See what a CF actually matches without opening it. Green pills are required matches, red pills are exclusions.
 
-**Hover any CF name for the description.** TRaSH-provided description (with the underline markdown rendered) plus links to the TRaSH-Guides page and the raw JSON on GitHub. Same content as before, just always one hover away instead of behind a click.
+**CF descriptions and TRaSH-Guides links on hover.** TRaSH-provided text rendered with markdown, plus links to the guide page and the JSON on GitHub.
 
-**Clone any CF as a starting point for your own.** A Clone button next to every row makes a copy ready to tweak. Includes a name-collision check so the clone does not shadow an existing CF.
+**Clone any CF as a starting point for your own.** Clone button next to every row makes a copy ready to tweak. Name-collision check prevents shadowing an existing CF.
 
-**Rewritten CF editor.** A wide modal with sidebar tabs (General, Conditions, plus TRaSH dev fields behind a toggle). Each match condition is its own card with labelled IDENTITY / VALUE / FLAGS / ACTIONS sections so you can see what the condition is doing without parsing a row of inputs. The description editor now has a markdown toolbar with live preview.
+**Rewritten CF editor.** Wide modal with sidebar tabs (General, Conditions, TRaSH dev fields behind a toggle). Each condition is its own card with labelled fields, and the description editor has a markdown toolbar with live preview.
 
-**Default Score on custom CFs.** Set the score the CF should apply by default when added to a profile. Previously new customs always shipped at score 0 and you had to remember to set the score every time you added them to a rule.
+**Default Score on custom CFs.** Set the score the CF should apply by default when added to a profile, instead of starting at 0 every time.
 
-**Organise custom CFs under your own categories.** Pick Custom (the default), one of the preset buckets, or type a new category name. Your categories nest under a single Custom parent in the sidebar so they never mix in with TRaSH groups.
+**Organise custom CFs under your own categories.** Pick Custom, one of the presets, or type a new category. Your categories nest under a single Custom parent in the sidebar.
 
-**Push any CF to a Radarr or Sonarr instance with one click.** Every Browse row now has a "+" button that adds the CF to a chosen instance without touching any profile. Use it to stage CFs before the next profile sync, or to make a CF available for ad-hoc testing in the Scoring Sandbox.
+**Push a CF to an Arr instance with one click.** "+" button on every Browse row adds the CF to the chosen instance without touching profiles. Use it to stage CFs before the next sync or for ad-hoc Scoring Sandbox testing.
 
-**New "In use" sub-tab.** A per-CF status view for every Custom Format that clonarr touches on Radarr or Sonarr. Browse shows the whole CF catalog; In use shows which CFs you actually have deployed and how each is doing. Toggle between Managed (clonarr owns these via a sync rule profile or the "+ Add" button) and Unmanaged (everything else on Arr, whether you made it directly in Radarr or another tool put it there).
+**New "In use" sub-tab.** Per-CF status view for every Custom Format clonarr touches on Radarr or Sonarr. Toggle between Managed (clonarr owns these via a sync rule or the "+ Add" button) and Unmanaged (everything else). Each row reports its state: In sync, Update available, Arr drift, or both. Drift detection covers Managed CFs and any Unmanaged CF whose name matches the TRaSH catalog or your own customs.
 
-**Per-CF drift and update detection.** Each In use row reports its real state: In sync, Update available (TRaSH has new commits affecting the CF), Arr drift (someone edited the spec directly on Arr), or both. Drift detection runs on every Managed CF and on Unmanaged CFs that clonarr recognises by name from the TRaSH catalog or your own customs.
-
-**Adopt or import unmanaged CFs into clonarr management.** Unmanaged CFs whose name matches the TRaSH catalog or one of your customs get a Manage button - one click records ownership in clonarr without modifying the CF on Arr, and the CF moves to the Managed bucket. Truly unknown CFs (created directly in Radarr without being imported) get an Import button that reads the spec into your custom catalog under the Custom group. clonarr never pushes or updates an unmanaged CF without an explicit user click - drift detection on these is purely informational until you adopt them.
+**Adopt or import unmanaged CFs.** Recognised unmanaged rows get a Manage button (records ownership without modifying Arr); unrecognised ones get an Import button (reads the spec into your custom catalog). clonarr never writes to an unmanaged CF without an explicit click.
 
 #### Sync Rules
 
-**Per-instance cards instead of a flat table.** Each Radarr or Sonarr instance gets its own card with a colour gradient header in the app colour. So you can see at a glance which rules belong to which instance, even when you have several of the same type (e.g. Radarr-main and Radarr-4K).
+**Per-instance cards instead of a flat table.** Each Radarr or Sonarr instance gets its own card with a colour-themed header, so you can tell rules apart even when you have several of the same type (Radarr-main vs Radarr-4K).
 
-**Status pills with one-click resolution.** Each rule shows In sync, Updates available, Arr drift, or Failed. Click an actionable pill to open the Quick action modal that lists the affected items plus a one-click resolution (Re-sync, Apply updates, Sync now). Replaces having to open the editor + figure out what action to take manually.
+**Status pills with one-click resolution.** Each rule shows In sync, Updates available, Arr drift, or Failed. Click an actionable pill to open a Quick action modal that lists the affected items plus a one-click fix (Re-sync, Apply updates, Sync now).
 
-**Add your own notes per sync rule.** Each profile now has a Notes field where you can write down why you set it up a certain way, what customisations you made, links to discussions or PRs you based it on, or anything else worth remembering next time you come back to it months later. Notes show up as a hover-tooltip beside the Arr profile name on the Sync Rules table so you do not have to open the editor to read them. Markdown supported.
+**Notes per sync rule.** Markdown field on each profile for documenting why you set things up a certain way or linking to discussions. Shows up as a hover-tooltip beside the Arr profile name on the Sync Rules table.
 
-**Clone a sync rule into a different instance.** Click Clone, pick the destination instance from the picker, and clonarr copies the synced TRaSH profile plus all your customisations into a new rule on that instance. Useful for going from Radarr-main to Radarr-4K (or any other same-type instance) without redoing customisations.
+**Clone a sync rule into a different instance.** Pick the destination from the picker; clonarr copies the synced TRaSH profile plus all your customisations into a new rule. Useful for Radarr-main to Radarr-4K without redoing the work.
 
-**Per-instance auto-sync pause.** Pause auto-sync for one instance without affecting others. Previously this was a global flag, so pausing one Radarr also paused the other.
+**Per-instance auto-sync pause.** Previously a global flag; now you can pause one instance without affecting the others.
 
-**Sync history shows more detail per event.** Each history row now shows a trigger chip (Manual, TRaSH update, Arr drift, Restore, Rollback, Delayed apply) so you can tell what kicked off each sync. Commit pills link to the upstream TRaSH commits that drove each CF change so you can read what TRaSH actually changed. Per-condition diffs surface exactly what was added or removed on each CF.
+**Sync history shows more detail per event.** Each row carries a trigger chip (Manual, TRaSH update, Arr drift, Restore, Rollback, Delayed apply). Commit pills link to the upstream TRaSH commits driving each CF change, and per-condition diffs show exactly what was added or removed.
 
 #### Compare
 
-**Reorganised into a sub-nav.** Overview, Optional, General, Qualities, All Diffs, Wrong score, Additional CFs, Missing, and All Active. Each pane has a one-line plain-language description at the top so you can pick the right view without clicking through every tab to figure out what it shows.
+**Reorganised into a sub-nav.** Overview, Optional, General, Qualities, All Diffs, Wrong score, Additional CFs, Missing, All Active. Each pane has a one-line plain-language description so you can pick the right view without clicking through every tab.
 
-**Exclusive groups show only the variant you picked.** Golden Rule, Miscellaneous Standard, and SQP groups now display only the HD or UHD variant that actually applies, not both. Previously the Compare view would suggest you were missing the variant you had explicitly opted out of.
+**Exclusive groups only show the variant you picked.** Golden Rule, Miscellaneous Standard, and SQP groups now display only the HD or UHD variant that actually applies. Previously Compare would suggest you were missing the variant you had explicitly opted out of.
 
 #### Auto-sync
 
-**Three modes for what should happen when TRaSH updates land.** Pick the one that matches how hands-on you want clonarr to be:
+**Three modes for what should happen when TRaSH updates land.** Pick how hands-on you want clonarr to be:
 
-- **Apply automatically** (the default) syncs the change to Arr right away for rules with auto-sync turned on. Same as how Profile Sync worked before.
-- **Just notify me. I'll apply manually** sends a notification (Discord, NTFY, or Apprise) and shows an "updates available" badge in the sidebar so you can review the diff first and apply when you are ready. Good if you want clonarr to watch for changes but not write to Arr automatically.
-- **Wait before applying. Apply on a separate schedule** detects changes now and applies them automatically after a delay you choose (minutes, hours, or days). The delay is per profile, counted from when that profile's own change was first detected, and survives container restarts. Useful for a controlled apply window no matter when TRaSH publishes; e.g. "wait 7 days so TRaSH gets time to spot any regression first".
+- **Apply automatically** (default) syncs the change to Arr right away.
+- **Just notify me** sends a notification (Discord, NTFY, Apprise) and shows an "updates available" badge so you can review and apply when ready.
+- **Wait before applying** detects now, applies after a per-profile delay you choose (minutes, hours, days). Useful for a controlled apply window, e.g. "wait 7 days so TRaSH spots any regression first".
 
-**Arr drift detection.** clonarr now also detects when someone (or something else, like Recyclarr) edits a synced profile directly in Radarr or Sonarr. Adds an "Arr drift" badge on the affected Sync Rules row and fires the new "Arr drift detected" and "Arr drift resolved" notification events. Toggle TRaSH-upstream detection and Arr drift detection independently so you can pick what you want clonarr to watch.
+**Arr drift detection.** clonarr now also detects when someone (or another tool like Recyclarr) edits a synced profile directly in Radarr or Sonarr. Adds an "Arr drift" badge on the affected Sync Rules row and fires "Arr drift detected" and "Arr drift resolved" notifications. Toggle TRaSH-upstream detection and Arr drift detection independently.
 
-**Check button runs both kinds of detection in one click.** Surfaces both pending TRaSH updates and Arr-side drift in a single pass. Fires the same notifications whether the Check was a manual click or the scheduled run.
+**Check button runs both detections in one click.** Surfaces pending TRaSH updates and Arr-side drift in one pass.
 
 #### Scoring Sandbox
 
-**Sandbox state persists to a file on disk.** Release titles and named score sets move from browser localStorage to `/config/sandbox/{radarr,sonarr}.json`. So they survive any browser clear or device swap, sync across browsers via the shared config volume, and back up alongside the rest of your config. Previously a browser data wipe would lose your sandbox history.
+**State persists to disk.** Release titles and named score sets move from browser localStorage to `/config/sandbox/{radarr,sonarr}.json`, so they survive browser clears, sync across browsers, and back up with the rest of your config.
 
-**Share your sandbox by pasting the file.** The file is intentionally slim and shareable: open it in any editor or paste it into a teammate's Bulk paste box and they get the same set of test releases. The Bulk paste textarea detects JSON automatically, so sharing round-trips in one click. Plain text one-title-per-line still works for casual sharing.
+**Shareable by pasting the file.** The JSON is slim. Open it in an editor or paste it into a teammate's Bulk paste box and they get the same test releases. Bulk paste detects JSON automatically. Plain text one-title-per-line still works.
 
-**Automatic migration from localStorage.** Your existing browser data is pushed to the server on first load. The localStorage cache stays as an emergency backup so a server-side accident never costs you your history.
+**Automatic migration from localStorage on first load.** The localStorage cache stays as an emergency backup.
 
-**Prompts to push a CF to Arr before scoring against it.** When you pick a custom format in the Sandbox Add Custom Formats picker that does not yet exist on your selected Arr instance, closing the picker now prompts to push the CF first. So the sandbox can actually score against it instead of silently ignoring the CF.
+**Prompts to push a CF to Arr before scoring.** When you pick a CF in the Sandbox picker that does not yet exist on the selected instance, closing the picker prompts to push it first, so the sandbox can actually score against it.
 
 #### TRaSH Profile Discovery
 
-**Auto-description per TRaSH profile.** Each profile on the TRaSH Profiles tab shows a short summary line: resolution plus source plus size hint plus audio fallback. Pulled live from the TRaSH-Guides JSON so it stays current with whatever TRaSH updates. Helps you pick a profile without having to open the editor and start poking around.
+**Auto-description per profile.** Each profile on the TRaSH Profiles tab shows a short summary line (resolution, source, size hint, audio fallback). Pulled live from TRaSH-Guides JSON. Helps you pick a profile without opening the editor.
 
-**SQP profiles surface TRaSH-Guides' verbatim disclaimer.** Plus a link to TRaSH's Discord guide on size prerequisites. So you do not accidentally sync an SQP profile without understanding the requirements (SQP needs a much larger storage budget than the Standard profiles).
+**SQP profiles surface TRaSH-Guides' verbatim disclaimer** plus a link to TRaSH's Discord guide on size prerequisites, so you do not accidentally sync an SQP profile without understanding the storage budget it needs.
 
-**Filter chips for category and features.** Filter by Standard, SQP, Anime, etc., and by features (HDR, DV, multi-audio). Reduces the list to whatever you are actually shopping for instead of scrolling the full ~30+ profile list.
+**Filter chips** for category (Standard, SQP, Anime, etc.) and features (HDR, DV, multi-audio).
 
-**"In use" badge per profile.** Tells you which profiles you already have sync rules set up for, with a hover-tooltip showing the instances. So you do not accidentally create a duplicate sync rule for the same profile.
+**"In use" badge per profile.** Tells you which profiles already have sync rules, with a hover-tooltip listing the instances, so you do not create a duplicate.
 
 #### Maintenance
 
-**Find unused Quality Profiles.** Scans each Radarr or Sonarr instance for quality profiles that are not referenced anywhere (no movies, series, import lists, or collections use them) so you can clean them out safely. Click a profile to see the breakdown of where it would be in use if it were used somewhere.
+**Find unused Quality Profiles.** Scans each Arr instance for quality profiles not referenced anywhere (no movies, series, import lists, or collections) so you can clean them out safely. Click a profile for the per-axis breakdown.
 
-**Restore TRaSH Data.** A Reset button under Settings then TRaSH Guides wipes the cached trash-guides repo and forces a fresh clone on the next Pull. Useful if the cache somehow gets stuck (rare, but it does happen). Your config, profiles, and custom CFs are not touched.
+**Restore TRaSH Data.** Reset button under Settings then TRaSH Guides wipes the cached trash-guides repo and forces a fresh clone on the next Pull. Your config, profiles, and custom CFs are not touched.
 
 #### Other
 
-**No-instance banner on first-run.** New users now see a themed banner pointing them straight to Settings then Instances. Disappears automatically as soon as you add one. Replaces the previous experience of staring at empty tabs and wondering where to start.
+**No-instance banner on first-run** points new users straight to Settings then Instances. Disappears once you add one.
 
-**Unsaved-changes guard.** Switching pages, switching apps, or reloading the browser with unsaved edits in the profile editor now prompts before discarding them. Resolves issue #52 (thanks @xopez).
+**Unsaved-changes guard.** Switching pages, switching apps, or reloading with unsaved edits in the profile editor now prompts before discarding. Resolves issue #52 (@xopez).
 
-**CIDR ranges in `TRUSTED_PROXIES`.** Set `TRUSTED_PROXIES=172.18.0.0/24` to trust an entire docker subnet at once, instead of having to list each container IP individually. Hostnames and literal IPs still work as before.
+**CIDR ranges in `TRUSTED_PROXIES`.** Set `TRUSTED_PROXIES=172.18.0.0/24` to trust an entire Docker subnet, instead of listing every container IP. Hostnames and literal IPs still work.
 
-**Homepage dashboard widget.** New read-only `GET /api/widget/summary` endpoint returns instance counts, sync-rule counts, per-app profile lists, next pull time, and next sync time in one call. So you can surface clonarr status on a [gethomepage](https://gethomepage.dev) dashboard. Paste-ready config in [`docs/homepage-widget.md`](docs/homepage-widget.md).
+**Homepage dashboard widget.** New read-only `GET /api/widget/summary` endpoint returns instance counts, sync-rule counts, per-app profile lists, next pull time, and next sync time. Surface clonarr status on a [gethomepage](https://gethomepage.dev) dashboard with the paste-ready config in [`docs/homepage-widget.md`](docs/homepage-widget.md).
 
 ### Changed
 
-**Profile Sync is now Auto-sync.** Same engine, plain-English name. The new three-mode model lives under Settings then Auto-sync.
+**Profile Sync renamed to Auto-sync.** Same engine, plainer name. The three-mode model lives under Settings then Auto-sync.
 
-**Auto Sync Schedule is removed.** The old fixed-interval force-resync ("sync every X hours regardless of state") is gone. Arr drift detection plus Apply automatically does the same job more precisely: clonarr syncs only when something has actually changed. If you had Auto Sync Schedule turned on, the upgrade automatically turns on Arr drift detection so your profiles stay in sync. No action needed.
+**Auto Sync Schedule removed.** The old fixed-interval force-resync is gone; Arr drift detection plus Apply automatically does the same job more precisely. If you had Auto Sync Schedule on, the upgrade turns on Arr drift detection so your profiles stay in sync. No action needed.
 
 ### Contributors
 
-- **@xopez** for PR #53 (structured GitHub issue templates for bug reports and feature requests, plus a contact link to Discord for community help) and Issue #52 (which surfaced the missing unsaved-changes warning).
+- **@xopez** — PR #53 (GitHub issue templates) and Issue #52 (unsaved-changes guard).
 
 
 ## v2.5.9
