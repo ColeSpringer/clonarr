@@ -1,5 +1,66 @@
 # Changelog
 
+## v3.1.0
+
+Two major additions on top of v3.0.0: the new Custom Formats "In use" sub-tab that catalogues every CF on each Arr instance, and the "+ Add to Arr" button can now drop a CF straight into a sync rule's profile. Plus the v3.0.0 bug-fixes that landed during soak.
+
+### Highlights
+
+- New Custom Formats "In use" sub-tab with Managed and Unmanaged views, per-CF drift detection, and one-click adopt for unmanaged CFs.
+- "+ Add to Arr" can target a sync rule profile, not just the instance.
+- Sortable columns on the In use table (Name, Category, Used in, Status, Last sync).
+- Sticky toolbars on Browse and In use so actions stay reachable while scrolling.
+- Sandbox export gets per-section toggles and a Hide failed filter.
+
+### New: Custom Formats "In use" sub-tab
+
+Per-CF status view for every Custom Format clonarr touches on your Arr instances. Replaces guessing which CFs are deployed where with one scannable table per instance.
+
+Toggle between **Managed** (CFs clonarr owns via a sync rule or the "+ Add" button) and **Unmanaged** (everything else on Arr). Each Managed row reports In sync, Update available, Arr drift, or both. Recognised Unmanaged CFs (whose name matches the TRaSH catalog or your own customs) get drift detection too, plus a **Manage** button to adopt them into clonarr without modifying the Arr side. Truly unknown CFs get an **Import** button that reads the spec into your custom catalog. clonarr never writes to an unmanaged CF without an explicit click.
+
+### New: "+ Add to Arr" can push to a profile
+
+The "+" button on each Browse row now offers two targets:
+
+- **Arr instance only** pushes the CF entity to the chosen instance without touching any profile. Same as before.
+- **A profile on this instance** appends the CF to a sync rule's selected CFs with a score. The profile picker filters out profiles that already manage the CF, the score auto-fills from the TRaSH-context recommended value, and the action row mirrors the Profile Editor's Apply / Apply & Sync pair.
+
+Both targets get clear empty-state info cards when the action would be a no-op. If a CF is already on the selected instance (Arr-only mode) or already in every sync rule on the instance (profile mode), the modal swaps the picker for a card pointing you to the right next step.
+
+### New: Sortable In use columns
+
+Click any column header (Name, Category, Used in, Status, Last sync) to sort ascending; click again for descending; once more to reset. Status sorts by urgency (Update + drift first, then drift, then update, then in sync). Lets you find drifted CFs or the most-recently-changed ones without hunting.
+
+### Improved: Browse and In use stay reachable while scrolling
+
+Action toolbars are now sticky on both Custom Formats sub-tabs. The Description / Conditions toggle, search, Expand all, Create, Import (Browse) and the Managed / Unmanaged toggle plus instance filter (In use) stay pinned at the top of the scroll area no matter how far down the list you are.
+
+### Improved: Custom Formats Browse polish
+
+- **Description / Conditions toggle restored** on the Browse toolbar, alongside the click-to-expand conditions panel that landed in v3.0.0.
+- **Rename indicator** beside each CF name when `includeCustomFormatWhenRenaming` is on, so you can scan a category and see which CFs append their name to renamed files.
+- **Custom and rename badges** restyled into a right-anchored cluster so they stay at a stable position across rows regardless of name length.
+
+### Improved: Added directly rows read cleaner
+
+CFs you pushed via the "+ Add to Arr" button now share the same status vocabulary as in-profile CFs (In sync, Arr drift, Update, Update + drift). The "Added directly" classification moves into the row's tooltip so the Status column is consistent across all Managed rows. Last sync shows the actual push date instead of "never".
+
+### Improved: Scoring Sandbox export
+
+The Sandbox export gets two toggles, **Score** and **CF Breakdown**, so you can pick what to copy without editing the output afterwards. Plus a **Hide failed** filter that trims the export to only releases that actually scored.
+
+### Changed
+
+- **Unmanaged sub-tab description** rewritten in plain language. Drops the name-check of a peer tool and explains what the Manage button does.
+
+### Fixed
+
+- **Dry-run preview no longer shows ghost "General" changes for saved overrides.** When the Arr profile already matched your override, the dry-run preview was listing the override as a pending change. Now the customisation summary only contributes to the dry-run when you are creating a new profile.
+- **Sonarr profile overview no longer crashes when two CF groups share a suffix.** Two groups ending in the same word (e.g. both ending in "Standard") collided on Alpine's `x-for` key and blanked the page. Now keyed by index so duplicates render cleanly.
+- **Language Custom Format links resolve to the right page.** CFs with one name but a different filename stem (like `french-vfq.json` for "VFQ") previously linked to a 404. Both the TRaSH-Guides docs link and the JSON link now use the filename.
+- **Sync Rules action buttons stay reachable on narrow viewports.** The instance card overflow used to hide Edit / Sync now / Delete buttons when the window was narrow. Switched to horizontal scroll so the actions are always within reach.
+- **CF name tooltip anchors to your cursor.** Previously the tooltip would land far from the CF name on wide rows; now it appears next to where you point.
+
 ## v3.0.0
 
 Ground-up UI redesign and a stack of new features on top. Config and data carry over from v2.5.9 with no manual migration.
@@ -7,7 +68,7 @@ Ground-up UI redesign and a stack of new features on top. Config and data carry 
 ### Highlights
 
 - Persistent sidebar nav (or top bar if you prefer), app-themed banner, dark and light themes.
-- Custom Formats tab rebuilt with hierarchical Browse, condition pills, and a new In use sub-tab with per-CF drift detection.
+- Custom Formats tab rebuilt with hierarchical Browse and inline condition pills.
 - Three auto-sync modes: Apply automatically, Just notify me, or Wait before applying with a delay you choose.
 - Arr drift detection: get notified when something edits a synced profile directly in Radarr or Sonarr.
 - Notes per sync rule, sync-rule clone across instances, per-instance auto-sync pause.
@@ -43,10 +104,6 @@ Ground-up UI redesign and a stack of new features on top. Config and data carry 
 **Organise custom CFs under your own categories.** Pick Custom, one of the presets, or type a new category. Your categories nest under a single Custom parent in the sidebar.
 
 **Push a CF to an Arr instance with one click.** "+" button on every Browse row adds the CF to the chosen instance without touching profiles. Use it to stage CFs before the next sync or for ad-hoc Scoring Sandbox testing.
-
-**New "In use" sub-tab.** Per-CF status view for every Custom Format clonarr touches on Radarr or Sonarr. Toggle between Managed (clonarr owns these via a sync rule or the "+ Add" button) and Unmanaged (everything else). Each row reports its state: In sync, Update available, Arr drift, or both. Drift detection covers Managed CFs and any Unmanaged CF whose name matches the TRaSH catalog or your own customs.
-
-**Adopt or import unmanaged CFs.** Recognised unmanaged rows get a Manage button (records ownership without modifying Arr); unrecognised ones get an Import button (reads the spec into your custom catalog). clonarr never writes to an unmanaged CF without an explicit click.
 
 #### Sync Rules
 
