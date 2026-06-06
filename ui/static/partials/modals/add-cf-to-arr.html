@@ -67,20 +67,39 @@
         <div>
           <div class="form-group" style="margin-bottom:12px">
             <label for="add-cf-arr-rule-select">Profile</label>
-            <select id="add-cf-arr-rule-select" class="input"
-                    x-model="addCFToArrModal.ruleId"
-                    @change="addCFRefreshDefaultScore()"
-                    :disabled="addCFToArrModal.saving">
-              <option value="">— select a profile —</option>
-              <template x-for="r in addCFAvailableRules()" :key="r.id">
-                <option :value="r.id" x-text="r.name + ' (ID #' + r.arrProfileId + ')'"></option>
-              </template>
-            </select>
-            <div x-show="addCFAvailableRules().length === 0 && addCFToArrModal.instanceId"
-                 style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4;font-style:italic">
-              <span x-text="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length === 0 ? 'No sync rules exist for this instance yet.' : 'Every sync rule on this instance already manages this CF.'"></span>
-              <span x-show="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length > 0"> Edit scores from the Profile Editor.</span>
-            </div>
+            <!-- Dropdown is shown only when there is at least one
+                 eligible target. Otherwise an info card replaces it
+                 so users never see an empty dropdown that looks
+                 broken. The two empty-state reasons (no rules at all
+                 vs. all rules already manage this CF) get separate
+                 messages so the user knows what to do next. -->
+            <template x-if="addCFAvailableRules().length > 0 || !addCFToArrModal.instanceId">
+              <select id="add-cf-arr-rule-select" class="input"
+                      x-model="addCFToArrModal.ruleId"
+                      @change="addCFRefreshDefaultScore()"
+                      :disabled="addCFToArrModal.saving">
+                <option value="">— select a profile —</option>
+                <template x-for="r in addCFAvailableRules()" :key="r.id">
+                  <option :value="r.id" x-text="r.name + ' (ID #' + r.arrProfileId + ')'"></option>
+                </template>
+              </select>
+            </template>
+            <template x-if="addCFAvailableRules().length === 0 && addCFToArrModal.instanceId">
+              <div style="padding:10px 12px;background:color-mix(in srgb, var(--app-color) 8%, var(--bg-elevated));border:1px solid color-mix(in srgb, var(--app-color) 40%, var(--border-subtle));border-left:3px solid var(--app-color);border-radius:4px;font-size:13px;line-height:1.5">
+                <template x-if="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length === 0">
+                  <div>
+                    <strong>No sync rules on this instance yet.</strong>
+                    <div style="color:var(--text-secondary);margin-top:2px">Create one under Profiles &rarr; TRaSH Profiles first, then come back to add this CF to it.</div>
+                  </div>
+                </template>
+                <template x-if="(autoSyncRules || []).filter(r => r.instanceId === addCFToArrModal.instanceId).length > 0">
+                  <div>
+                    <strong>This CF is already in every sync rule on this instance.</strong>
+                    <div style="color:var(--text-secondary);margin-top:2px">To change the score, open the Profile Editor for the rule that uses it. To push the CF to the instance without touching profiles, switch the target above to "Arr instance only".</div>
+                  </div>
+                </template>
+              </div>
+            </template>
           </div>
           <div class="form-group" style="margin-bottom:0">
             <label for="add-cf-arr-score-input">Score</label>
@@ -91,6 +110,19 @@
               Pre-filled with the TRaSH guide's recommended score for the selected profile. Tweak before adding.
             </div>
           </div>
+        </div>
+      </template>
+
+      <!-- Arr-only target: when the selected instance already has this
+           CF on Arr (via any path - sync rule, "+" Add, or external),
+           clicking Add would be a silent no-op. Replace the Add button
+           with an info card so users see why the action is unavailable
+           and can switch instance or switch target. Symmetric with the
+           profile-empty info card above. -->
+      <template x-if="addCFToArrModal.target === 'arr' && addCFAlreadyOnSelectedInstance()">
+        <div style="margin-top:12px;padding:10px 12px;background:color-mix(in srgb, var(--app-color) 8%, var(--bg-elevated));border:1px solid color-mix(in srgb, var(--app-color) 40%, var(--border-subtle));border-left:3px solid var(--app-color);border-radius:4px;font-size:13px;line-height:1.5">
+          <strong>This CF is already on the selected instance.</strong>
+          <div style="color:var(--text-secondary);margin-top:2px">Open <em>Custom Formats &rarr; In use</em> on this instance to see how it got there (sync rule, "+ Add", or external) and whether it has any drift. To add it to a different instance, pick that instance above.</div>
         </div>
       </template>
 
@@ -106,7 +138,7 @@
           <button type="button" class="btn btn-sm"
                   style="background:var(--accent-blue-strong);color:var(--text-on-accent)"
                   @click="commitAddCFToArr()"
-                  :disabled="addCFToArrModal.saving || !addCFToArrModal.instanceId"
+                  :disabled="addCFToArrModal.saving || !addCFToArrModal.instanceId || addCFAlreadyOnSelectedInstance()"
                   x-text="addCFToArrModal.saving ? 'Adding…' : addCFToArrButtonLabel()"
                   x-tt="'Push the CF entity to the selected Arr instance. Profiles are not modified.'"></button>
         </template>

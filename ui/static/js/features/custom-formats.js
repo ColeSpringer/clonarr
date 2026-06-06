@@ -1109,6 +1109,46 @@ export default {
       return (this.instances || []).filter(i => i.type === at).sort((a, b) => a.name.localeCompare(b.name));
     },
 
+    // Same list minus instances that already have this CF on Arr (by
+    // any means - synced via a rule, pushed via "+", or added outside
+    // clonarr). Used by the "Arr instance only" picker so users do
+    // not see options that would no-op. cfSyncRules[appType] is the
+    // source of truth; if it has not loaded yet the list is the same
+    // as addCFToArrInstances (we will not block the user on cold
+    // state).
+    addCFToArrEligibleInstances() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.appType) return [];
+      const all = this.addCFToArrInstances();
+      const cfId = this.addCFModalCFID();
+      if (!cfId) return all;
+      const rows = this.cfSyncRules?.[m.appType] || [];
+      const row = rows.find(r => r.trashId === cfId);
+      if (!row) return all;
+      const presentOn = new Set();
+      for (const inst of (row.instances || [])) {
+        if (inst?.id) presentOn.add(inst.id);
+      }
+      return all.filter(i => !presentOn.has(i.id));
+    },
+
+    // Whether the modal's currently-selected instance already has the
+    // CF on Arr (via any path - sync rule, "+" Add, or external).
+    // Drives the "already there" info card in Arr-only target mode so
+    // users do not re-click Add and get a silent no-op. Cold state
+    // (cfSyncRules not yet loaded) reports false to avoid blocking
+    // the user before the data arrives.
+    addCFAlreadyOnSelectedInstance() {
+      const m = this.addCFToArrModal;
+      if (!m || !m.appType || !m.instanceId) return false;
+      const cfId = this.addCFModalCFID();
+      if (!cfId) return false;
+      const rows = this.cfSyncRules?.[m.appType] || [];
+      const row = rows.find(r => r.trashId === cfId);
+      if (!row) return false;
+      return (row.instances || []).some(i => i?.id === m.instanceId);
+    },
+
     // "Add to Radarr (main)" / "Add to Sonarr 4K" — surfaces the
     // selected instance name in the primary button so the user can see
     // where the CF is going without scanning the dropdown.
