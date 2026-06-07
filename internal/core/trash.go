@@ -1443,12 +1443,22 @@ func (ts *TrashStore) parseAppData(app string) (AppData, error) {
 var (
 	reHTML        = regexp.MustCompile(`<[^>]+>`)
 	reMarkdownLn  = regexp.MustCompile(`\[([^\]]+)\]\(((?:[^()]|\([^()]*\))*)\)(\{[^}]*\})?`)
+	// reImage matches markdown image syntax !\[alt](url){attrs} — runs
+	// BEFORE reMarkdownLn so the link regex doesn't strip the alt-text
+	// part and leave a dangling "!" prefix in output.
+	reImage       = regexp.MustCompile(`!\[[^\]]*\]\(((?:[^()]|\([^()]*\))*)\)(\{[^}]*\})?`)
 	reComment     = regexp.MustCompile(`<!--[\s\S]*?-->`)
 	reTemplate    = regexp.MustCompile(`\{\{[^}]+\}\}`)
 	reIncludeMd   = regexp.MustCompile(`\{!\s*include-markdown\s+"[^"]+"\s*!\}`)
 	reSnippetIncl = regexp.MustCompile(`--8<--\s+"[^"]+"`)
 	reAdmonition  = regexp.MustCompile(`\?\?\?\s+\w+\s+"[^"]*"`)
-	reTitleLine   = regexp.MustCompile(`(?m)^\*\*[^*]+\*\*\s*$`)
+	// reAdmonExclaim matches MkDocs always-shown admonition headers
+	// (!!! type) with optional title. Body content of the admonition
+	// (the indented lines) stays in output as a regular paragraph —
+	// only the decorative !!! header is dropped, matching how
+	// reAdmonition treats ??? collapsible headers.
+	reAdmonExclaim = regexp.MustCompile(`(?m)^!!!\s+\w+(\s+"[^"]*")?\s*$`)
+	reTitleLine    = regexp.MustCompile(`(?m)^\*\*[^*]+\*\*\s*$`)
 )
 
 // loadCFDescriptions reads includes/cf-descriptions/*.md and returns a map of
@@ -1493,6 +1503,12 @@ func cleanDescription(raw string) string {
 	s := reComment.ReplaceAllString(raw, "")
 	s = reHTML.ReplaceAllString(s, "")
 	s = reTitleLine.ReplaceAllString(s, "")
+	// Strip markdown image refs ![alt](url) BEFORE running the link
+	// regex. The link regex doesn't account for the leading "!", so
+	// without this step images get half-eaten into anchors with a
+	// dangling "!" left in the output (e.g. "!Imax Enhanced Example"
+	// appearing 5x for the imax-enhanced description).
+	s = reImage.ReplaceAllString(s, "")
 	// Convert markdown links to clickable anchors. Frontend's sanitizeHTML
 	// already gates href to http/https only and force-sets rel="noopener
 	// noreferrer" on any anchor with target, so the strict markdown-link
@@ -1504,13 +1520,18 @@ func cleanDescription(raw string) string {
 	s = reIncludeMd.ReplaceAllString(s, "")
 	s = reSnippetIncl.ReplaceAllString(s, "")
 	s = reAdmonition.ReplaceAllString(s, "")
-	// Strip markdown bold/italic markers
+	s = reAdmonExclaim.ReplaceAllString(s, "")
+	// Strip markdown bold/italic + inline-code markers. Backticks
+	// (`code`) appear literally in the rendered description otherwise,
+	// e.g. "default score of `-10000`" → "default score of `-10000`".
 	s = strings.ReplaceAll(s, "**", "")
 	s = strings.ReplaceAll(s, "__", "")
-	// Convert markdown pipe tables to HTML
+	s = strings.ReplaceAll(s, "`", "")
+	// Convert markdown pipe tables + bullet lists to HTML.
 	lines := strings.Split(s, "\n")
 	var cleaned []string
 	var tableRows [][]string
+	var listItems []string
 	flushTable := func() {
 		if len(tableRows) == 0 {
 			return
@@ -1532,13 +1553,45 @@ func cleanDescription(raw string) string {
 		cleaned = append(cleaned, buf.String())
 		tableRows = nil
 	}
+	// flushList wraps consecutive `- item` lines into a single <ul>.
+	// Without this step bullets collapse into a single paragraph and
+	// list-formatted descriptions like special-edition.md read as one
+	// long blob. Frontend's sanitizeHTML allowlist already accepts
+	// UL/LI so the markup passes through cleanly.
+	flushList := func() {
+		if len(listItems) == 0 {
+			return
+		}
+		var buf strings.Builder
+		buf.WriteString("<ul>")
+		for _, it := range listItems {
+			buf.WriteString("<li>" + it + "</li>")
+		}
+		buf.WriteString("</ul>")
+		cleaned = append(cleaned, buf.String())
+		listItems = nil
+	}
+	isListItem := func(line string) (string, bool) {
+		if strings.HasPrefix(line, "- ") {
+			return strings.TrimSpace(line[2:]), true
+		}
+		if strings.HasPrefix(line, "* ") {
+			return strings.TrimSpace(line[2:]), true
+		}
+		if strings.HasPrefix(line, "+ ") {
+			return strings.TrimSpace(line[2:]), true
+		}
+		return "", false
+	}
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			flushTable()
+			flushList()
 			continue
 		}
 		if strings.HasPrefix(line, "|") && strings.HasSuffix(line, "|") {
+			flushList()
 			// Skip separator rows (|---|---|)
 			inner := strings.Trim(line, "|")
 			if strings.Trim(strings.ReplaceAll(strings.ReplaceAll(inner, "-", ""), "|", ""), " :") == "" {
@@ -1546,12 +1599,19 @@ func cleanDescription(raw string) string {
 			}
 			cells := strings.Split(inner, "|")
 			tableRows = append(tableRows, cells)
-		} else {
-			flushTable()
-			cleaned = append(cleaned, line)
+			continue
 		}
+		if item, ok := isListItem(line); ok {
+			flushTable()
+			listItems = append(listItems, item)
+			continue
+		}
+		flushTable()
+		flushList()
+		cleaned = append(cleaned, line)
 	}
 	flushTable()
+	flushList()
 	return strings.Join(cleaned, "\n")
 }
 

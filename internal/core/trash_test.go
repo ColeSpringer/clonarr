@@ -435,3 +435,50 @@ func TestCleanDescription_MarkdownLinkWithParensInURL(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanDescription_StripImagesAndAdmonitions(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{
+			name: "markdown image gets fully stripped",
+			in:   `body text ![alt](/path/to/image.png) trailing text.`,
+			want: `body text  trailing text.`,
+		},
+		{
+			name: "image with jekyll attrs stripped",
+			in:   `![!Imax Enhanced Example](/Radarr/images/imax-e/imax-e.1.png){:target="_blank"}`,
+			want: ``,
+		},
+		{
+			name: "exclaim admonition header stripped, body preserved",
+			in:   "Body para.\n\n!!! note\n\n    Indented body that should stay.\n",
+			want: "Body para.\nIndented body that should stay.",
+		},
+		{
+			name: "exclaim admonition with title stripped",
+			in:   "!!! warning \"Heads up\"\n\n    Stuff.",
+			want: "Stuff.",
+		},
+		{
+			name: "backticks stripped",
+			in:   "default score of `-10000` matters.",
+			want: "default score of -10000 matters.",
+		},
+		{
+			name: "list items wrap into ul",
+			in:   "Intro line.\n\n- First item.\n- Second item.\n",
+			want: "Intro line.\n<ul><li>First item.</li><li>Second item.</li></ul>",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := cleanDescription(c.in)
+			gotNorm := strings.Join(strings.Fields(got), " ")
+			wantNorm := strings.Join(strings.Fields(c.want), " ")
+			if gotNorm != wantNorm {
+				t.Errorf("cleanDescription(%q)\n got  %q\n want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
