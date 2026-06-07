@@ -128,3 +128,47 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+
+  # Auto-create a GitHub Release whenever a clean semver tag (vX.Y.Z)
+  # is pushed AND the build job succeeded. Pre-releases (vX.Y.Z-rc*)
+  # are skipped because the title cell on Releases would otherwise
+  # carry "rc" noise that we don't want surfaced as a stable landing
+  # page.
+  #
+  # Body is the CHANGELOG.md section for the tag - extracted by
+  # awk-walking between "## v<version>" and the next "## v" line so
+  # the Release page mirrors what is already in repo, no double
+  # maintenance.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Extract CHANGELOG section
+        id: extract
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          awk -v ver="## v${VERSION}" '
+            $0 == ver { found=1; next }
+            found && /^## v/ { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/release-body.md
+          if [ ! -s /tmp/release-body.md ]; then
+            echo "::error::No CHANGELOG.md section found for v${VERSION}"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: v${{ steps.extract.outputs.version }}
+          body_path: /tmp/release-body.md
+          draft: false
+          prerelease: false
