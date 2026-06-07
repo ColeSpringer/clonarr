@@ -4941,11 +4941,28 @@ export default {
     pdExcludedCFCount() {
       const sel = this.selectedOptionalCFs || {};
       const defaults = this.computeTrashDefaults();
-      let n = 0;
-      for (const tid of defaults) {
-        if (sel[tid] === false) n++;
+      // Default-on groups the user toggled OFF. Their required + default-
+      // on CFs are effectively excluded even when sel[tid] is undefined
+      // (the restore path intentionally skips per-CF sel writes to
+      // avoid freezing them as Phase 2c locks on re-enable). Backend
+      // ComputeRuleCustomizations counts them via rule.ExcludedCFs ∩
+      // ComputeTrashDefaults — match here so the Sync Rules pill total
+      // and the editor header total agree end-to-end.
+      const offGroupCFs = new Set();
+      for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
+        if (!g.defaultEnabled) continue;
+        const grpKey = '__grp_' + g.name;
+        if (sel[grpKey] !== false) continue;
+        for (const cf of (g.cfs || [])) {
+          if (cf.required || cf.default) offGroupCFs.add(cf.trashId);
+        }
       }
-      return n;
+      const excluded = new Set();
+      for (const tid of defaults) {
+        if (sel[tid] === false) excluded.add(tid);
+        else if (offGroupCFs.has(tid)) excluded.add(tid);
+      }
+      return excluded.size;
     },
 
     // Hybrid layout for the CF Customizations card: split pdAllCustomizations()

@@ -796,7 +796,7 @@ export default {
     // diff with original-vs-current side by side. Computed lazily on
     // each access (Alpine reactivity tracks the dependencies).
     spOverviewDiffs() {
-      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [], qualityItems: [] };
+      const out = { modifiedBasics: [], scoreOverrides: [], additionalCFs: [], excludedCFs: [], excludedRequiredCFs: [], disabledGroups: [], qualityItems: [] };
       if (!this.profileDetail) return out;
       // Quality items diffs — leaf-flatten profile defaults vs user's
       // qualityStructure (or legacy qualityOverrides flat map) and
@@ -1030,9 +1030,10 @@ export default {
         }
       }
 
-      // 4. Excluded default-on CFs — only counted when the group is
-      // still active (an inactive group's CFs aren't "excluded" — the
-      // whole group is off).
+      // 4. Excluded default-on CFs — per-CF opt-outs within active
+      // groups (default-on groups still on, optional CF toggled off).
+      // Default-on groups TOGGLED OFF land in bucket 6 (disabledGroups)
+      // as a single rolled-up entry instead of 18 individual rows.
       for (const g of (this.profileDetail.detail?.trashGroups || [])) {
         const grpKey = '__grp_' + g.name;
         const grpOn = sel[grpKey] !== undefined ? sel[grpKey] : g.defaultEnabled;
@@ -1051,6 +1052,31 @@ export default {
             });
           }
         }
+      }
+      // 6. Default-on groups the user toggled OFF. One row per group
+      // (rather than per CF) so the diff reads "Streaming Services
+      // General disabled (18 CFs excluded)" instead of 18 individual
+      // rows. Mirrors backend ComputeRuleCustomizations — its
+      // ExcludedCFs bucket sums these via rule.ExcludedCFs ∩ defaults,
+      // so we surface them too. Optional groups toggled OFF (default-
+      // off → user opted IN, then OFF again) don't appear here: they
+      // would have shown up as Additional CF opt-ins in bucket 3 and
+      // disappear when toggled back off.
+      for (const g of (this.profileDetail.detail?.trashGroups || [])) {
+        if (!g.defaultEnabled) continue;
+        const grpKey = '__grp_' + g.name;
+        if (sel[grpKey] !== false) continue;
+        const excludedCount = (g.cfs || []).filter(cf => cf.required || cf.default).length;
+        if (excludedCount === 0) continue;
+        const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
+        const shortName = m ? (m[2].trim() || g.name) : g.name;
+        out.disabledGroups.push({
+          groupName: shortName,
+          fullName: g.name,
+          sourceCategory: g.category,
+          excludedCount,
+          _g: g, // group reference, used by the Re-enable reset button
+        });
       }
 
       // 5. Excluded required CFs — Phase 2c. Two sources:
@@ -1385,7 +1411,7 @@ export default {
     // Total diff count for the sub-nav badge.
     spOverviewDiffCount() {
       const d = this.spOverviewDiffs();
-      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length + d.excludedRequiredCFs.length + (d.qualityItems?.length || 0);
+      return d.modifiedBasics.length + d.scoreOverrides.length + d.additionalCFs.length + d.excludedCFs.length + d.excludedRequiredCFs.length + (d.disabledGroups?.length || 0) + (d.qualityItems?.length || 0);
     },
 
     // Allowed qualities in their qualityStructure order. Falls back to

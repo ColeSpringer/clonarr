@@ -1243,6 +1243,30 @@
             </div>
           </div>
 
+          <!-- Default-on groups the user turned off entirely - one row per
+               group rather than per CF so a 18-CF group reads as a single
+               line instead of flooding the diff with individual rows. -->
+          <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.disabledGroups.length > 0">
+            <div class="sp-ov-cf-section-title">Disabled default-on groups</div>
+            <div class="sp-ov-cf-list">
+              <template x-for="dg in _d.disabledGroups" :key="'diff-dg-'+dg.fullName">
+                <div class="sp-ov-cf-row sp-ov-diff-row sp-ov-cf-excluded">
+                  <button class="sp-basics-reset sp-ov-diff-reset"
+                          @click="pdToggleGroup(dg._g, true)"
+                          :aria-label="'Re-enable ' + dg.groupName"
+                          x-tt="'Re-enable this group'">&#8634;</button>
+                  <span class="sp-ov-cf-name">
+                    <span class="sp-ov-cf-name-text" x-text="dg.groupName"></span>
+                    <span class="sp-ov-cf-source" x-text="'(' + dg.excludedCount + ' CF' + (dg.excludedCount === 1 ? '' : 's') + ' excluded)'"></span>
+                  </span>
+                  <span class="sp-ov-diff-old">on</span>
+                  <span class="sp-ov-diff-arrow" aria-hidden="true">&rarr;</span>
+                  <span class="sp-ov-diff-new sp-ov-diff-excluded-tag">disabled</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Excluded default-on CFs - would normally be on but user turned off -->
           <div class="sp-ov-cf-section" :class="getCategoryClass('')" x-show="_d.excludedCFs.length > 0">
             <div class="sp-ov-cf-section-title">Excluded default-on CFs</div>
