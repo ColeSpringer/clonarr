@@ -658,6 +658,7 @@
                           @mouseenter="if (fi.description || (!fi.isCustom && (trashCFGuideUrl(fi, activeAppType) || trashCFJsonUrl(fi, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(fi, activeAppType))"
                           @mouseleave="hideCFTooltip()"></span>
                   </div>
+                  <div class="sp-cf-desc" x-html="cfInlineDescriptionHTML(fi, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
                   </template>
@@ -942,6 +943,7 @@
                           @mouseleave="hideCFTooltip()"></span>
                     <span class="sp-cf-recommended" x-show="cf.default && !cf.required" x-tt="'TRaSH recommends keeping this on'">recommended</span>
                   </div>
+                  <div class="sp-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score"
                          :class="((cfScoreOverrides[cf.trashId] ?? cf.score) > 0 ? 'positive' : (cfScoreOverrides[cf.trashId] ?? cf.score) < 0 ? 'negative' : 'zero')"
@@ -2018,6 +2020,7 @@
                           @mouseenter="if (cf.description || (!cf.isCustom && (trashCFGuideUrl(cf, activeAppType) || trashCFJsonUrl(cf, activeAppType)))) showCFTooltip($event, buildCFInfoHTML(cf, activeAppType))"
                           @mouseleave="hideCFTooltip()"></span>
                   </div>
+                  <div class="sp-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <div class="sp-cf-score" :class="(_eff > 0 ? 'positive' : _eff < 0 ? 'negative' : 'zero')" x-text="_eff != null ? ((_eff > 0 ? '+' : '') + _eff) : ''"></div>
                   </template>

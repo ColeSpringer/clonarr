@@ -594,21 +594,57 @@ button.sp-summary-active:focus-visible {
 }
 .sp-cf-row {
   display: grid;
-  /* Fixed columns so the score lines up at the same x across every
-     row in the list — variable CF-name lengths don't shift the score
-     position. 240px name column fits the widest TRaSH names (~24
-     chars × 13px). 1fr trailing column absorbs remaining card width
-     so the cluster stays packed on the left. */
-  grid-template-columns: 22px 240px 100px 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 3px 8px;
-  border-radius: 3px;
+  /* Mirror Browse cf-row-compact: name and description live in
+     SEPARATE side-by-side columns instead of stacked vertically.
+     The 220px name column matches Browse's --cf-grid-cols; the 1fr
+     description column flexes and wraps multi-line; the icon + score
+     anchor the row edges. */
+  grid-template-columns: 22px 220px 1fr 100px;
+  align-items: start;
+  column-gap: 12px;
+  padding: 8px 8px;
+  border-top: 1px solid var(--border-muted);
   font-size: 13px;
 }
+.sp-cf-list > .sp-cf-row:first-child,
+.sp-cf-row:first-child { border-top: 0; }
+.sp-cf-row > .sp-cf-icon { grid-column: 1; align-self: center; }
+.sp-cf-row > .sp-cf-name { grid-column: 2; align-self: center; }
+.sp-cf-row > .sp-cf-desc { grid-column: 3; align-self: center; }
+.sp-cf-row > .sp-cf-score,
+.sp-cf-row > .sp-cf-score-edit { grid-column: 4; align-self: center; justify-self: end; }
 .sp-cf-row:hover {
   background: var(--bg-elevated);
 }
+/* Inline description block — same treatment Browse uses on
+   cf-cell-desc. Body-coloured prose, TRaSH-Guides / JSON links in
+   tiny uppercase muted text on a line of their own. */
+.sp-cf-desc {
+  font-size: 12px;
+  color: var(--text-body);
+  line-height: 1.45;
+  min-width: 0;
+}
+.sp-cf-desc .cf-desc-text { color: var(--text-body); }
+.sp-cf-desc .cf-desc-text u { text-decoration: underline; }
+.sp-cf-desc .cf-desc-empty { color: var(--text-muted); font-style: italic; }
+.sp-cf-desc .cf-desc-links {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}
+.sp-cf-desc .cf-desc-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-right: 12px;
+}
+.sp-cf-desc .cf-desc-links a:hover { color: var(--app-color); text-decoration: underline; }
+.sp-cf-desc:empty { display: none; }
 .sp-cf-icon {
   display: inline-flex;
   align-items: center;
@@ -651,7 +687,7 @@ button.sp-summary-active:focus-visible {
   color: var(--text-muted);
 }
 .sp-cf-name {
-  color: var(--text-primary);
+  color: var(--text-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -659,6 +695,11 @@ button.sp-summary-active:focus-visible {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  /* Browse uses font-weight: 600 on cf-name-text so the name carries
+     visual weight against the description without bumping size.
+     Matching that here keeps the three editor tabs consistent with
+     the Custom Formats Browse view. */
+  font-weight: 600;
 }
 /* Hover-tooltip affordance — cursor: help only when a tooltip is
    actually wired up (Alpine flips .sp-cf-name-has-tooltip based on
