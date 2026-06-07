@@ -231,6 +231,11 @@ export default function baseState() {
     spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
     spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
+    // Inline CF descriptions toggle. True = show description column
+    // beside the name (default — matches Browse). False = hide,
+    // collapsing the row to icon + name + score. LocalStorage-
+    // persisted per browser so the preference survives reload.
+    spShowCFDesc: (typeof localStorage !== 'undefined' && localStorage.getItem('clonarr_spShowCFDesc') === '0') ? false : true,
     // Sync Preview CF search — single state shared across the three
     // sub-nav surfaces (Profile default, Additional CF, Profile
     // overview). When set, panes filter their CF rows to ones whose

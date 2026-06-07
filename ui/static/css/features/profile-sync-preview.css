@@ -645,6 +645,34 @@ button.sp-summary-active:focus-visible {
 }
 .sp-cf-desc .cf-desc-links a:hover { color: var(--app-color); text-decoration: underline; }
 .sp-cf-desc:empty { display: none; }
+/* User toggle: when the editor's root carries sp-hide-cf-desc, every
+   inline description collapses back to the compact name + score
+   layout. The toggle lives on the editor's tab bar so the same
+   preference applies across Profile default and Additional CF. */
+.sp-hide-cf-desc .sp-cf-row { grid-template-columns: 22px 1fr 100px; }
+.sp-hide-cf-desc .sp-cf-row > .sp-cf-name { grid-column: 2; }
+.sp-hide-cf-desc .sp-cf-row > .sp-cf-score,
+.sp-hide-cf-desc .sp-cf-row > .sp-cf-score-edit { grid-column: 3; }
+.sp-hide-cf-desc .sp-cf-desc { display: none; }
+/* Dimmed state (group off OR cf off): dims icon, name and score
+   columns. Description stays at full opacity so the user can read
+   what an off CF is about while scanning to decide what to turn on
+   - matters most when descriptions are visible. */
+.sp-cf-row-dimmed > .sp-cf-icon,
+.sp-cf-row-dimmed > .sp-cf-name,
+.sp-cf-row-dimmed > .sp-cf-score,
+.sp-cf-row-dimmed > .sp-cf-score-edit { opacity: 0.35; }
+/* Descriptions toggle tab - lives at the right edge of the tab row
+   alongside the real tabs. .sp-tab-utility pushes it right via auto
+   margin and strips the active underline so it does not look like a
+   sibling tab. */
+.sp-tab-utility {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sp-tab-utility:hover { color: var(--text-body); }
+.sp-tab-utility.active { box-shadow: none; }
 .sp-cf-icon {
   display: inline-flex;
   align-items: center;

@@ -11,7 +11,7 @@
          4. Tabs - Profile default (always) + Additional CF (Customize-gated) + Profile overview
          5. Sub-nav + main content - Required CFs + each default-on group in left rail,
             selected sub-nav item's CFs render compactly in the main area. -->
-  <div class="page sp-page" x-show="profileDetail && !['settings','about'].includes(currentSection)" x-cloak>
+  <div class="page sp-page" x-show="profileDetail && !['settings','about'].includes(currentSection)" :class="{ 'sp-hide-cf-desc': !spShowCFDesc }" x-cloak>
 
     <!-- ===== Sync result + Dry-run banners =====
          syncResult populates after applySync(), syncPlan after
@@ -495,6 +495,15 @@
         </template>
       </button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
+      <!-- Descriptions toggle - right-aligned via .sp-tab-utility's
+           auto margin. No active state (it is a preference, not a
+           tab). LocalStorage persists per browser. -->
+      <button type="button"
+              class="sp-tab sp-tab-utility sp-desc-toggle-tab"
+              @click="spShowCFDesc = !spShowCFDesc; try { localStorage.setItem('clonarr_spShowCFDesc', spShowCFDesc ? '1' : '0'); } catch (_) {}"
+              x-tt="spShowCFDesc ? 'Collapse CF rows to name and score only.' : 'Show CF descriptions inline.'">
+        <span x-text="spShowCFDesc ? 'Hide descriptions' : 'Show descriptions'"></span>
+      </button>
       <!-- Profile updates - TRaSH-source pending changes only. Shows when
            Profile Sync detection has found upstream TRaSH changes for
            this rule. Drift entries get their own sibling tab below.
@@ -890,21 +899,20 @@
                      :class="{
                        'sp-cf-locked': cf.required,
                        'sp-cf-req-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false,
-                     }"
-                     :style="{
-                       /* Object-form :style so any future inline static
-                          style attribute survives - string-form would wipe
-                          the row's other inline styles. The dimming logic:
-                          - hidden group toggle (opt-in only): dim purely on
-                            per-CF off (no group state to express).
-                          - required CF: dim when group is off OR Phase 2c
-                            user-excluded.
-                          - optional CF: dim when group is off OR cf is off. */
-                       opacity: (() => {
+                       /* sp-cf-row-dimmed: dim only icon + name + score
+                          (CSS targets specific child selectors). Keeps
+                          the description column at full opacity so users
+                          can read what an off-CF is about. Logic mirrors
+                          the prior inline-opacity rule:
+                          - hidden group toggle: dim purely on per-CF off
+                          - required CF: dim when group off OR Phase 2c
+                            user-excluded
+                          - optional CF: dim when group off OR cf off */
+                       'sp-cf-row-dimmed': (() => {
                          const cfOn = selectedOptionalCFs[cf.trashId] === undefined ? !!cf.default : !!selectedOptionalCFs[cf.trashId];
-                         if (!_hasToggle) return cfOn ? 1 : 0.35;
-                         if (cf.required) return (_groupOn && selectedOptionalCFs[cf.trashId] !== false) ? 1 : 0.35;
-                         return (_groupOn && cfOn) ? 1 : 0.35;
+                         if (!_hasToggle) return !cfOn;
+                         if (cf.required) return !(_groupOn && selectedOptionalCFs[cf.trashId] !== false);
+                         return !(_groupOn && cfOn);
                        })()
                      }">
                   <template x-if="cf.required && !pdOverridesEnabled">
