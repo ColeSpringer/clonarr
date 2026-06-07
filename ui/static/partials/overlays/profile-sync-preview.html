@@ -1169,7 +1169,7 @@
                  x-data="{ get _d() { return spOverviewDiffs(); } }">
           <h3 class="sp-ov-card-title">
             Diffs from profile default
-            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) + ')'"></span>
+            <span class="sp-ov-card-count" x-text="'(' + (_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.disabledGroups?.length || 0) + (_d.qualityItems?.length || 0)) + ')'"></span>
           </h3>
 
           <!-- Modified general - same naming as the "General" sub-nav
@@ -1256,7 +1256,7 @@
                           :aria-label="'Re-enable ' + dg.groupName"
                           x-tt="'Re-enable this group'">&#8634;</button>
                   <span class="sp-ov-cf-name">
-                    <span class="sp-ov-cf-name-text" x-text="dg.groupName"></span>
+                    <span class="sp-ov-cf-name-text" x-text="dg.displayName"></span>
                     <span class="sp-ov-cf-source" x-text="'(' + dg.excludedCount + ' CF' + (dg.excludedCount === 1 ? '' : 's') + ' excluded)'"></span>
                   </span>
                   <span class="sp-ov-diff-old">on</span>
@@ -1338,7 +1338,7 @@
             </div>
           </div>
 
-          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.qualityItems?.length || 0)) === 0">
+          <div class="sp-ov-empty" x-show="(_d.modifiedBasics.length + _d.scoreOverrides.length + _d.additionalCFs.length + _d.excludedCFs.length + _d.excludedRequiredCFs.length + (_d.disabledGroups?.length || 0) + (_d.qualityItems?.length || 0)) === 0">
             Nothing customized - this profile matches the TRaSH default exactly.
           </div>
         </section>

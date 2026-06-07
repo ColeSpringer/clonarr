@@ -1070,8 +1070,16 @@ export default {
         if (excludedCount === 0) continue;
         const m = (g.name || '').match(/^\[([^\]]+)\]\s*(.*)$/);
         const shortName = m ? (m[2].trim() || g.name) : g.name;
+        const prefix = m ? m[1].trim() : '';
+        // Display name combines the section prefix + short name so the
+        // user sees "Streaming Services General" rather than just
+        // "General" — bracket-stripped version of the full TRaSH group
+        // name. "General" alone collides across sections (Streaming
+        // Services General vs Streaming HQ General etc).
+        const displayName = prefix ? (prefix + ' ' + shortName) : shortName;
         out.disabledGroups.push({
           groupName: shortName,
+          displayName,
           fullName: g.name,
           sourceCategory: g.category,
           excludedCount,
