@@ -230,6 +230,12 @@ export default function baseState() {
     _profileBaseline: null,
     spActiveTab: 'default',     // 'default' | 'overview' | 'additional' (Customize-gated)
     spActiveGroup: '__required', // '__required' | <trashGroup.name>
+    spActiveParent: null,        // null | <sectionName> — when set, main pane
+                                 // renders ALL groups whose _section matches
+                                 // (mirrors Custom Formats Browse's parent
+                                 // mode). Mutually exclusive with spActiveGroup
+                                 // — spSelectGroup clears this, spSelectParent
+                                 // clears spActiveGroup.
     spOverviewSection: 'all',    // 'all' | 'diffs' | 'general' | 'quality' | 'all-cf' | 'optional-cf' | 'additional-cf'
     // Inline CF descriptions toggle. True = show description column
     // beside the name (default — matches Browse). False = hide,

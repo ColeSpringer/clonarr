@@ -373,6 +373,14 @@ export default {
     // preserved from the input list (TRaSH sorts groups by its own `group`
     // field, so categories come out in the same order as TRaSH renders
     // them on its website).
+    // Returns the UPPERCASE section name extracted from a TRaSH group
+    // name like "[Audio Formats] WEB Tier 01". Matches the section
+    // keys produced by spGroupBySection. Used by render gates that
+    // need to test whether a raw group belongs to spActiveParent.
+    spSectionOfGroup(g) {
+      const m = ((g && g.name) || '').match(/^\[([^\]]+)\]\s*/);
+      return m ? m[1].trim().toUpperCase() : 'OTHER';
+    },
     spGroupBySection(groups) {
       const re = /^\[([^\]]+)\]\s*(.*)$/;
       const sections = new Map();
@@ -381,7 +389,7 @@ export default {
         const section = m ? m[1].trim().toUpperCase() : 'OTHER';
         const shortName = m ? (m[2].trim() || g.name) : g.name;
         if (!sections.has(section)) sections.set(section, []);
-        sections.get(section).push({ ...g, _shortName: shortName });
+        sections.get(section).push({ ...g, _shortName: shortName, _section: section });
       }
       return Array.from(sections, ([section, items]) => ({ section, items }));
     },
@@ -402,6 +410,10 @@ export default {
       if (this.spExpandedSection !== null && this.spExpandedSection !== undefined) {
         return this.spExpandedSection === sectionName;
       }
+      // Parent-active mode (label-clicked, rendering all section items in
+      // main): keep the section expanded in the sidebar so the user can
+      // still drill into a specific child.
+      if (this.spActiveParent === sectionName) return true;
       if (this.spActiveGroup && this.spActiveGroup !== '__required') {
         return (sectionItems || []).some(g => g.name === this.spActiveGroup);
       }
@@ -416,29 +428,33 @@ export default {
       this.spSidebarExpanded = updated;
       try { window.localStorage.setItem('sp-sidebar-expanded', JSON.stringify(updated)); } catch (_) {}
     },
-    // Label click — toggles transient focus on a section. Clears any
-    // explicit chevron-set override on the same section so the
-    // transient can actually take effect (otherwise a previously-
-    // collapsed section stays collapsed because explicit=false wins
-    // over transient in isSpSidebarSectionExpanded). Doesn't change
-    // spActiveGroup, so main pane stays on whatever group was
-    // selected. Clears via spSelectGroup when user picks a specific
-    // group from the expanded list.
+    // Label click — selects the parent section so main pane renders
+    // ALL groups under it (Custom Formats Browse parent mode). Side-
+    // bar section auto-expands via isSpSidebarSectionExpanded's
+    // spActiveParent check, so the user can still drill into a
+    // specific child afterwards.
     //
     // Single-child shortcut: when the section has exactly one group,
-    // click navigates directly to that group instead of just
-    // expanding (which would force a second click on the single
-    // child). Saves the wasted click for sections like Unwanted
+    // click navigates directly to that single child instead — parent
+    // mode would just render the same thing with extra structure.
+    // Saves the wasted second click for sections like Unwanted
     // (only Unwanted Formats), Custom (one user-cat), etc.
     spExpandSectionTransient(sectionName, sectionItems) {
       if (Array.isArray(sectionItems) && sectionItems.length === 1 && sectionItems[0]?.name) {
         this.spSelectGroup(sectionItems[0].name);
         return;
       }
-      const next = (this.spExpandedSection === sectionName) ? null : sectionName;
-      this.spExpandedSection = next;
-      // Clear chevron-set explicit override on this section so the
-      // transient focus controls visibility.
+      this.spSelectParent(sectionName);
+    },
+    // Parent selection — sets active parent + clears active group so
+    // main pane renders every group whose _section matches. Used by
+    // section labels (multi-child case).
+    spSelectParent(sectionName) {
+      this.spActiveParent = sectionName;
+      this.spActiveGroup = null;
+      this.spExpandedSection = null;
+      // Clear chevron-set explicit collapse on this section so it
+      // auto-expands now that it is the active parent.
       if (this.spSidebarExpanded && Object.prototype.hasOwnProperty.call(this.spSidebarExpanded, sectionName)) {
         const updated = { ...this.spSidebarExpanded };
         delete updated[sectionName];
@@ -446,11 +462,12 @@ export default {
         try { window.localStorage.setItem('sp-sidebar-expanded', JSON.stringify(updated)); } catch (_) {}
       }
     },
-    // Group selection — sets active group + clears transient expand
-    // so the previously label-expanded section collapses. Used by
-    // every group button (Required CFs + per-group + Additional CF).
+    // Group selection — sets active group + clears active parent +
+    // transient expand. Used by every group button (Required CFs +
+    // per-group + Additional CF).
     spSelectGroup(name) {
       this.spActiveGroup = name;
+      this.spActiveParent = null;
       this.spExpandedSection = null;
     },
 

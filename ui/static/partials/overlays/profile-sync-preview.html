@@ -580,6 +580,7 @@
                       :aria-label="(isSpSidebarSectionExpanded(section.section, section.items) ? 'Collapse ' : 'Expand ') + section.section"
                       @click="toggleSpSidebarSection(section.section, section.items)">&#9654;</button>
               <button type="button" class="sp-sub-nav-section-label"
+                      :class="{ active: spActiveParent === section.section }"
                       @click="spExpandSectionTransient(section.section, section.items)">
                 <span class="sp-sub-nav-section" x-text="section.section"></span>
                 <span class="sp-sub-nav-section-count" x-text="section.items.length"></span>
@@ -722,7 +723,7 @@
              selected group doesn't render with zero rows when its
              matches live elsewhere). When search is empty, mount only
              the active group - preserves lazy-mount perf. -->
-        <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name)">
+        <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g))">
           <div x-data="{
                  get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
@@ -1911,6 +1912,7 @@
                       :aria-label="(isSpSidebarSectionExpanded(section.section, section.items) ? 'Collapse ' : 'Expand ') + section.section"
                       @click="toggleSpSidebarSection(section.section, section.items)">&#9654;</button>
               <button type="button" class="sp-sub-nav-section-label"
+                      :class="{ active: spActiveParent === section.section }"
                       @click="spExpandSectionTransient(section.section, section.items)">
                 <span class="sp-sub-nav-section" x-text="section.section"></span>
                 <span class="sp-sub-nav-section-count" x-text="section.items.length"></span>
@@ -1940,7 +1942,7 @@
         <!-- Same cross-group-search model as Profile default: when
              search is active, mount only matching groups (ignoring
              spActiveGroup); when empty, mount the active group. -->
-        <template x-if="(!!spSearchFilter ? spAdditionalGroupCFs(g).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name)) && spAdditionalGroupCFs(g).length > 0">
+        <template x-if="(!!spSearchFilter ? spAdditionalGroupCFs(g).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g))) && spAdditionalGroupCFs(g).length > 0">
           <div x-data="{
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }

@@ -762,6 +762,13 @@ export default {
       // A renders B's editor with the search still applied, hiding rows
       // that don't match.
       this.spSearchFilter = '';
+      // Reset sidebar navigation state so a freshly opened rule does
+      // not inherit "parent: AUDIO selected" from the previous editor
+      // session (parent name may not even exist in the new rule's
+      // section list, leading to an empty main pane).
+      this.spActiveGroup = '__required';
+      this.spActiveParent = null;
+      this.spExpandedSection = null;
 
       this.profileDetail = { instance: inst, profile: profile, detail: null };
       // Pre-load languages and quality presets for this instance (for override dropdowns)
