@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.2.0
+
+CF descriptions move inline beside the name in the Profile Editor and Profile Overview, sidebar section labels open a parent view that renders every group under them, the customizations counter finally sees CFs excluded via group-off toggle, and a stack of TRaSH description rendering fixes lands.
+
+### New: Inline CF descriptions in the editor tabs
+
+CF rows in Profile Editor and Profile Overview now show the description beside the name, matching the Custom Formats Browse layout. A Hide / Show descriptions toggle on the tab bar collapses back to the compact name-plus-score view; preference is remembered per browser and applies to both tabs at once.
+
+### New: Section-label parent navigation
+
+Click a TRaSH section label like Audio or HDR Formats in the Profile Editor sidebar and the main pane renders every group under it at once, matching the parent-click behavior Custom Formats Browse already had. Drilling into a specific child still focuses on one group like before.
+
+### Improved: TRaSH description rendering
+
+Four markdown patterns that used to leak into rendered descriptions are now stripped cleanly:
+
+- "!!! note" admonition headers used to show as literal text (ATMOS undefined).
+- Markdown image syntax used to render as broken anchor stubs prefixed with "!" (IMAX Enhanced showed five).
+- Inline-code backticks used to survive in the prose (German DL).
+- Bullet lists collapsed into one running paragraph (Special Edition's Director's Cut / Extended Cut list).
+
+### Fixed
+
+- **Customizations counter sees disabled-group exclusions.** Turn off a default-on group like Streaming Services General and the Sync Rules pill said "18 excluded CFs" while the editor header read "0 customizations" and the Diffs view said nothing was customized. Three different answers for the same rule. The editor now matches the Sync Rules pill, and the Diffs view shows a Re-enable row for the disabled group.
+- **CF description column stays readable when a row is dimmed.** Off rows used to dim the description too, which made it hard to read what an off CF was about while scanning to decide whether to turn it on.
+
 ## v3.1.0
 
 Two major additions on top of v3.0.0: the new Custom Formats "In use" sub-tab that catalogues every CF on each Arr instance, and the "+ Add to Arr" button can now drop a CF straight into a sync rule's profile. Plus the v3.0.0 bug-fixes that landed during soak.

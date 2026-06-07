@@ -21,13 +21,13 @@
   <WebUI>http://[IP]:[PORT:6060]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/clonarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/clonarr/main/ui/static/icons/clonarr.png</Icon>
-  <Date>2026-05-31</Date>
+  <Date>2026-06-07</Date>
   <Changes>
-### 2026-05-31
-- v3.0.0: Ground-up UI redesign. Navigation is grouped into Library, Tools, and App, shown as a persistent left sidebar by default or a top bar if you prefer (toggle under Display). Custom Formats are completely rebuilt with a category sidebar, inline condition pills, hover tooltips, clone, and a default-score field; you can also push any CF to a Radarr or Sonarr instance with one click without touching a profile. Sync Rules gains per-rule Notes and Clone-across-instances. The new three-mode Auto-sync lets you pick Apply automatically (default), Just notify me, or Wait before applying with a delay you choose. Arr drift detection flags edits made directly in Radarr or Sonarr and fires notifications. Scoring Sandbox state moves to a shareable JSON file under /config/sandbox/ so titles survive browser clears and you can paste a sandbox dump to a teammate. Find unused Quality Profiles. CIDR ranges supported in TRUSTED_PROXIES. Thanks @xopez for issue templates and the unsaved-changes guard (PR #53, Issue #52).
+### 2026-06-07
+- v3.2.0: CF descriptions move inline next to the name on Profile Editor and Profile Overview, matching the Custom Formats Browse layout. Hide / Show toggle on the tab bar collapses back to compact view. Clicking a section label (Audio, HDR Formats, Streaming Services, etc.) in the sidebar now renders every group under it at once, mirroring how Custom Formats Browse parent click already worked. The customizations counter finally sees CFs excluded via group-off toggle, so a rule that disables a default-on group reads "18 customizations" in the header (matching the Sync Rules pill) instead of "0", and the Diffs view shows a Re-enable row for the disabled group. Plus a stack of TRaSH description rendering fixes: bullet lists wrap into real lists, "!!! note" admonitions and image markup no longer leak as literal text, backticks vanish. CFs like ATMOS (undefined), IMAX Enhanced, German DL, and Special Edition all render cleanly now.
 
-### 2026-05-14
-- v2.5.9: Toast notifications stack consistently again. Switched to a line-count trigger and removed a flexbox layout bug so Sync All toasts in the same batch have predictable uniform sizing.
+### 2026-06-06
+- v3.1.0: Custom Formats "In use" sub-tab catalogues every CF on each Arr instance with Managed and Unmanaged views, per-CF drift detection, and one-click adopt. The "+ Add to Arr" button can now target a sync rule profile, not just the instance. Sortable In use columns. Sticky toolbars on Browse and In use. Sandbox export per-section toggles and Hide failed filter. Plus the v3.0.0 bug fixes that landed during soak.
 
 For full version history, see CHANGELOG.md on GitHub.
   </Changes>
