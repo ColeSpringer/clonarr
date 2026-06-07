@@ -1242,6 +1242,23 @@ button.sp-summary-active:focus-visible {
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* Disabled-default-on-group diff row variant. The default diff grid
+   reserves a 220px name column, which clips longer composite labels
+   like "Streaming Services General (18 CFs excluded)". Give the name
+   column 1fr instead, drop the source-span truncation, and let the
+   on / arrow / disabled cells anchor right. */
+.sp-ov-card-diffs .sp-ov-diff-row-grp {
+  grid-template-columns: 20px 1fr 60px 14px 80px 1fr;
+}
+.sp-ov-card-diffs .sp-ov-diff-row-grp .sp-ov-cf-name {
+  max-width: none;
+  overflow: visible;
+}
+.sp-ov-card-diffs .sp-ov-diff-row-grp .sp-ov-cf-source {
+  overflow: visible;
+  text-overflow: clip;
+  flex: 0 0 auto;
+}
 .sp-ov-diff-old {
   color: var(--text-muted);
   opacity: 0.7;
