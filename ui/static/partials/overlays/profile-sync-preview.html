@@ -1514,6 +1514,7 @@
               <template x-for="cf in spOverviewFlatCFs(null)" :key="'flat-all-'+cf.trashId">
                 <div class="sp-ov-cf-row">
                   <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                  <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score"
                           :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
@@ -1561,6 +1562,7 @@
                     <template x-for="cf in section.cfs" :key="'grp-all-'+cf.trashId">
                       <div class="sp-ov-cf-row">
                         <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                        <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score"
                                 :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')"
@@ -1608,6 +1610,7 @@
               <template x-for="cf in spOverviewFlatCFs('optional-in-profile')" :key="'flat-opt-'+cf.trashId">
                 <div class="sp-ov-cf-row">
                   <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                  <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                   </template>
@@ -1638,6 +1641,7 @@
                     <template x-for="cf in section.cfs.filter(c => !c._isRequired)" :key="cf.trashId">
                       <div class="sp-ov-cf-row">
                         <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                        <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                         </template>
@@ -1682,6 +1686,7 @@
               <template x-for="cf in spOverviewFlatCFs('additional')" :key="'flat-add-'+cf.trashId">
                 <div class="sp-ov-cf-row">
                   <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                  <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                   <template x-if="!pdOverridesEnabled">
                     <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                   </template>
@@ -1712,6 +1717,7 @@
                     <template x-for="cf in section.cfs" :key="cf.trashId">
                       <div class="sp-ov-cf-row">
                         <div class="sp-ov-cf-namecell">{{template "_sp-overview-cf-control" .}}<span class="sp-ov-cf-name" x-text="cf.name"></span></div>
+                        <div class="sp-ov-cf-desc" x-html="cfInlineDescriptionHTML(cf, activeAppType)"></div>
                         <template x-if="!pdOverridesEnabled">
                           <span class="sp-ov-cf-score" :class="cf._score.isOverridden ? 'overridden' : (cf._score.effective > 0 ? 'positive' : cf._score.effective < 0 ? 'negative' : 'zero')" x-text="cf._score.effective != null ? ((cf._score.effective > 0 ? '+' : '') + cf._score.effective) : ''" x-tt="cf._score.isOverridden ? ('Profile default: ' + ((cf._score.original > 0 ? '+' : '') + cf._score.original)) : ''"></span>
                         </template>

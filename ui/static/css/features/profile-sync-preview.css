@@ -1033,18 +1033,58 @@ button.sp-summary-active:focus-visible {
 }
 .sp-ov-cf-row {
   display: grid;
-  /* Mirror .sp-cf-row column widths so name + score align identically
-     between Profile default editor and Profile overview's CF lists.
-     Customized info (default value → new value) lives INSIDE the score
-     cell so the score column starts at the same x across all rows
-     regardless of whether the row is overridden. Trailing 1fr column
-     absorbs remaining card width. */
-  grid-template-columns: 240px 160px 1fr;
-  align-items: baseline;
-  gap: 12px;
-  padding: 2px 0;
+  /* Mirror .sp-cf-row layout: name | description | score so the two
+     editor tabs read the same horizontally. Customized info
+     (default value → new value) lives INSIDE the score cell so the
+     score column starts at the same x across all rows. The
+     .sp-ov-card-diffs descendant override below keeps the diff
+     section's wider grid (label | old | → | new | spacer) intact. */
+  grid-template-columns: 220px 1fr 100px;
+  align-items: start;
+  column-gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-muted);
   font-size: 13px;
 }
+.sp-ov-cf-list > .sp-ov-cf-row:first-child,
+.sp-ov-cf-row:first-child { border-top: 0; }
+.sp-ov-cf-row > .sp-ov-cf-namecell,
+.sp-ov-cf-row > .sp-ov-cf-name { align-self: center; }
+.sp-ov-cf-row > .sp-ov-cf-desc { align-self: center; grid-column: 2; }
+.sp-ov-cf-row > .sp-ov-cf-score { align-self: center; justify-self: end; grid-column: 3; }
+/* Description-hidden: drop the desc column so the score hugs the
+   name, matching .sp-cf-row's hide behaviour on Profile default. */
+.sp-hide-cf-desc .sp-ov-cf-row { grid-template-columns: 220px 100px; }
+.sp-hide-cf-desc .sp-ov-cf-row > .sp-ov-cf-score { grid-column: 2; }
+.sp-hide-cf-desc .sp-ov-cf-desc { display: none; }
+/* Inline description in the overview's CF rows. Mirrors .sp-cf-desc
+   so Profile default and Overview render identical prose styling. */
+.sp-ov-cf-desc {
+  font-size: 12px;
+  color: var(--text-body);
+  line-height: 1.45;
+  min-width: 0;
+}
+.sp-ov-cf-desc .cf-desc-text { color: var(--text-body); }
+.sp-ov-cf-desc .cf-desc-text u { text-decoration: underline; }
+.sp-ov-cf-desc .cf-desc-empty { color: var(--text-muted); font-style: italic; }
+.sp-ov-cf-desc .cf-desc-links {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}
+.sp-ov-cf-desc .cf-desc-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-right: 12px;
+}
+.sp-ov-cf-desc .cf-desc-links a:hover { color: var(--app-color); text-decoration: underline; }
+.sp-ov-cf-desc:empty { display: none; }
 .sp-ov-cf-name {
   color: var(--text-primary);
   overflow: hidden;
