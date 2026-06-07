@@ -474,7 +474,7 @@
       </template>
       <button class="btn btn-sm sp-summary-action"
               style="border-color:var(--accent-red);color:var(--accent-red)"
-              @click="pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
+              @click="$event.currentTarget.blur(); pdOverridesEnabled ? pdConfirmDisable() : spConfirmEnableCustomize()"
               x-tt="pdOverridesEnabled ? 'Clear all customizations and revert this profile to TRaSH defaults' : 'Override profile defaults for language, scores, quality, and custom formats'"
               x-text="pdOverridesEnabled ? 'Reset to profile defaults' : 'Customize this profile'"></button>
     </div>
