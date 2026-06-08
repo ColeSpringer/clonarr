@@ -381,6 +381,54 @@ export default {
       const m = ((g && g.name) || '').match(/^\[([^\]]+)\]\s*/);
       return m ? m[1].trim().toUpperCase() : 'OTHER';
     },
+    // Profile Editor CF search matcher. Mirrors Browse: multi-term
+    // OR-match across name + description + positive specifications
+    // (negated specs skipped so "atmos" does not match PCM via its
+    // Not TrueHD/ATMOS exclusion). Single-term searches degrade
+    // gracefully to simple substring match.
+    spMatchCF(cf, query) {
+      if (!cf) return false;
+      const q = String(query || '').trim().toLowerCase();
+      if (!q) return true;
+      const terms = q.split(/\s+/).filter(t => t.length > 0);
+      const haystacks = [(cf.name || '').toLowerCase()];
+      if (cf.description) haystacks.push(String(cf.description).toLowerCase());
+      for (const s of (cf.specifications || [])) {
+        if (!s || s.negate) continue;
+        if (s.name) haystacks.push(String(s.name).toLowerCase());
+      }
+      return terms.some(term => haystacks.some(hay => hay.includes(term)));
+    },
+    // Sidebar bulk-toggle helpers. Expand sets every parent section
+    // explicit-open; Collapse sets explicit-closed. Both persist to
+    // localStorage so the bulk state survives reload. Used by the
+    // toolbar Expand all / Collapse all buttons.
+    // Returns true when at least one parent section in the active
+    // tab's sidebar is currently expanded. Drives the toggle button
+    // label so it reads "Collapse all" when something is open and
+    // "Expand all" when everything is closed - same pattern Browse
+    // uses for anyCFCategoryExpanded.
+    spAnyParentExpanded() {
+      const groups = this.profileDetail?.detail?.trashGroups || [];
+      const sections = this.spGroupBySection(groups);
+      for (const s of sections) {
+        if (this.isSpSidebarSectionExpanded(s.section, s.items)) return true;
+      }
+      return false;
+    },
+    // Single-button toggle: if any parent is currently expanded,
+    // collapse them all; otherwise expand them all. Persists via
+    // localStorage so the bulk state survives reload.
+    spToggleAllParents() {
+      const groups = this.profileDetail?.detail?.trashGroups || [];
+      const sections = this.spGroupBySection(groups);
+      const target = !this.spAnyParentExpanded();
+      const updated = { ...(this.spSidebarExpanded || {}) };
+      for (const s of sections) updated[s.section] = target;
+      this.spSidebarExpanded = updated;
+      this.spExpandedSection = null;
+      try { window.localStorage.setItem('sp-sidebar-expanded', JSON.stringify(updated)); } catch (_) {}
+    },
     spGroupBySection(groups) {
       const re = /^\[([^\]]+)\]\s*(.*)$/;
       const sections = new Map();

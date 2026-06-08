@@ -1458,6 +1458,13 @@ var (
 	// only the decorative !!! header is dropped, matching how
 	// reAdmonition treats ??? collapsible headers.
 	reAdmonExclaim = regexp.MustCompile(`(?m)^!!!\s+\w+(\s+"[^"]*")?\s*$`)
+	// reItalic matches single-asterisk markdown italics (*text*). Runs
+	// AFTER the ** bold strip so the ** of any **bold** wrappers cannot
+	// be misread as two solo asterisks. Solo asterisks not part of a
+	// matched pair (e.g. paths like *.json, arithmetic) stay. Output is
+	// <em> since sanitizeHTML allows it - same convert-vs-strip choice
+	// we already made for markdown links + lists + tables.
+	reItalic       = regexp.MustCompile(`\*([^*\n]+)\*`)
 	reTitleLine    = regexp.MustCompile(`(?m)^\*\*[^*]+\*\*\s*$`)
 )
 
@@ -1521,12 +1528,14 @@ func cleanDescription(raw string) string {
 	s = reSnippetIncl.ReplaceAllString(s, "")
 	s = reAdmonition.ReplaceAllString(s, "")
 	s = reAdmonExclaim.ReplaceAllString(s, "")
-	// Strip markdown bold/italic + inline-code markers. Backticks
-	// (`code`) appear literally in the rendered description otherwise,
-	// e.g. "default score of `-10000`" → "default score of `-10000`".
+	// Strip markdown bold + inline-code markers. Backticks (`code`)
+	// appear literally otherwise. Italic single-asterisks get the
+	// reItalic convert-to-<em> treatment next so the emphasis the
+	// author intended stays visible.
 	s = strings.ReplaceAll(s, "**", "")
 	s = strings.ReplaceAll(s, "__", "")
 	s = strings.ReplaceAll(s, "`", "")
+	s = reItalic.ReplaceAllString(s, `<em>$1</em>`)
 	// Convert markdown pipe tables + bullet lists to HTML.
 	lines := strings.Split(s, "\n")
 	var cleaned []string

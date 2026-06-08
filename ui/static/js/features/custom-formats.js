@@ -97,25 +97,53 @@ export default {
     filteredCFBrowseGroups(appType) {
       const filter = (this.cfBrowseFilter || '').trim().toLowerCase();
       let groups = this.getCFBrowseGroups(appType) || [];
-      // Sidebar category pin — if the user selected a specific
-      // category, drop everything else BEFORE the text filter runs.
-      // Three forms: 'all' = no pin, 'parent:<name>' = all subs under
-      // that parent, '<displayName>' = exact single subgroup.
-      const active = this.cfBrowseActiveCategory;
-      if (active && active !== 'all') {
-        if (active.startsWith('parent:')) {
-          const parentName = active.slice('parent:'.length);
-          groups = groups.filter(cat => (cat.category || 'Other') === parentName);
-        } else {
-          groups = groups.filter(cat => cat.displayName === active);
+      // Sidebar category pin only applies when search is empty. When
+      // the user types a query, broaden across every category so a
+      // CF can be found without first remembering which sidebar
+      // entry it lives under. The row's source group is rendered in
+      // the result, so cross-category surfacing does not confuse.
+      if (!filter) {
+        const active = this.cfBrowseActiveCategory;
+        if (active && active !== 'all') {
+          if (active.startsWith('parent:')) {
+            const parentName = active.slice('parent:'.length);
+            groups = groups.filter(cat => (cat.category || 'Other') === parentName);
+          } else {
+            groups = groups.filter(cat => cat.displayName === active);
+          }
         }
+        return groups;
       }
-      if (!filter) return groups;
+      // Multi-term OR-match. Splits on whitespace so a query like
+      // "5.1 7.1" surfaces both 5.1 Surround AND 7.1 Surround. Each
+      // term tests against name, description, AND specification
+      // labels (the condition pills the user already sees on each
+      // row), so "atmos" finds CFs whose conditions mention Atmos
+      // even when the name does not.
+      const terms = filter.split(/\s+/).filter(t => t.length > 0);
+      const matchCF = (cf) => {
+        const haystacks = [
+          (cf.name || '').toLowerCase(),
+          (cf.description || '').toLowerCase(),
+        ];
+        // Only positive specs contribute to the haystack. TRaSH audio
+        // CFs typically carry a stack of "Not <other format>" negated
+        // specs (PCM has "Not TrueHD/ATMOS" so it stays mutually
+        // exclusive). Without the negate-skip, searching "atmos" would
+        // match every audio CF via its NOT-Atmos spec - the opposite
+        // of intent. spec.implementation is dropped from the haystack
+        // because it's the same boilerplate name across the catalog
+        // ("ReleaseTitleSpecification") and never carries user signal.
+        for (const s of (cf.specifications || [])) {
+          if (!s || s.negate) continue;
+          if (s.name) haystacks.push(String(s.name).toLowerCase());
+        }
+        return terms.some(term => haystacks.some(hay => hay.includes(term)));
+      };
       return groups
         .map(cat => {
-          if (cat.displayName.toLowerCase().includes(filter)) return cat;
           const filteredGroups = (cat.groups || [])
-            .map(g => ({ ...g, cfs: (g.cfs || []).filter(cf => cf.name.toLowerCase().includes(filter)) }))
+            .map(g => ({ ...g, cfs: (g.cfs || []).filter(matchCF) }))
             .filter(g => g.cfs.length > 0);
           if (filteredGroups.length === 0) return null;
           return {

@@ -470,6 +470,21 @@ func TestCleanDescription_StripImagesAndAdmonitions(t *testing.T) {
 			in:   "Intro line.\n\n- First item.\n- Second item.\n",
 			want: "Intro line.\n<ul><li>First item.</li><li>Second item.</li></ul>",
 		},
+		{
+			name: "single-asterisk italics convert to em",
+			in:   "Body. *This is parenthetical clarifying text.* Trailing.",
+			want: "Body. <em>This is parenthetical clarifying text.</em> Trailing.",
+		},
+		{
+			name: "italic inside subscript HTML survives the strip",
+			in:   "<sub>*This custom format accepts DV Profile 5.*</sub>",
+			want: "<em>This custom format accepts DV Profile 5.</em>",
+		},
+		{
+			name: "solo asterisks not in a pair stay (e.g. *.json paths)",
+			in:   "Glob pattern *.json matches.",
+			want: "Glob pattern *.json matches.",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

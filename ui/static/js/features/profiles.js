@@ -3931,18 +3931,27 @@ export default {
     cfSyncRulesFiltered(appType) {
       let rows = this._cfSRRowsForView(appType);
       const cat = this.cfSyncRulesActiveCat || 'all';
-      if (cat.startsWith('cat:')) {
-        const target = cat.slice('cat:'.length);
-        rows = rows.filter(r => (r.category || 'Other') === target);
-      } else if (cat.startsWith('sub:')) {
-        const rest = cat.slice('sub:'.length);
-        const pipe = rest.indexOf('|');
-        if (pipe > -1) {
-          const parent = rest.slice(0, pipe);
-          const child = rest.slice(pipe + 1);
-          rows = rows.filter(r =>
-            (r.category || 'Other') === parent
-            && (r.subcategory || '') === child);
+      const q = (this.cfSyncRulesSearch || '').trim().toLowerCase();
+      // Sidebar category pin only applies when search is empty.
+      // Active query broadens to every category so a CF can be
+      // found without first remembering which sub-cat it lives
+      // under - matches the Custom Formats Browse search behaviour.
+      // view: filters (drifted / updates) still apply because they
+      // are a different axis (status, not taxonomy).
+      if (!q) {
+        if (cat.startsWith('cat:')) {
+          const target = cat.slice('cat:'.length);
+          rows = rows.filter(r => (r.category || 'Other') === target);
+        } else if (cat.startsWith('sub:')) {
+          const rest = cat.slice('sub:'.length);
+          const pipe = rest.indexOf('|');
+          if (pipe > -1) {
+            const parent = rest.slice(0, pipe);
+            const child = rest.slice(pipe + 1);
+            rows = rows.filter(r =>
+              (r.category || 'Other') === parent
+              && (r.subcategory || '') === child);
+          }
         }
       }
       const instId = this.cfSyncRulesActiveInstance || '';
@@ -3978,17 +3987,43 @@ export default {
           })
           .filter(Boolean);
       }
-      const q = (this.cfSyncRulesSearch || '').trim().toLowerCase();
+      // Search reads the same `q` value computed at the top. Multi-
+      // term OR-match: "5.1 7.1" surfaces both 5.1 Surround and
+      // 7.1 Surround. Each term tests against name, profile names,
+      // and (when cfBrowseData is loaded) the description +
+      // specification labels from the TRaSH catalog. The backend
+      // CFRow currently carries only Name + Category, so the rich
+      // fields come from the frontend lookup.
       if (q) {
+        const terms = q.split(/\s+/).filter(t => t.length > 0);
+        const data = this.cfBrowseData?.[appType] || {};
+        const lookup = new Map();
+        for (const c of (data.cfs || [])) {
+          if (c && c.trash_id) lookup.set(c.trash_id, c);
+        }
+        for (const c of (data.customCFs || [])) {
+          if (c && c.trashId) lookup.set(c.trashId, c);
+        }
         rows = rows.filter(r => {
-          if ((r.name || '').toLowerCase().includes(q)) return true;
+          const haystacks = [(r.name || '').toLowerCase()];
           for (const inst of (r.instances || [])) {
             for (const p of (inst.profiles || [])) {
-              if ((p.trashProfileName || '').toLowerCase().includes(q)) return true;
-              if ((p.arrProfileName || '').toLowerCase().includes(q)) return true;
+              if (p.trashProfileName) haystacks.push(String(p.trashProfileName).toLowerCase());
+              if (p.arrProfileName) haystacks.push(String(p.arrProfileName).toLowerCase());
             }
           }
-          return false;
+          const meta = r.trashId ? lookup.get(r.trashId) : null;
+          if (meta) {
+            if (meta.description) haystacks.push(String(meta.description).toLowerCase());
+            // Skip negated specs - searching "atmos" should not match
+            // PCM via its "Not TrueHD/ATMOS" exclusion spec. Mirror the
+            // Browse-side decision.
+            for (const s of (meta.specifications || [])) {
+              if (!s || s.negate) continue;
+              if (s.name) haystacks.push(String(s.name).toLowerCase());
+            }
+          }
+          return terms.some(term => haystacks.some(hay => hay.includes(term)));
         });
       }
       return rows;

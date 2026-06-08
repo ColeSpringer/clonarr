@@ -495,15 +495,6 @@
         </template>
       </button>
       <button class="sp-tab" :class="{ active: spActiveTab === 'overview' }" @click="spActiveTab = 'overview'">Profile overview</button>
-      <!-- Descriptions toggle - right-aligned via .sp-tab-utility's
-           auto margin. No active state (it is a preference, not a
-           tab). LocalStorage persists per browser. -->
-      <button type="button"
-              class="sp-tab sp-tab-utility sp-desc-toggle-tab"
-              @click="spShowCFDesc = !spShowCFDesc; try { localStorage.setItem('clonarr_spShowCFDesc', spShowCFDesc ? '1' : '0'); } catch (_) {}"
-              x-tt="spShowCFDesc ? 'Collapse CF rows to name and score only.' : 'Show CF descriptions inline.'">
-        <span x-text="spShowCFDesc ? 'Hide descriptions' : 'Show descriptions'"></span>
-      </button>
       <!-- Profile updates - TRaSH-source pending changes only. Shows when
            Profile Sync detection has found upstream TRaSH changes for
            this rule. Drift entries get their own sibling tab below.
@@ -527,6 +518,34 @@
               @click="spActiveTab = 'drift'">Arr drift
         <span class="sp-tab-count" x-text="pdPendingChangesDrift().length"></span>
       </button>
+      <!-- Inline toolbar - search + Expand toggle + Hide descriptions
+           sit on the same row as the tabs to keep vertical space
+           compact. Only renders on the three main tabs; updates and
+           drift have their own focused layouts. margin-left:auto on
+           .sp-tabs-tail pushes the cluster to the right edge so it
+           does not crowd the tab buttons. -->
+      <div class="sp-tabs-tail" x-show="['default','additional','overview'].includes(spActiveTab)">
+        <div class="sp-toolbar-search">
+          <input type="search" class="sp-toolbar-search-input"
+                 x-model.debounce.150ms="spSearchFilter"
+                 placeholder="Search CFs by name or description…"
+                 autocomplete="off"
+                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
+          <button type="button" class="sp-toolbar-search-clear"
+                  x-show="spSearchFilter"
+                  @click="spSearchFilter = ''"
+                  aria-label="Clear search">&#10005;</button>
+        </div>
+        <button type="button" class="sp-toolbar-btn"
+                x-show="['default','additional'].includes(spActiveTab)"
+                @click="spToggleAllParents()"
+                x-tt="spAnyParentExpanded() ? 'Close every category section in the sidebar.' : 'Open every category section in the sidebar.'"
+                x-text="spAnyParentExpanded() ? 'Collapse all' : 'Expand all'"></button>
+        <button type="button" class="sp-toolbar-btn"
+                @click="spShowCFDesc = !spShowCFDesc; try { localStorage.setItem('clonarr_spShowCFDesc', spShowCFDesc ? '1' : '0'); } catch (_) {}"
+                x-tt="spShowCFDesc ? 'Collapse CF rows to name and score only.' : 'Show CF descriptions inline.'"
+                x-text="spShowCFDesc ? 'Hide descriptions' : 'Show descriptions'"></button>
+      </div>
     </div>
 
     <!-- ===== Profile default tab ===== -->
@@ -539,17 +558,6 @@
         <!-- Sidebar search - filters CF rows in the right pane to ones
              whose name matches. Shared state with the Overview /
              Additional CF tabs so the filter follows you across them. -->
-        <div class="sp-sidebar-search-wrap">
-          <input type="search" class="sp-sidebar-search"
-                 x-model.debounce.150ms="spSearchFilter"
-                 placeholder="Search CFs…"
-                 autocomplete="off"
-                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
-          <button type="button" class="sp-sidebar-search-clear"
-                  x-show="spSearchFilter"
-                  @click="spSearchFilter = ''"
-                  aria-label="Clear search">&#10005;</button>
-        </div>
         <!-- Required CFs sits outside any category section, so it carries
              its own colored left-border via the cat-required class. -->
         <button class="sp-sub-nav-item sp-sub-nav-standalone cat-required"
@@ -598,6 +606,16 @@
             </div>
           </div>
         </template>
+        <!-- All categories sits at the bottom and is NOT default-
+             selected on rule open. It is an opt-in for users who
+             want to scan every group at once; the default state
+             (spActiveGroup === '__required') keeps the editor light
+             when a rule first opens. -->
+        <button class="sp-sub-nav-item sp-sub-nav-standalone sp-sub-nav-all"
+                :class="{ active: spActiveParent === '__all' }"
+                @click="spSelectParent('__all')">
+          <span class="sp-sub-nav-label">All categories</span>
+        </button>
       </nav>
 
       <!-- Main content: selected sub-nav item's CFs -->
@@ -612,14 +630,14 @@
              matches the filter. Without the second guard the section
              header + intro paragraph would render even when no rows
              match, leaving an empty card. -->
-        <template x-if="spActiveGroup === '__required' || (!!spSearchFilter && (profileDetail?.detail?.formatItemNames || []).some(fi => fi.name.toLowerCase().includes(spSearchFilter.toLowerCase())))">
+        <template x-if="spActiveGroup === '__required' || spActiveParent === '__all' || (!!spSearchFilter && (profileDetail?.detail?.formatItemNames || []).some(fi => spMatchCF(fi, spSearchFilter)))">
           <div>
             <h2 class="sp-content-title">Required CFs</h2>
             <p class="sp-content-sub">Custom Formats this profile pins as part of its base setup - always included when syncing. <span x-text="(profileDetail?.detail?.formatItemNames || []).length"></span> total.</p>
             <div class="sp-cf-list">
               <template x-for="fi in (profileDetail?.detail?.formatItemNames || [])" :key="fi.trashId">
                 <div class="sp-cf-row sp-cf-locked"
-                     x-show="!spSearchFilter || fi.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
+                     x-show="!spSearchFilter || spMatchCF(fi, spSearchFilter)"
                      :class="(selectedOptionalCFs[fi.trashId] === false) ? 'sp-cf-req-excluded' : ''"
                      x-data="{
                        get _def() { return fi.score; },
@@ -723,8 +741,8 @@
              selected group doesn't render with zero rows when its
              matches live elsewhere). When search is empty, mount only
              the active group - preserves lazy-mount perf. -->
-        <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g))">
-          <div x-data="{
+        <template x-if="!!spSearchFilter ? (g.cfs || []).some(cf => spMatchCF(cf, spSearchFilter)) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g) || spActiveParent === '__all')">
+          <div class="sp-group-block" x-data="{
                  get _groupOn() { return selectedOptionalCFs['__grp_'+g.name] !== undefined ? selectedOptionalCFs['__grp_'+g.name] : g.defaultEnabled; },
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; },
@@ -782,6 +800,13 @@
                   <span x-text="g.cfs[0].name"></span>
                   <span class="sp-action-state" x-text="g.defaultEnabled ? '(default-on)' : '(optional)'"></span>
                 </span>
+                <!-- Single-CF combined rows skip the per-row CF list, so
+                     the description has nowhere else to live. Render it
+                     inline between the label and score - same helper as
+                     the multi-CF .sp-cf-row uses, and the
+                     .sp-hide-cf-desc toggle hides it via the existing
+                     global rule. -->
+                <span class="sp-cf-desc sp-cf-desc-inline" x-html="cfInlineDescriptionHTML(g.cfs[0], activeAppType)"></span>
                 <!-- _defScore: prefer pre-resolved cf.score (always set
                      for profile.trashGroups); fall back to
                      resolveCFDefaultScore so the row keeps working if
@@ -883,7 +908,7 @@
                            })()">
                     <span class="slider"></span>
                   </span>
-                  <span class="sp-action-label">All optional CFs</span>
+                  <span class="sp-action-label" x-text="'All optional in ' + _shortName"></span>
                   <span class="sp-action-count"
                         x-text="(() => {
                           const opt = g.cfs.filter(cf => !cf.required && !cf.default);
@@ -896,7 +921,7 @@
             <div class="sp-cf-list" x-show="!_singleCF">
               <template x-for="cf in (g.cfs || [])" :key="cf.trashId">
                 <div class="sp-cf-row"
-                     x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
+                     x-show="!spSearchFilter || spMatchCF(cf, spSearchFilter)"
                      :class="{
                        'sp-cf-locked': cf.required,
                        'sp-cf-req-excluded': cf.required && selectedOptionalCFs[cf.trashId] === false,
@@ -1028,17 +1053,6 @@
              is active. Matches CF name (case-insensitive). Same state
              also used by the Profile default + Additional CF sub-nav
              search inputs so the filter follows the user across tabs. -->
-        <div class="sp-sidebar-search-wrap">
-          <input type="search" class="sp-sidebar-search"
-                 x-model.debounce.150ms="spSearchFilter"
-                 placeholder="Search CFs…"
-                 autocomplete="off"
-                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
-          <button type="button" class="sp-sidebar-search-clear"
-                  x-show="spSearchFilter"
-                  @click="spSearchFilter = ''"
-                  aria-label="Clear search">&#10005;</button>
-        </div>
         <button class="sp-sub-nav-item"
                 :class="{ active: spOverviewSection === 'all' }"
                 @click="spOverviewSection = 'all'">
@@ -1913,17 +1927,6 @@
          x-effect="if (spActiveTab === 'additional' && pdOverridesEnabled && (extraCFGroups || []).length === 0 && profileDetail?.instance?.type) loadExtraCFList()">
       <nav class="sp-sub-nav">
         <!-- Sidebar search shared with the other tabs. -->
-        <div class="sp-sidebar-search-wrap">
-          <input type="search" class="sp-sidebar-search"
-                 x-model.debounce.150ms="spSearchFilter"
-                 placeholder="Search CFs…"
-                 autocomplete="off"
-                 @keydown.escape="spSearchFilter = ''; $event.target.blur()">
-          <button type="button" class="sp-sidebar-search-clear"
-                  x-show="spSearchFilter"
-                  @click="spSearchFilter = ''"
-                  aria-label="Clear search">&#10005;</button>
-        </div>
         <!-- Pre-filter the sub-nav to groups with at least one unique CF
              (a CF whose trashId isn't already in any profile-default
              group). Hides Golden Rule HD when UHD is active (identical
@@ -1960,6 +1963,13 @@
             </div>
           </div>
         </template>
+        <!-- All categories at the bottom - same opt-in pattern as
+             Profile default. -->
+        <button class="sp-sub-nav-item sp-sub-nav-standalone sp-sub-nav-all"
+                :class="{ active: spActiveParent === '__all' }"
+                @click="spSelectParent('__all')">
+          <span class="sp-sub-nav-label">All categories</span>
+        </button>
       </nav>
       <main class="sp-content">
         <!-- Lazy-mount: same x-if pattern as the Profile default
@@ -1972,8 +1982,8 @@
         <!-- Same cross-group-search model as Profile default: when
              search is active, mount only matching groups (ignoring
              spActiveGroup); when empty, mount the active group. -->
-        <template x-if="(!!spSearchFilter ? spAdditionalGroupCFs(g).some(cf => cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g))) && spAdditionalGroupCFs(g).length > 0">
-          <div x-data="{
+        <template x-if="(!!spSearchFilter ? spAdditionalGroupCFs(g).some(cf => spMatchCF(cf, spSearchFilter)) : (spActiveGroup === g.name || spActiveParent === spSectionOfGroup(g) || spActiveParent === '__all')) && spAdditionalGroupCFs(g).length > 0">
+          <div class="sp-group-block" x-data="{
                  get _section() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? m[1].trim() : ''; },
                  get _shortName() { const m = (g.name||'').match(/^\[([^\]]+)\]\s*(.*)$/); return m ? (m[2].trim() || g.name) : g.name; }
                }">
@@ -2015,7 +2025,7 @@
                            })()">
                     <span class="slider"></span>
                   </span>
-                  <span class="sp-action-label">All CFs in this group</span>
+                  <span class="sp-action-label" x-text="'All in ' + _shortName"></span>
                   <span class="sp-action-count"
                         x-text="(() => {
                           const cfs = spAdditionalGroupCFs(g);
@@ -2038,7 +2048,7 @@
                    fast-path for CFs that also appear in this profile. -->
               <template x-for="cf in spAdditionalGroupCFs(g)" :key="cf.trashId">
                 <div class="sp-cf-row"
-                     x-show="!spSearchFilter || cf.name.toLowerCase().includes(spSearchFilter.toLowerCase())"
+                     x-show="!spSearchFilter || spMatchCF(cf, spSearchFilter)"
                      x-data="{
                        get _def() { const r = resolveCFDefaultScore(cf.trashId); return (typeof r === 'number') ? r : 0; },
                        /* Read extras FIRST then cfScoreOverrides - matches

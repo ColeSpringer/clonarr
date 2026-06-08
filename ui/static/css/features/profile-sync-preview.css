@@ -263,6 +263,80 @@ button.sp-summary-active:focus-visible {
   padding: 0 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* Inline toolbar that sits on the tabs row. margin-left:auto on the
+   container pushes the cluster to the right edge so the tab buttons
+   keep their natural left-anchor. Visuals mirror the Custom Formats
+   Browse toolbar (flat-text buttons with hover glow, slim search
+   input) so the two surfaces read identically. */
+.sp-tabs-tail {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 0 8px;
+}
+.sp-toolbar-search {
+  position: relative;
+  flex: 0 1 240px;
+  min-width: 160px;
+}
+.sp-toolbar-search-input {
+  width: 100%;
+  padding: 4px 22px 4px 8px;
+  font-size: 12px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+}
+.sp-toolbar-search-input:focus {
+  outline: 0;
+  border-color: var(--app-color);
+}
+.sp-toolbar-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.sp-toolbar-search-clear:hover { color: var(--text-primary); }
+/* Flat-text toolbar buttons - match .cf-browse-expand-toggle exactly
+   so Profile Editor + Custom Formats Browse read as one design.
+   white-space: nowrap keeps "Expand all" / "Hide descriptions" on
+   one line regardless of the available width. */
+.sp-toolbar-btn {
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.sp-toolbar-btn:hover {
+  color: var(--app-color);
+  background: var(--app-glow);
+}
+/* All categories sits at the bottom of the sidebar - subtle top
+   spacing + border separates it from the category sections above
+   without making the entry visually heavy. */
+.sp-sub-nav-all {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
 .sp-tab {
   padding: 8px 14px;
   background: transparent;
@@ -478,6 +552,25 @@ button.sp-summary-active:focus-visible {
   align-items: center;
   gap: 10px;
 }
+/* Group block wrapper - matters most in parent-mode where multiple
+   group blocks render stacked under one section. Without separator
+   the last CF row of one group blurs into the next group's title.
+   Every group-block carries a heavy top border + padding so the
+   transition into the next title is unmistakable. The reset only
+   fires when the group-block is also the first child of its parent
+   container (single-group view, no Required CFs above) - when
+   Required CFs renders above the first group-block, the separator
+   stays and acts as a clean boundary between Required and groups. */
+.sp-group-block {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 2px solid var(--border-strong, var(--border-muted));
+}
+.sp-group-block:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 .sp-content-title-name {
   display: flex;
   align-items: center;
@@ -569,6 +662,19 @@ button.sp-summary-active:focus-visible {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);
 }
+/* Inline description in single-CF combined rows. Flex-grow takes the
+   space between label and score so the score still anchors right.
+   Compact font matches the rest of the action-row. The action-row's
+   align-items: center handles vertical placement so we do not need
+   extra rules here. */
+.sp-action-row-combined .sp-cf-desc-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-body);
+  line-height: 1.4;
+}
+.sp-action-row-combined .sp-cf-desc-inline:empty { display: none; }
 .sp-action-label {
   color: var(--text-primary);
   font-weight: 500;
@@ -680,7 +786,7 @@ button.sp-summary-active:focus-visible {
   color: var(--text-muted);
 }
 .sp-cf-icon svg { display: block; }
-.sp-cf-row .toggle { justify-self: start; }
+.sp-cf-row .toggle { justify-self: start; align-self: center; }
 .sp-cf-locked .sp-cf-icon { color: var(--text-muted); }
 /* Phase 2c — lock icon turns into a button when Customize is on so
    the user can opt out of a required CF. Clickable affordance keeps
