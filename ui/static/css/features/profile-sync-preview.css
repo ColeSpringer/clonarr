@@ -649,32 +649,55 @@ button.sp-summary-active:focus-visible {
   cursor: default;
 }
 .sp-action-row .toggle { flex-shrink: 0; }
-/* Combined single-CF row — lock icon between toggle and label, score
-   on the right where the count usually sits. */
+/* Single-CF combined row — render the lone CF on the SAME column grid the
+   multi-CF .sp-cf-row (and the Additional CF list) uses: control | name |
+   description | score. Every other CF row already renders this way (e.g.
+   FLAC inside the multi-CF Audio Formats group); single-CF groups (the HDR
+   formats — DV, DV Boost, HDR, HDR10+ Boost, SDR) were the only ones still
+   on the boxed flex action-row, which dropped the description inline inside
+   the grey action-row background with no name/description spacing. Grid here
+   strips the background and lines the description up in its own column so
+   these rows match every other CF. */
+.sp-action-row-combined {
+  display: grid;
+  grid-template-columns: 22px 220px 1fr 100px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 8px;
+  background: transparent;
+  border-radius: 0;
+}
+.sp-action-row-combined > .toggle { grid-column: 1; justify-self: start; }
 .sp-action-row-combined .sp-cf-icon {
+  grid-column: 1;
+  justify-self: end;
   font-size: 12px;
   color: var(--text-muted);
-  flex-shrink: 0;
 }
+.sp-action-row-combined > .sp-action-label { grid-column: 2; }
 .sp-action-row-combined .sp-cf-score {
-  margin-left: auto;
+  grid-column: 4;
+  justify-self: end;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);
 }
-/* Inline description in single-CF combined rows. Flex-grow takes the
-   space between label and score so the score still anchors right.
-   Compact font matches the rest of the action-row. The action-row's
-   align-items: center handles vertical placement so we do not need
-   extra rules here. */
+.sp-action-row-combined .sp-cf-score-edit { grid-column: 4; justify-self: end; }
+/* Description column — mirrors .sp-cf-desc prose styling so single-CF rows
+   read identically to the multi-CF / Additional CF rows. */
 .sp-action-row-combined .sp-cf-desc-inline {
-  flex: 1 1 auto;
+  grid-column: 3;
   min-width: 0;
   font-size: 12px;
   color: var(--text-body);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .sp-action-row-combined .sp-cf-desc-inline:empty { display: none; }
+/* Hide-descriptions: drop the description column so the score hugs the
+   name, exactly like .sp-cf-row's hide behaviour. */
+.sp-hide-cf-desc .sp-action-row-combined { grid-template-columns: 22px 220px 100px; }
+.sp-hide-cf-desc .sp-action-row-combined .sp-cf-score,
+.sp-hide-cf-desc .sp-action-row-combined .sp-cf-score-edit { grid-column: 3; }
 .sp-action-label {
   color: var(--text-primary);
   font-weight: 500;
@@ -870,10 +893,12 @@ button.sp-summary-active:focus-visible {
   line-height: 1;
 }
 .sp-sidebar-search-clear:hover { color: var(--text-body); }
-/* "recommended" is our UI translation of TRaSH's `cf.default: true`
-   — the CF auto-checks when its group is enabled. Rendered as muted
-   meta-text rather than a pill so a group like Unwanted Formats with
-   12 of 16 default-on CFs doesn't read as a wall of green badges. */
+/* "default-on" tag renders next to a CF name when cf.default=true and
+   the CF is not required. Visually matches the "(default-on)" /
+   "(optional)" suffix used on the group toggle so the language is
+   consistent across both levels. Muted meta-text rather than a pill
+   so a group like Unwanted Formats with 12 of 16 default-on CFs
+   doesn't read as a wall of green badges. */
 .sp-cf-recommended {
   font-size: 10px;
   color: var(--text-muted);
