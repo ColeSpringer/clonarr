@@ -888,24 +888,15 @@ export default {
         }
       }
 
-      // Step 2: build the set of CFs covered by a group-off flag —
-      // their excludedCFs entry is redundant (group flag carries the
-      // signal) and writing sel=false on them would inhibit re-enable.
-      const groupOffCFs = new Set();
-      for (const g of (detail.trashGroups || [])) {
-        if (selOpt['__grp_' + g.name] === false) {
-          for (const cf of (g.cfs || [])) {
-            if (cf.required || cf.default) groupOffCFs.add(cf.trashId);
-          }
-        }
-      }
-
-      // Step 3: apply per-CF state. Skip the group-off-covered CFs in
-      // the excludedCFs loop so they end up sel=undefined (group flag
-      // cascades) instead of sel=false (looks like a Phase 2c lock).
+      // Step 2: apply per-CF state. Every excludedCFs entry gets
+      // sel=false so the per-CF toggle reads as off in the editor,
+      // matching the actual sync behaviour. Re-enabling the group
+      // via pdToggleGroup-on releases the default+required sel=false
+      // entries so they return to their natural on state - that
+      // handler covers the Phase 2c lock concern the previous skip
+      // path was guarding against.
       for (const tid of (rule.selectedCFs || [])) selOpt[tid] = true;
       for (const tid of (rule.excludedCFs || [])) {
-        if (groupOffCFs.has(tid)) continue;
         selOpt[tid] = false;
       }
       this.selectedOptionalCFs = selOpt;
@@ -1169,12 +1160,40 @@ export default {
 
     toggleOptionalCF(trashId) {
       const updated = { ...this.selectedOptionalCFs, [trashId]: !this.selectedOptionalCFs[trashId] };
-      // If enabling, deactivate any conflicting CFs (cross-group conflicts from conflicts.json)
       if (updated[trashId]) {
+        // Clean up stale __grp_<name>=false flags on default-on
+        // groups containing this CF. Without this, getExcludedCFIds
+        // would still see the group as off and emit the CF into
+        // excludedCFs even though the user just opted in - the
+        // resulting save would carry both selected and excluded
+        // entries for the same CF, and the backend's
+        // selected ∪ defaults - excluded math would drop it,
+        // leaving the activation as a no-op sync. The aggregate-
+        // based _groupOn already renders the group as on once any
+        // CF flips on; this just brings save in line with display.
+        const groups = this.profileDetail?.detail?.trashGroups || [];
+        for (const g of groups) {
+          if (!g.defaultEnabled) continue;
+          if (!(g.cfs || []).some(cf => cf.trashId === trashId)) continue;
+          const grpKey = '__grp_' + g.name;
+          if (updated[grpKey] === false) delete updated[grpKey];
+        }
+        // Existing conflict handling: deactivate any cross-group
+        // conflicts from conflicts.json so the new opt-in is not
+        // masked by a previously-active conflicting CF.
         const appType = this.profileDetail?.instance?.type || this.currentTab;
         for (const conflictId of this.getConflictingCFs(appType, trashId)) {
           updated[conflictId] = false;
         }
+      } else if (this.cfScoreOverrides && this.cfScoreOverrides[trashId] !== undefined) {
+        // Toggling a CF OFF drops its score override too — mirrors the
+        // group-off path in pdToggleGroup. Without this the override
+        // lingers in cfScoreOverrides, gets re-persisted by buildSyncBody,
+        // and resurfaces as a phantom "custom score" customization on a CF
+        // the user just deactivated.
+        const overrides = { ...this.cfScoreOverrides };
+        delete overrides[trashId];
+        this.cfScoreOverrides = overrides;
       }
       this.selectedOptionalCFs = updated;
     },
@@ -1801,6 +1820,14 @@ export default {
       const selForExtras = this.selectedOptionalCFs || {};
       for (const [tid, score] of Object.entries(this.cfScoreOverrides)) {
         if (this._isOrphanCustomTrashId(tid)) continue;
+        // Same sel-filter the extraCFs loop below applies: a CF the user
+        // toggled OFF must not survive in scoreOverrides. The sync engine
+        // already resets its Arr score to 0 (it's no longer in the profile
+        // set), but persisting the override onto the rule leaves a phantom
+        // customization — the Sync Rules "custom score" pill, the editor
+        // header count, and the diff all keep reporting an override for a
+        // CF that isn't in use anymore.
+        if (selForExtras[tid] === false) continue;
         allScoreOverrides[tid] = score;
       }
       for (const [tid, score] of Object.entries(this.extraCFs)) {
@@ -2394,16 +2421,28 @@ export default {
       // path skipped the history refresh, or if the rule was modified
       // outside the sync history flow. Fall back to sh.selectedCFs only
       // for orphaned profiles where no rule mapping exists.
-      const selectedCFs = (rule && Array.isArray(rule.selectedCFs))
-        ? rule.selectedCFs.slice()
+      //
+      // Gate the fallback on rule absence, NOT on whether the array
+      // parsed: SelectedCFs/ExcludedCFs are omitempty on the backend, so
+      // an empty list comes back as `undefined`, not `[]`. When a rule
+      // exists, an absent field means "no entries" and is authoritative —
+      // falling back to the (possibly stale) sync-history snapshot here
+      // would reintroduce opt-ins/opt-outs the user just cleared. That's
+      // what made a freshly-activated default-on CF revert on the next
+      // manual Sync: the rule's now-empty excludedCFs was omitted, the
+      // code fell through to the stale history row that still listed the
+      // CF as excluded, and the backend's selected ∪ defaults − excluded
+      // math dropped it again.
+      const selectedCFs = rule
+        ? (Array.isArray(rule.selectedCFs) ? rule.selectedCFs.slice() : [])
         : Object.keys(sh.selectedCFs || {}).filter(k => sh.selectedCFs[k]);
-      // Opt-outs follow the same prefer-rule-then-history pattern as selectedCFs
-      // and keepArrCFIDs. Rollback (useHistoryOnly=true) sets rule=null, so the
-      // history snapshot's excludedCFs is the only source — without this, every
-      // rolled-back sync would silently re-include CFs the user had opted out of
-      // at the time of the original sync.
-      const excludedCFs = (rule && Array.isArray(rule.excludedCFs))
-        ? rule.excludedCFs.slice()
+      // Opt-outs follow the same rule-authoritative pattern. Rollback
+      // (useHistoryOnly=true) sets rule=null, so the history snapshot's
+      // excludedCFs becomes the only source — without that branch, every
+      // rolled-back sync would silently re-include CFs the user had opted
+      // out of at the time of the original sync.
+      const excludedCFs = rule
+        ? (Array.isArray(rule.excludedCFs) ? rule.excludedCFs.slice() : [])
         : (Array.isArray(sh.excludedCFs) ? sh.excludedCFs.slice() : []);
       const body = {
         instanceId: inst.id,
@@ -3018,24 +3057,16 @@ export default {
       // re-apply the rule's excludedCFs here so the state is consistent
       // regardless of which load path ran.
       if (ruleForRestore && Array.isArray(ruleForRestore.excludedCFs)) {
-        // Mirror the groupOffViaExcluded skip from the per-group
-        // loop above — when a default-on group is wholly disabled
-        // its required+default CFs land in excludedCFs as the bulk
-        // group-off signal. Writing sel=false here would freeze them
-        // as Phase 2c locks (shadowing cf.default on re-enable),
-        // exactly the bug pdToggleGroup-off avoids.
-        const groupOffCFs = new Set();
-        for (const g of (this.profileDetail?.detail?.trashGroups || [])) {
-          if (!g.defaultEnabled) continue;
-          const defaultsInGroup = (g.cfs || []).filter(cf => cf.required || cf.default).map(cf => cf.trashId);
-          if (defaultsInGroup.length === 0) continue;
-          if (defaultsInGroup.every(tid => ruleForRestore.excludedCFs.includes(tid))) {
-            for (const tid of defaultsInGroup) groupOffCFs.add(tid);
-          }
-        }
+        // Write sel=false on every excludedCFs entry so the per-CF
+        // toggle reads as off in the editor. Without this the user
+        // would see a "deactivated group + activated CF" mismatch
+        // when they had only excluded one default-on CF. The Phase
+        // 2c lock concern the previous skip path was guarding
+        // against is now handled by pdToggleGroup re-enable, which
+        // clears sel=false on default+required CFs when the user
+        // toggles the group back on.
         const sel = { ...this.selectedOptionalCFs };
         for (const tid of ruleForRestore.excludedCFs) {
-          if (groupOffCFs.has(tid)) continue;
           sel[tid] = false;
         }
         this.selectedOptionalCFs = sel;
@@ -7021,13 +7052,29 @@ export default {
       const updated = { ...this.selectedOptionalCFs };
       updated['__grp_' + group.name] = enabled;
       if (!enabled) {
+        // Disable: clear opt-in sel=true entries AND explicitly
+        // mark default + required CFs as sel=false so the editor
+        // shows them as off. Without writing sel=false the per-CF
+        // toggles would fall back to cf.default and visually read
+        // as on while the group is off - the bug the user flagged.
         const overrides = { ...(this.cfScoreOverrides || {}) };
         let touchedOverrides = false;
         for (const cf of (group.cfs || [])) {
           if (updated[cf.trashId] === true) delete updated[cf.trashId];
+          if (cf.required || cf.default) updated[cf.trashId] = false;
           if (overrides[cf.trashId] !== undefined) { delete overrides[cf.trashId]; touchedOverrides = true; }
         }
         if (touchedOverrides) this.cfScoreOverrides = overrides;
+      } else {
+        // Enable: release any sel=false lingering on default + required
+        // CFs in this group so they return to their natural on state.
+        // Opt-in sel=true entries are not touched because they may be
+        // legitimate per-CF state.
+        for (const cf of (group.cfs || [])) {
+          if ((cf.required || cf.default) && updated[cf.trashId] === false) {
+            delete updated[cf.trashId];
+          }
+        }
       }
       this.selectedOptionalCFs = updated;
     },
