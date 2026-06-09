@@ -249,6 +249,33 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	for _, a := range plan.CFActions {
 		allCFIDs = append(allCFIDs, a.TrashID)
 	}
+
+	// Drop score overrides for CFs that didn't end up in the profile. When
+	// a user deactivates a CF, the sync engine correctly resets its Arr
+	// score to 0 (it's no longer in the synced set), but persisting the
+	// stale override onto the rule + sync history leaves a phantom "custom
+	// score" customization — the Sync Rules pill, the editor header count,
+	// and the profile diff all keep reporting an override for a CF that is
+	// no longer in use. The frontend's buildSyncBody filters this for the
+	// editor's Apply & Sync path, but the per-rule Sync / Sync All paths
+	// (quickSync) re-send the rule's stored overrides verbatim, so the
+	// filter has to live here at persistence time to cover every caller.
+	// allCFIDs is the post-sync CF set (plan.CFActions), so a deactivated
+	// CF is absent from it.
+	syncedCFSet := make(map[string]bool, len(allCFIDs))
+	for _, id := range allCFIDs {
+		syncedCFSet[id] = true
+	}
+	persistedScoreOverrides := req.ScoreOverrides
+	if len(req.ScoreOverrides) > 0 {
+		persistedScoreOverrides = make(map[string]int, len(req.ScoreOverrides))
+		for tid, score := range req.ScoreOverrides {
+			if syncedCFSet[tid] {
+				persistedScoreOverrides[tid] = score
+			}
+		}
+	}
+
 	// Build selectedCFs map from request (for resync restore)
 	selectedCFMap := make(map[string]bool, len(req.SelectedCFs))
 	for _, id := range req.SelectedCFs {
@@ -381,7 +408,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		SyncedCFs:         allCFIDs,
 		SelectedCFs:       selectedCFMap,
 		ExcludedCFs:       append([]string(nil), req.ExcludedCFs...),
-		ScoreOverrides:    req.ScoreOverrides,
+		ScoreOverrides:    persistedScoreOverrides,
 		QualityOverrides:  req.QualityOverrides,
 		QualityStructure:  req.QualityStructure,
 		Overrides:         req.Overrides,
@@ -495,7 +522,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 				cfg.AutoSync.Rules[i].ImportedProfileID = req.ImportedProfileID
 				cfg.AutoSync.Rules[i].SelectedCFs = req.SelectedCFs
 				cfg.AutoSync.Rules[i].ExcludedCFs = req.ExcludedCFs
-				cfg.AutoSync.Rules[i].ScoreOverrides = req.ScoreOverrides
+				cfg.AutoSync.Rules[i].ScoreOverrides = persistedScoreOverrides
 				cfg.AutoSync.Rules[i].QualityOverrides = req.QualityOverrides
 				cfg.AutoSync.Rules[i].QualityStructure = req.QualityStructure
 				cfg.AutoSync.Rules[i].Behavior = req.Behavior
@@ -614,7 +641,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 			SelectedCFs:          req.SelectedCFs,
 			ExcludedCFs:          req.ExcludedCFs,
 			KeepArrCFIDs:         req.KeepArrCFIDs,
-			ScoreOverrides:       req.ScoreOverrides,
+			ScoreOverrides:       persistedScoreOverrides,
 			QualityOverrides:    req.QualityOverrides,
 			QualityStructure:     req.QualityStructure,
 			Behavior:             req.Behavior,
