@@ -1449,6 +1449,15 @@ func ExecuteSyncPlan(ad *AppData, instance Instance, req SyncRequest, plan *Sync
 			})
 			updated = true
 			result.ScoresUpdated++
+			// The CF had no FormatItem in the Arr profile yet, so this is a
+			// 0 → score transition. Record the same "Score set" detail the
+			// existing-item path emits for the zero-boundary case above —
+			// without it this branch pushes a real score change to Arr while
+			// reporting an empty detail list, which surfaces to the user as a
+			// "No changes" toast even though the profile was updated.
+			if score != 0 {
+				result.ScoreDetails = append(result.ScoreDetails, fmt.Sprintf("Score set: %s (%+d)", name, score))
+			}
 		}
 
 		// Reset mode: zero out extra CFs not in the sync set
