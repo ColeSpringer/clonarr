@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.2.1
+
+A small follow-up to v3.2.0: a cleaner layout for single-format groups (such as several HDR groups) in the Profile Editor, plus three fixes to how sync results and scores are shown.
+
+### Improved: Single-format group rows match the rest of the list
+
+Groups that contain just one Custom Format (for example several HDR groups) used to render as a separate boxed row with the description cramped onto the colored background. They now use the same layout as every other CF row, so the name, description, and score line up across the whole list.
+
+### Fixed
+
+- **"No changes" message after a sync that did change something.** Adding a Custom Format that was not yet on the Arr profile updated the profile correctly but reported "No changes". The summary now lists the added format.
+- **A turned-off Custom Format no longer leaves a stray custom score behind.** Turning a CF off correctly removed it from Arr, but the Sync Rules pill, the editor header, and the diff kept showing a custom score for it. They now clear.
+- **A Custom Format you just switched on stays on.** Re-running a per-rule Sync right after enabling a default-on CF could switch it back off. The editor now treats your saved rule as the source of truth.
+
 ## v3.2.0
 
 CF descriptions move inline beside the name in the Profile Editor and Profile Overview, sidebar section labels open a parent view that renders every group under them, the customizations counter finally sees CFs excluded via group-off toggle, and a stack of TRaSH description rendering fixes lands.
